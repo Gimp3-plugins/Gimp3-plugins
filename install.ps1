@@ -1,0 +1,52 @@
+# Instaluje wtyczkę „Kreator memów” do GIMP 3.x (Windows)
+# (+ czcionkę Anton do folderu czcionek GIMP-a).
+# Użycie:  powershell -ExecutionPolicy Bypass -File .\install.ps1 [-Version 3.2]
+param(
+    [string]$Version,
+    [string[]]$Plugin
+)
+
+$ErrorActionPreference = "Stop"
+$known = @("meme-maker")
+$gimpRoot = Join-Path $env:APPDATA "GIMP"
+
+if (-not $Plugin) {
+    # Domyślnie: wszystkie wtyczki, których foldery leżą obok skryptu.
+    $Plugin = $known | Where-Object { Test-Path (Join-Path $PSScriptRoot $_) }
+}
+if (-not $Plugin) {
+    throw "Nie znaleziono folderu wtyczki obok install.ps1."
+}
+
+if (-not $Version) {
+    # Najnowszy katalog konfiguracji 3.x (np. 3.0, 3.2), bez kopii zapasowych.
+    $dir = Get-ChildItem $gimpRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^3\.\d+$' } |
+        Sort-Object { [version]$_.Name } -Descending |
+        Select-Object -First 1
+    if (-not $dir) {
+        throw "Nie znaleziono katalogu $gimpRoot\3.x - uruchom GIMP 3 raz albo podaj -Version."
+    }
+    $Version = $dir.Name
+}
+
+$dest = Join-Path $gimpRoot "$Version\plug-ins"
+New-Item -ItemType Directory -Force $dest | Out-Null
+
+foreach ($name in $Plugin) {
+    $src = Join-Path $PSScriptRoot $name
+    if (-not (Test-Path $src)) { throw "Brak folderu wtyczki: $src" }
+    Copy-Item $src $dest -Recurse -Force
+    Write-Host "Zainstalowano do: $(Join-Path $dest $name)"
+
+    if ($name -eq "meme-maker") {
+        # Czcionka Anton (SIL OFL) do folderu czcionek GIMP-a.
+        $fonts = Join-Path $gimpRoot "$Version\fonts"
+        New-Item -ItemType Directory -Force $fonts | Out-Null
+        Copy-Item (Join-Path $src "fonts\Anton-Regular.ttf") $fonts -Force
+        Copy-Item (Join-Path $src "fonts\OFL.txt") (Join-Path $fonts "Anton-OFL.txt") -Force
+        Write-Host "Czcionka Anton skopiowana do: $fonts"
+    }
+}
+
+Write-Host "Uruchom ponownie GIMP. Menu: Filtry -> Memy."
