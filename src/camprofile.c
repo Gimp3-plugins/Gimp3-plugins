@@ -306,9 +306,20 @@ read_hsv_map (const Tiff *t,
   map->val  = dims[2];
   map->data = g_new (gfloat, n);
   for (i = 0; i < n; i++)
-    map->data[i] = (gfloat) tmp[i];
+    map->data[i] = (gfloat) CLAMP (tmp[i], -1e4, 1e4);
   g_free (tmp);
 
+  return TRUE;
+}
+
+static gboolean
+sane_matrix (const gdouble v[9])
+{
+  gint k;
+
+  for (k = 0; k < 9; k++)
+    if (! isfinite (v[k]) || fabs (v[k]) > 100.0)
+      return FALSE;
   return TRUE;
 }
 
@@ -371,7 +382,7 @@ dcp_parse (const guint8 *data,
           break;
 
         case 50721: case 50722:          /* ColorMatrix1/2: XYZ -> camera */
-          if (read_numbers (&t, e, v, 9))
+          if (read_numbers (&t, e, v, 9) && sane_matrix (v))
             {
               for (k = 0; k < 9; k++)
                 dcp->cm[tag - 50721][k / 3][k % 3] = v[k];
@@ -380,7 +391,7 @@ dcp_parse (const guint8 *data,
           break;
 
         case 50964: case 50965:          /* ForwardMatrix1/2 */
-          if (read_numbers (&t, e, v, 9))
+          if (read_numbers (&t, e, v, 9) && sane_matrix (v))
             {
               for (k = 0; k < 9; k++)
                 dcp->fm[tag - 50964][k / 3][k % 3] = v[k];
@@ -589,13 +600,19 @@ apply_hsv (const HsvMap *m,
   gfloat out[3] = { 0, 0, 0 };
 
   rgb_to_hsv (c, &h, &s, &v);
+  if (! isfinite (h) || ! isfinite (s) || ! isfinite (v))
+    return;
   vl = m->srgb_encoded ? srgb_oetf (CLAMP (v, 0.0f, 1.0f)) : CLAMP (v, 0.0f, 1.0f);
 
   hf = h * m->hue / 6.0f;
   sf = s * (m->sat - 1);
   vf = m->val > 1 ? vl * (m->val - 1) : 0;
 
-  h0 = (gint) hf; h1 = (h0 + 1) % m->hue; hf -= h0; h0 %= m->hue;
+  hf = CLAMP (hf, 0.0f, (gfloat) m->hue);
+  h0 = (gint) floorf (hf);
+  hf -= h0;
+  h0 = ((h0 % m->hue) + m->hue) % m->hue;
+  h1 = (h0 + 1) % m->hue;
   s0 = CLAMP ((gint) sf, 0, m->sat - 1); s1 = MIN (s0 + 1, m->sat - 1); sf -= s0;
   v0 = CLAMP ((gint) vf, 0, m->val - 1); v1 = MIN (v0 + 1, m->val - 1); vf -= v0;
   sf = CLAMP (sf, 0.0f, 1.0f);
@@ -770,7 +787,7 @@ apply_dcp (const Dcp     *dcp,
       for (k = 0; k < 3; k++)
         q[k] = (gfloat) (to_pp[k][0] * p[0] + to_pp[k][1] * p[1] + to_pp[k][2] * p[2]);
       for (k = 0; k < 3; k++)
-        q[k] = MAX (q[k], 0.0f);
+        q[k] = isfinite (q[k]) ? CLAMP (q[k], 0.0f, 1e6f) : 0.0f;
 
       if (hsm.data)
         apply_hsv (&hsm, hsm.data, q);

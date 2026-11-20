@@ -690,6 +690,42 @@ test_dcp_hostile (void)
       g_free (buf);
     }
 
+  /* extreme values: huge (rejected) matrix, a sane one with a HueSatMap,
+   * and NaN / huge pixels -- output must stay finite
+   */
+  {
+    const gdouble huge[9] = { 500, 0, 0, 0, 500, 0, 0, 0, 500 };  /* > 100: rejected */
+    const gdouble fm[9]   = { 0.797675, 0.135192, 0.031353, 0.288040, 0.711874,
+                              0.000086, 0.0, 0.0, 0.825210 };
+    guint32       dims[3] = { 6, 3, 2 };
+    gfloat        map[6 * 3 * 2 * 3];
+    gfloat        bad[9]  = { NAN, 0.5f, 0.5f,  1e30f, 1e30f, -1e30f,  INFINITY, 0, 0 };
+    DcpTag        t[4];
+    gchar        *dp;
+
+    t[0] = tag_short (50778, 23);
+    t[1] = tag_srat9 (50964, huge);
+    dp = write_dcp (t, 2);
+    g_assert_false (rawheic_camprofile_apply (dp, px, 1, one, CS_SRGB, TRUE, &error));
+    g_clear_error (&error);
+    g_remove (dp);
+    g_free (dp);
+
+    for (i = 0; i < (gint) G_N_ELEMENTS (map); i++)
+      map[i] = (i % 3 == 0) ? 1e30f : 2.0f;
+    t[0] = tag_short (50778, 23);
+    t[1] = tag_longs (50937, dims, 3);
+    t[2] = tag_floats (50938, map, G_N_ELEMENTS (map));
+    t[3] = tag_srat9 (50964, fm);
+    dp = write_dcp (t, 4);
+    g_assert_true (rawheic_camprofile_apply (dp, bad, 3, one, CS_SRGB, TRUE, &error));
+    g_assert_no_error (error);
+    for (i = 0; i < 9; i++)
+      g_assert_true (isfinite (bad[i]));
+    g_remove (dp);
+    g_free (dp);
+  }
+
   g_rand_free (r);
   g_remove (path);
   g_free (path);
@@ -779,6 +815,138 @@ test_dcp_matches_libraw (void)
   g_remove (dcp);
   g_free (dcp);
   g_free (raw);
+}
+
+
+/* --- XMP sidecars ------------------------------------------------------------ */
+
+static const gchar *lr_xmp =
+  "<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
+  "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n"
+  " <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n"
+  "  <rdf:Description rdf:about=\"\" xmlns:crs=\"http://ns.adobe.com/camera-raw-settings/1.0/\"\n"
+  "   crs:WhiteBalance=\"Custom\" crs:Temperature=\"4350\" crs:Tint=\"+12\"\n"
+  "   crs:Exposure2012=\"+4.20\" crs:LensProfileEnable=\"1\" crs:AutoLateralCA=\"1\"\n"
+  "   crs:LuminanceSmoothing=\"25\"/>\n"
+  " </rdf:RDF>\n"
+  "</x:xmpmeta>\n"
+  "<?xpacket end=\"w\"?>\n";
+
+static const gchar *lr_xmp_elements =
+  "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"r\">"
+  "<rdf:Description xmlns:crs=\"c\"><crs:WhiteBalance>As Shot</crs:WhiteBalance>"
+  "<crs:Exposure2012>-0.50</crs:Exposure2012></rdf:Description></rdf:RDF></x:xmpmeta>";
+
+static gchar *
+gz_param (const guint8 *data, gsize len)
+{
+  GConverter *c = G_CONVERTER (g_zlib_compressor_new (G_ZLIB_COMPRESSOR_FORMAT_ZLIB, 9));
+  guint8      out[512];
+  gsize       r = 0, w = 0;
+  gchar      *b64, *res;
+
+  g_converter_convert (c, data, len, out, sizeof out, G_CONVERTER_INPUT_AT_END, &r, &w, NULL);
+  g_object_unref (c);
+  b64 = g_base64_encode (out, w);
+  res = g_strconcat ("gz12", b64, NULL);
+  g_free (b64);
+  return res;
+}
+
+static void
+test_xmp (void)
+{
+  RawSettings  s;
+  const gchar *src;
+  gfloat       expo[6] = { 0, 0, 1.25f, 0, 0, 0 };
+  gchar       *gz, *dt;
+
+  /* Lightroom, attributes */
+  raw_settings_defaults (&s);
+  src = rawheic_xmp_apply_data (lr_xmp, strlen (lr_xmp), &s);
+  g_assert_nonnull (src);
+  g_assert_cmpint (s.wb_mode, ==, WB_MANUAL);
+  g_assert_cmpfloat (s.wb_temperature, ==, 4350);
+  g_assert_cmpfloat (s.wb_tint, ==, 12);
+  g_assert_cmpfloat (s.exposure, ==, 3.0);                          /* LibRaw max */
+  g_assert_cmpfloat_with_epsilon (s.brightness, pow (2.0, 1.2), 1e-6); /* the rest */
+  g_assert_true (s.lens_distortion && s.lens_vignetting && s.lens_tca);
+  g_assert_cmpfloat (s.denoise, ==, 250);
+
+  /* Lightroom, elements */
+  raw_settings_defaults (&s);
+  s.wb_mode = WB_AUTO;
+  g_assert_nonnull (rawheic_xmp_apply_data (lr_xmp_elements, strlen (lr_xmp_elements), &s));
+  g_assert_cmpint (s.wb_mode, ==, WB_CAMERA);
+  g_assert_cmpfloat (s.exposure, ==, -0.5);
+
+  /* darktable: multipliers (hex), exposure (gz), lens switched off later,
+   * an entry beyond history_end ignored
+   */
+  gz = gz_param ((const guint8 *) expo, sizeof expo);
+  dt = g_strdup_printf (
+    "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"r\">"
+    "<rdf:Description xmlns:darktable=\"d\" darktable:history_end=\"4\">"
+    "<darktable:history><rdf:Seq>"
+    "<rdf:li darktable:num=\"0\" darktable:operation=\"temperature\" darktable:enabled=\"1\""
+    " darktable:modversion=\"3\" darktable:params=\"000000400000803f0000c03f0000803f\"/>"
+    "<rdf:li darktable:num=\"1\" darktable:operation=\"exposure\" darktable:enabled=\"1\""
+    " darktable:modversion=\"6\" darktable:params=\"%s\"/>"
+    "<rdf:li darktable:num=\"2\" darktable:operation=\"lens\" darktable:enabled=\"1\""
+    " darktable:modversion=\"5\" darktable:params=\"00\"/>"
+    "<rdf:li darktable:num=\"3\" darktable:operation=\"lens\" darktable:enabled=\"0\""
+    " darktable:modversion=\"5\" darktable:params=\"00\"/>"
+    "<rdf:li darktable:num=\"4\" darktable:operation=\"exposure\" darktable:enabled=\"1\""
+    " darktable:modversion=\"6\" darktable:params=\"00000000000000000000404000000000\"/>"
+    "</rdf:Seq></darktable:history></rdf:Description></rdf:RDF></x:xmpmeta>", gz);
+  raw_settings_defaults (&s);
+  src = rawheic_xmp_apply_data (dt, strlen (dt), &s);
+  g_assert_nonnull (src);
+  g_assert_cmpint (s.wb_mode, ==, WB_MULTIPLIERS);
+  g_assert_cmpfloat_with_epsilon (s.wb_mul[0], 2.0, 1e-6);
+  g_assert_cmpfloat_with_epsilon (s.wb_mul[2], 1.5, 1e-6);
+  g_assert_cmpfloat_with_epsilon (s.exposure, 1.25, 1e-6);       /* not the 3.0 after end */
+  g_assert_false (s.lens_distortion);                             /* disabled later */
+  g_free (dt);
+  g_free (gz);
+
+  /* hostile input: no crash, nothing absurd applied */
+  raw_settings_defaults (&s);
+  dt = g_strdup ("<x><rdf:li darktable:operation=\"temperature\" darktable:enabled=\"1\""
+                 " darktable:params=\"0000c07f0000803f0000c07f\"/>"            /* NaN */
+                 "<rdf:li darktable:operation=\"exposure\" darktable:enabled=\"1\""
+                 " darktable:modversion=\"6\" darktable:params=\"zz\"/>"
+                 "<rdf:Description crs:Exposure2012=\"inf\" crs:Temperature=\"nan\"/>"
+                 "<unclosed>");
+  rawheic_xmp_apply_data (dt, strlen (dt), &s);
+  g_assert_cmpint (s.wb_mode, ==, WB_CAMERA);
+  g_assert_true (isfinite (s.exposure) && isfinite (s.wb_temperature));
+  g_free (dt);
+  g_assert_null (rawheic_xmp_apply_data ("", 0, &s));
+}
+
+static void
+test_xmp_find (void)
+{
+  gchar *dir  = g_dir_make_tmp ("rawheic-xmp-XXXXXX", NULL);
+  gchar *raw  = g_build_filename (dir, "IMG_1.CR3", NULL);
+  gchar *lr   = g_build_filename (dir, "IMG_1.xmp", NULL);
+  gchar *dt   = g_build_filename (dir, "IMG_1.CR3.xmp", NULL);
+  gchar *found;
+
+  g_file_set_contents (raw, "x", 1, NULL);
+  g_assert_null (rawheic_xmp_find (raw));
+  g_file_set_contents (lr, lr_xmp, -1, NULL);
+  found = rawheic_xmp_find (raw);
+  g_assert_cmpstr (found, ==, lr);
+  g_free (found);
+  g_file_set_contents (dt, lr_xmp, -1, NULL);
+  found = rawheic_xmp_find (raw);                 /* darktable's name first */
+  g_assert_cmpstr (found, ==, dt);
+  g_free (found);
+
+  g_remove (dt); g_remove (lr); g_remove (raw); g_rmdir (dir);
+  g_free (dt); g_free (lr); g_free (raw); g_free (dir);
 }
 
 /* --- batch session -------------------------------------------------------- */
@@ -918,6 +1086,8 @@ main (int argc, char **argv)
   g_test_add_func ("/camprofile/dcp-hostile",   test_dcp_hostile);
   g_test_add_func ("/camprofile/icc",           test_icc_profile);
   g_test_add_func ("/camprofile/dcp-vs-libraw", test_dcp_matches_libraw);
+  g_test_add_func ("/xmp/lightroom-darktable",  test_xmp);
+  g_test_add_func ("/xmp/find-sidecar",         test_xmp_find);
 
   return g_test_run ();
 }
