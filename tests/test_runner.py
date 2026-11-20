@@ -82,5 +82,22 @@ o = run_check("en", "hang"); check(o.startswith("NO	probe-timeout") and "did not
 o = run_check("pl", "missingdep"); check(o.startswith("NO	missing-dep") and "absent_dep.dll" in o, "check PL: missing dep named")
 o = run_check("en", "invert"); check("passed the basic test" in o, "caveat line present")
 
+# --- manager window model (headless, needs GIMP's GTK runtime) ---
+GIMP = r"C:\gimp3"
+if os.path.isdir(os.path.join(GIMP, "bin")):
+    cfgdir = os.path.join(T, "cfg"); png = os.path.join(T, "ui.png")
+    env = dict(os.environ, PATH=os.path.join(GIMP, "bin") + os.pathsep + os.environ["PATH"], XDG_DATA_DIRS=os.path.join(GIMP, "share"),
+               PSHOST_CONFIG_DIR=cfgdir, PSHOST_RUNNER=RUN)
+    def ui(lang, *dirs):
+        return subprocess.run([os.path.join(B, "ui_snapshot.exe"), png, lang, *dirs], capture_output=True, text=True, env=env, timeout=120).stdout
+    o = ui("en", os.path.join(B, "mini"))
+    check("items=5 ok=2 warn=0 no=3 dirs=1 png=yes" in o, "UI: scanning mini dir -> 2 usable, 3 rejected")
+    cfg = open(os.path.join(cfgdir, "config.json"), encoding="utf-8").read()
+    check('"verdict": "NO"' in cfg and '"reason": "probe-crash"' in cfg and '"reason": "missing-dep"' in cfg and '"language": "en"' in cfg, "UI: config.json written with verdicts/reasons")
+    o = ui("pl", os.path.join(B, "mini"))   # same dir again: no duplicate, config reloaded
+    check("items=5" in o and "dirs=1" in o, "UI: config reload, directory not duplicated")
+else:
+    print("skip UI tests (GIMP runtime not found)")
+
 print("failures:", fails)
 sys.exit(1 if fails else 0)

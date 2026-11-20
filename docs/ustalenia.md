@@ -1,4 +1,4 @@
-# Ustalenia (PSHost) — stan: Etap 3
+# Ustalenia (PSHost) — stan: Etap 5
 
 ## Zweryfikowane na tej maszynie (fakty)
 - GIMP **3.2.6**, instalacja per-user: `%LOCALAPPDATA%\Programs\GIMP 3`. Katalog użytkownika: `%APPDATA%\GIMP\3.2` (instrukcja zakładała 3.0 — używamy 3.2).
@@ -31,6 +31,13 @@
 - Dodatkowe wtyczki testowe (wskazane przez użytkownika): `C:\Program Files (x86)\Topaz Labs` — 8 plików: 4 × x86 (Adjust 5, B&W 2, Lens Effects, ReStyle → NIE/32bit) i 4 × x64 (`PS_Plugins_x64`, `Plugins_x64`; wszystkie statycznie OK, entry `PluginMain`, kategoria „Topaz Labs”). Probe dynamiczny — w Etapie 4. Fusion Express 2 nie zawiera `.8bf`.
 - Probe (sam `Prepare`, 64×64) na 10 filtrach x64 testowych (Zetmar ×2, Nik: Analog, Color, Dfine 2, HDR, Sharpener ×2, Silver, Viveza): wszystkie `noErr`, bez nieobsługiwanych callbacków. **Uwaga:** `Prepare` to słaby test — filtry z własnym oknem (Zetmar, Nik) robią całą pracę w `Start`.
 - Zetmar Color uruchomiony przez runner: okno otwiera się, podgląd działa (metoda `inputRate`). Pełnego przebiegu (OK → zapis) nie udało się potwierdzić automatycznie.
+
+## Etap 5 — okno zarządzania (zweryfikowane headless)
+- GTK3 potwierdzone (gtk+-3.0 3.24.52 w pkgconfig GIMP-a; `gimp_ui_init`). Konfiguracja: `%APPDATA%\GIMP.2\pshost\config.json` (json-glib z instalacji GIMP-a): katalogi (+ podkatalogi), język, limit czasu testu, wyniki skanu z flagą `enabled`. Zapis atomowy (plik tmp + move). Nazwa procedury filtru: `pshost-filter-<12 znaków MD5(ścieżka|entry|nazwa)>` (do Etapu 6).
+- Skan w wątku roboczym (UI nie blokuje się), ścieżki UTF-8 przez GLib; po skanie: okno podsumowania („Użyte: N, z zastrzeżeniami: K, pominięte: M” + rozwijane szczegóły; dla jednego pliku jedno zdanie).
+- Testy bez ekranu: okno renderowane do GtkOffscreenWindow → PNG; skan na 3 katalogach testowych daje 42 wpisy: 14 OK / 28 NIE (tak jak `pshost_check`). Wizualnie sprawdzone zrzuty PL i EN.
+- W prawdziwym GIMP-ie: procedury `pshost-manage` i `pshost-about` są rejestrowane (komunikaty `gimp-console`). **Otwarcie okna w żywym GIMP-ie — do potwierdzenia przez użytkownika.**
+- Tłumaczenia UI na tym etapie: tabela EN→PL w `config.c` (`_T()`); zamiana na gettext/.po — Etap 7.
 
 ## Założenia / niezweryfikowane
 - Brak Photoshop SDK na dysku; planowane własne minimalne definicje struktur (`src/common/ps_types.h`). Licencja Adobe SDK do sprawdzenia przed jakąkolwiek redystrybucją nagłówków.
