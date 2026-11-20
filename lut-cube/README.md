@@ -1,6 +1,6 @@
 # LUT-y (.cube) – wtyczka GIMP 3
 
-Darmowa wtyczka open source (GPL-3.0), która nakłada kolorystyczne tablice LUT w formacie `.cube` (te same, których używasz w Lightroomie, Photoshopie czy DaVinci Resolve). Ma własną bibliotekę LUT-ów, podgląd przed/po z suwakiem dzielącym i suwak siły efektu. Działa w pełni offline: bez kont, kluczy API i zbierania danych.
+Darmowa wtyczka open source (GPL-3.0), która nakłada kolorystyczne tablice LUT w formatach `.cube`, `.3dl` i Hald CLUT (`.png`) (te same, których używasz w Lightroomie, Photoshopie czy DaVinci Resolve). Ma własną bibliotekę LUT-ów, podgląd przed/po z suwakiem dzielącym i suwak siły efektu. Działa w pełni offline: bez kont, kluczy API i zbierania danych.
 
 ![Okno wtyczki: biblioteka i suwak przed/po](../docs/lut-cube/okno-suwak.png)
 
@@ -41,7 +41,14 @@ Linux/macOS: `~/.config/GIMP/3.x/plug-ins/lut-cube/`, plik `lut-cube.py` musi mi
 
 Całość to **jeden krok cofania** (Ctrl+Z). Przy dużych zdjęciach widać pasek postępu z przyciskiem **Przerwij**. Przerwanie zostawia obraz bez zmian.
 
-**Filtry → LUT → Zarządzaj biblioteką…** otwiera to samo okno bez obrazu: do importu i porządkowania LUT-ów, z podglądem na wbudowanym obrazku testowym (tęcza barw, szarości, odcienie skóry).
+Wszystkie polecenia wtyczki są w menu **Filtry → LUT**:
+
+| Polecenie | Do czego |
+|---|---|
+| **Zastosuj LUT (.cube)…** | okno z biblioteką, podglądem i ustawieniami (opis niżej) |
+| **Zarządzaj biblioteką…** | to samo okno bez obrazu: import i porządkowanie LUT-ów, podgląd na wbudowanym obrazku testowym (tęcza barw, szarości, odcienie skóry) |
+| **Wsadowo (folder zdjęć)…** | ten sam LUT na wszystkich zdjęciach z folderu ([tryb wsadowy](#tryb-wsadowy)) |
+| **Utwórz obraz Hald (własny look)…** i **Zapisz look jako .cube…** | własny LUT z korekt zrobionych w GIMP-ie ([własny look](#własny-look-korekty-gimp-a-jako-cube)) |
 
 ### Podgląd przed/po
 
@@ -50,8 +57,9 @@ Całość to **jeden krok cofania** (Ctrl+Z). Przy dużych zdjęciach widać pas
 | Suwak przed/po | lewa część to oryginał, prawa to efekt; linię przeciągasz myszą. Opcja *Pionowo*: góra/dół |
 | Obok siebie | dwa obrazy obok siebie (albo jeden pod drugim) |
 | Przełącznik przed/po | jeden obraz; kliknięcie w podgląd albo przycisk *Pokaż oryginał* przełącza |
+| Siatka LUT-ów 2×2 / 3×3 | kilka LUT-ów z listy naraz (strona z wybranym LUT-em); kliknięcie w kafelek wybiera LUT, strzałki przewijają |
 
-W każdym trybie **przytrzymanie spacji** (albo `\`) pokazuje oryginał. Zoom: *Dopasuj do okna* albo *100 %* (wycinek w pełnej rozdzielczości, przesuwasz go przeciągnięciem).
+**Przytrzymanie spacji** (gdy aktywny jest podgląd albo lista) lub klawisza `\` pokazuje oryginał. Na przyciskach i polach wyboru spacja działa normalnie. Zoom: *Dopasuj do okna* albo *100 %* (wycinek w pełnej rozdzielczości, przesuwasz go przeciągnięciem).
 
 Podgląd liczony jest na zmniejszonej kopii (dłuższy bok 1100 px; bez numpy 640 px) z krótkim opóźnieniem po zmianie suwaka. Uwzględnia zaznaczenie, siłę i mieszanie.
 
@@ -61,7 +69,12 @@ Podgląd liczony jest na zmniejszonej kopii (dłuższy bok 1100 px; bez numpy 64
 
 - **Siła 0–100 %**: `wynik = oryginał · (1 − s) + LUT(oryginał) · s`, liczone na wartościach perceptualnych (jak w Lightroomie).
 - **Mieszanie: kolor / jasność** (rozwijane): osobno ustalasz, ile zmiany barwy i ile zmiany jasności przenieść z LUT-a. *Jasność 0 %* daje sam look kolorystyczny bez zmiany kontrastu, a *Kolor 0 %* samą zmianę tonalną. Zmiana jasności to część różnicy wspólna dla R, G i B (luminancja Rec.709).
+- **Zakres tonalny** (w tym samym rozwijanym panelu): osobna siła efektu dla **cieni, półtonów i świateł**, np. look tylko w cieniach. Wagi zmieniają się płynnie z jasnością oryginału (bez ostrych granic) i przy 100/100/100 nic nie zmieniają.
 - **Interpolacja**: tetraedralna (domyślna, mniej artefaktów na szarościach i w gładkich przejściach) albo trójliniowa.
+
+### Presety
+
+Przycisk **Presety ▾** zapisuje bieżący LUT razem z siłą, mieszaniem, zakresem tonalnym i interpolacją pod jedną nazwą, np. „Ciepły wieczór 70 %”. Wybór presetu z listy ustawia wszystko jednym kliknięciem. Preset działa też bez okna (argument `preset`) i w trybie wsadowym.
 
 ### Zapis wyniku
 
@@ -69,7 +82,9 @@ Podgląd liczony jest na zmniejszonej kopii (dłuższy bok 1100 px; bez numpy 64
 - **Siła jako krycie warstwy** (opcja): warstwa dostaje pełny efekt, a siła trafia do krycia, więc później możesz ją zmieniać w oknie *Warstwy*. GIMP miesza krycie w świetle liniowym, więc wynik nieznacznie różni się od siły „w pikselach”.
 - **Na aktywnej warstwie**: nadpisuje piksele (z cofaniem).
 
-Wybór, siła, mieszanie, interpolacja, tryb podglądu i ostatni LUT są zapamiętywane.
+Nowa warstwa jest liczona, zanim trafi do obrazu, więc **Przerwij** nie zostawia śladu ani w obrazie, ani w historii cofania.
+
+Wybór, siła, mieszanie, zakres tonalny, interpolacja, tryb podglądu i ostatni LUT są zapamiętywane, a **Filtry → Powtórz** nakłada ten sam LUT z tymi samymi ustawieniami bez okna.
 
 ### Co jeszcze wtyczka obsługuje
 
@@ -84,17 +99,19 @@ Wybór, siła, mieszanie, interpolacja, tryb podglądu i ostatni LUT są zapami�
 Biblioteka to folder w katalogu konfiguracji GIMP-a: `%APPDATA%\GIMP\3.2\lut-cube\` (funkcja `Gimp.directory()`), w nim:
 
 - `luts\`: **kopie** zaimportowanych plików, więc biblioteka nie zależy od miejsca, z którego je dodałeś,
-- `index.json`: nazwa wyświetlana, plik, kategoria, ulubione, data dodania, rozmiar siatki, typ (1D/3D), SHA-256, ostatnio użyte, ustawienia,
+- `index.json`: nazwa wyświetlana, plik, kategoria, ulubione, data dodania, rozmiar siatki, typ (1D/3D), SHA-256, ostatnio użyte, presety, ustawienia,
 - `cache\*.lutc`: sparsowane LUT-y w formacie binarnym (wczytanie trwa milisekundy, a nie ~0,1 s na parsowanie 400 KB tekstu).
 
 Co możesz zrobić:
 
-- **Dodaj pliki…** (wielokrotny wybór), **Dodaj folder…** (z podfolderami), **przeciągnij** pliki lub foldery na listę.
+- **Dodaj pliki…** (wielokrotny wybór), **Dodaj folder…** (z podfolderami), **przeciągnij** pliki lub foldery na listę. Obsługiwane: `.cube`, `.3dl` i obrazy Hald CLUT `.png` (zwykłe zdjęcia PNG w folderze są pomijane).
 - **Deduplikacja po SHA-256**: plik o tej samej treści nie zostanie dodany drugi raz; podsumowanie importu mówi, ile pominięto. Uszkodzone pliki są pomijane z opisem błędu, reszta importu idzie dalej.
 - **Zmiana nazwy** (plik na dysku się nie zmienia), **kategorie** (własne: dodaj / zmień nazwę / usuń w *Więcej → Kategorie…*), **ulubione** (kliknij ☆ przy nazwie), **usuwanie** (pytanie; opcjonalnie razem z plikiem w folderze biblioteki). Prawy przycisk na LUT-cie otwiera menu.
 - **Wyszukiwarka** po nazwie, filtr kategorii i ulubionych, sortowanie po nazwie lub dacie dodania. **Ulubione i 5 ostatnio użytych są zawsze na górze.**
 - **Miniatury** liczone leniwie na bieżącym obrazie, w tle, po jednej; lista od razu jest gotowa do użycia.
-- **Wczytaj plik .cube…** nakłada dowolny plik bez dodawania go do biblioteki. Obok jest **Dodaj do biblioteki**. Okna wyboru pamiętają ostatni folder.
+- **Wczytaj plik LUT…** nakłada dowolny plik bez dodawania go do biblioteki. Obok jest **Dodaj do biblioteki**. Okna wyboru pamiętają ostatni folder.
+- **Eksport i import biblioteki** (*Więcej → Eksportuj / Importuj bibliotekę (.zip)…*): jeden plik z LUT-ami, nazwami, kategoriami, ulubionymi i presetami, np. na kopię zapasową albo drugi komputer. Przy imporcie duplikaty są pomijane.
+- **Posprzątaj folder biblioteki…** (*Więcej*): usuwa pliki, które zostały w folderze po „usuń tylko z listy” (z potwierdzeniem). LUT usunięty tylko z listy można też po prostu dodać ponownie.
 
 ### Import startowy
 
@@ -133,9 +150,32 @@ Pierwsze otwarcie okna z importem startowym 49 plików (kopiowanie, parsowanie, 
 
 Wariant numpy liczy kawałkami po 128 tys. pikseli równolegle w kilku wątkach. Wariant bez numpy liczy każdy unikalny kolor tylko raz (cache), więc zdjęcia z 8-bitowego JPEG-a idą w nim szybciej niż szum. Wariant bez numpy można wymusić zmienną środowiskową `LUT_CUBE_NO_NUMPY=1`.
 
-## Format .cube
+## Tryb wsadowy
 
-Obsługiwane: komentarze `#`, `TITLE`, końce linii CRLF/LF, BOM, `LUT_3D_SIZE` (2–256), `LUT_1D_SIZE`, plik z częścią 1D i 3D naraz (najpierw 1D, potem 3D), `DOMAIN_MIN`/`DOMAIN_MAX` oraz `LUT_1D_INPUT_RANGE`/`LUT_3D_INPUT_RANGE`. Kolejność danych: R zmienia się najszybciej. Wartości wyjściowe spoza 0–1 są przycinane. Błędy (przecinek zamiast kropki, zła liczba wierszy, brak rozmiaru, tekst zamiast liczb) dają komunikat po polsku z numerem wiersza.
+**Filtry → LUT → Wsadowo (folder zdjęć)…** nakłada jeden LUT (albo preset) na wszystkie zdjęcia z folderu:
+
+- wejście: JPG, PNG, TIFF, WebP; opcjonalnie z podfolderami (struktura folderów zostaje zachowana),
+- wynik: osobny folder, nazwa z przyrostkiem (domyślnie `-lut`), format JPG, PNG, TIFF, WebP albo jak oryginał, jakość JPG/WebP,
+- zdjęcia w innych profilach niż sRGB są domyślnie konwertowane do sRGB,
+- **oryginały nie są ruszane**: wtyczka odmówi pracy, gdy folder wynikowy jest tym samym folderem, a nie ma przyrostka.
+
+Każde zdjęcie jest przetwarzane jako cały widoczny obraz. Błąd jednego pliku nie przerywa pozostałych; na końcu GIMP pokazuje podsumowanie.
+
+## Własny look: korekty GIMP-a jako .cube
+
+1. **Filtry → LUT → Utwórz obraz Hald (własny look)…**: powstaje obraz 16-bitowy z „mapą wszystkich kolorów” (siatka 25, 36 albo 64).
+2. Popraw na nim kolory tak jak na zdjęciu: *Kolory → Krzywe, Poziomy, Balans kolorów, Barwa-Nasycenie…*. Nie kadruj, nie skaluj i nie używaj filtrów przestrzennych (rozmycie, wyostrzanie) – LUT zapamiętuje tylko zmianę koloru piksela.
+3. **Filtry → LUT → Zapisz look jako .cube…**: plik `.cube` (od razu także w bibliotece). Działa również w Lightroomie, Photoshopie i DaVinci.
+
+Test sprawdza całą drogę: look zrobiony krzywymi i barwą/nasyceniem na obrazie Hald, nałożony jako LUT na zdjęcie, różni się od tej samej korekty zrobionej bezpośrednio na zdjęciu o najwyżej 0,005.
+
+## Formaty plików
+
+- **.3dl** (Autodesk Lustre/Flame): siatka z pierwszego wiersza, wartości 10-, 12- lub 16-bitowe (rozpoznawane automatycznie albo z nagłówka `Mesh`).
+- **Hald CLUT .png**: kwadratowy obraz L³×L³ (np. 512×512 = siatka 64), 8 lub 16 bitów.
+- **.cube**: opis poniżej.
+
+Obsługiwane w `.cube`: komentarze `#`, `TITLE`, końce linii CRLF/LF, BOM, `LUT_3D_SIZE` (2–256), `LUT_1D_SIZE`, plik z częścią 1D i 3D naraz (najpierw 1D, potem 3D), `DOMAIN_MIN`/`DOMAIN_MAX` oraz `LUT_1D_INPUT_RANGE`/`LUT_3D_INPUT_RANGE`. Kolejność danych: R zmienia się najszybciej. Wartości wyjściowe spoza 0–1 są przycinane. Błędy (przecinek zamiast kropki, zła liczba wierszy, brak rozmiaru, tekst zamiast liczb) dają komunikat po polsku z numerem wiersza.
 
 ## Wywołanie bez okna (Python-Fu / skrypty)
 
@@ -152,11 +192,27 @@ cfg.set_property("output", "new-layer")       # albo "in-place"
 cfg.set_property("interpolation", "tetrahedral")  # albo "trilinear"
 cfg.set_property("color", 100.0)              # 0–100
 cfg.set_property("luminance", 100.0)          # 0–100
+cfg.set_property("shadows", 100.0)            # cienie / półtony / światła, 0–100
+cfg.set_property("midtones", 100.0)
+cfg.set_property("highlights", 100.0)
 cfg.set_property("strength-as-opacity", False)
+# cfg.set_property("preset", "Ciepły wieczór")  # zamiast pliku i ustawień
 proc.run(cfg)
 ```
 
-Po użyciu okna *Filtry → Powtórz* nakłada ten sam LUT z tymi samymi ustawieniami bez okna.
+Tryb wsadowy ze skryptu (folder wynikowy musi istnieć):
+
+```python
+proc = Gimp.get_pdb().lookup_procedure("python-fu-lut-cube-batch")
+cfg = proc.create_config()
+cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+cfg.set_property("input-folder", Gio.File.new_for_path(r"C:\Zdjęcia\sesja"))
+cfg.set_property("output-folder", Gio.File.new_for_path(r"C:\Zdjęcia\sesja-lut"))
+cfg.set_property("lut-file", Gio.File.new_for_path(r"C:\LUT\film.cube"))
+cfg.set_property("format", "jpg")             # jpg / png / tif / webp / same
+cfg.set_property("quality", 92)
+proc.run(cfg)
+```
 
 ## Testy
 
@@ -168,7 +224,7 @@ Po użyciu okna *Filtry → Powtórz* nakłada ten sam LUT z tymi samymi ustawie
   ```
   "%LOCALAPPDATA%\Programs\GIMP 3\bin\gimp-console-3.2.exe" -i --batch-interpreter python-fu-eval -b "exec(open(r'tests/gimp_lut_integration.py', encoding='utf-8').read())" --quit
   ```
-- Okno (budowane poza ekranem, akcje jak z przycisków i klawiszy, zrzuty do `docs/lut-cube/`): to samo polecenie z `tests/gimp_lut_ui.py`.
+- Okno (budowane poza ekranem, akcje jak z przycisków i klawiszy): to samo polecenie z `tests/gimp_lut_ui.py`. Zrzuty okna trafiają do `docs/lut-cube/` tylko ze zmienną `LUT_CUBE_SCREENSHOTS=1`, inaczej do katalogu tymczasowego.
 
 Obrazy testowe testy generują same. Jeśli w repo jest folder `Luts/` z plikami `.cube`, testy go używają; jeśli nie (jak w publicznym repo), generują kilka syntetycznych LUT-ów.
 
@@ -178,7 +234,8 @@ Obrazy testowe testy generują same. Jeśli w repo jest folder `Luts/` z plikami
 - **Wartości HDR (> 1) w obrazach 32-bitowych**: wejście LUT-a jest przycinane do domeny (zwykle 0–1), tak jak w innych programach. Zmiana dodana przez LUT nie usuwa jednak jasności ponad 1.
 - **Podgląd 100 %** liczy wycinek wielkości okna podglądu. Przy przeciąganiu widać przesunięty stary wycinek, a nowy liczy się po puszczeniu myszy.
 - **Numpy w paczce** pasuje do Pythona 3.14 z GIMP-a 3.2 (Windows). Po aktualizacji GIMP-a ze zmianą wersji Pythona wtyczka sama przejdzie na wariant bez numpy. Wtedy uruchom ponownie zaktualizowany `tools\fetch-numpy.ps1`.
-- **Tryb wsadowy** (wiele plików naraz) nie jest wbudowany. Da się go zrobić skryptem Python-Fu z wywołaniem bez okna (przykład wyżej).
+- **Własny look (Hald)** zapamiętuje tylko zmiany koloru zależne od samego piksela. Efekty przestrzenne (rozmycie, wyostrzanie, winieta) nie dają się zapisać jako LUT.
+- **Tryb wsadowy** przetwarza cały widoczny obraz każdego pliku (warstwy są scalane) i zapisuje go bez metadanych EXIF ustawianych ręcznie – przyjmuje domyślne ustawienia eksportu GIMP-a.
 
 ## Licencja
 

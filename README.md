@@ -4,9 +4,9 @@ Darmowe wtyczki open source (GPL-3.0) do GIMP-a 3.x, napisane w Pythonie. Dział
 
 | Wtyczka | Menu | Opis | Paczka |
 |---|---|---|---|
-| **Podpis na zdjęciu** (`podpis-zdjecia/`) | Filtry → Podpis | podpis tekstowy albo logo jako nowa warstwa, 9 pozycji, rozmiar w % obrazu | [v1.0.0](https://github.com/zetmar-collab/gimp-wtyczki/releases/tag/v1.0.0) |
-| **Kreator memów** (`meme-maker/`) | Filtry → Memy | tekst górny i dolny z obrysem, pasek na tekst, eksport JPG/PNG. [Opis](meme-maker/README.md) | [v1.0.0](https://github.com/zetmar-collab/gimp-wtyczki/releases/tag/meme-maker-v1.0.0) |
-| **LUT-y (.cube)** (`lut-cube/`) | Filtry → LUT | LUT-y `.cube` z biblioteką, podglądem przed/po i siłą efektu. [Opis](lut-cube/README.md) | [v1.0.0](https://github.com/zetmar-collab/gimp-wtyczki/releases/tag/lut-cube-v1.0.0) |
+| **Podpis na zdjęciu** (`podpis-zdjecia/`) | Filtry → Podpis | podpis tekstowy albo logo jako nowa warstwa, 9 pozycji, rozmiar w % obrazu, szablony podpisów | [v1.0.0](https://github.com/zetmar-collab/gimp-wtyczki/releases/tag/v1.0.0) |
+| **Kreator memów** (`meme-maker/`) | Filtry → Memy | tekst górny i dolny z obrysem, pasek na tekst, podgląd na żywo, eksport JPG/PNG. [Opis](meme-maker/README.md) | [v1.0.0](https://github.com/zetmar-collab/gimp-wtyczki/releases/tag/meme-maker-v1.0.0) |
+| **LUT-y (.cube)** (`lut-cube/`) | Filtry → LUT | LUT-y `.cube`, `.3dl` i Hald z biblioteką, podglądem przed/po, siłą efektu, presetami, trybem wsadowym i własnym lookiem. [Opis](lut-cube/README.md) | [v1.0.0](https://github.com/zetmar-collab/gimp-wtyczki/releases/tag/lut-cube-v1.0.0) |
 
 `install.ps1` bez parametrów instaluje wszystkie wtyczki leżące obok skryptu; jedną wybierzesz przez `-Plugin podpis-zdjecia`, `-Plugin meme-maker` albo `-Plugin lut-cube`.
 
@@ -57,6 +57,12 @@ Linux/macOS: ścieżka `~/.config/GIMP/3.x/plug-ins/podpis-zdjecia/`, a plik mus
 | `margin-percent` | Margines jako % krótszego boku obrazu | 3.0 |
 | `margin` | Margines w px. **0 oznacza, że liczony jest procent** | 0 |
 | `layer-name` | Nazwa nowej warstwy | Podpis |
+| `template` | Wczytaj zapisany szablon (nazwa); jego ustawienia zastępują te z okna | puste |
+| `save-template` | Po udanym podpisie zapisz bieżące ustawienia pod tą nazwą | puste |
+
+#### Szablony podpisów
+
+Jeśli używasz kilku podpisów (np. różne marki, tekst i logo), zapisz każdy jako szablon: wpisz nazwę w polu **Zapisz jako szablon** i wstaw podpis. Następnym razem wpisz tę nazwę w **Wczytaj szablon** (wielkość liter bez znaczenia). Okno pokazuje listę zapisanych szablonów. Szablon tekstowy pamięta tekst, font, rozmiar, kolor i wyrównanie, szablon z obrazu pamięta plik i skalę, a oba pamiętają krycie, położenie, margines i nazwę warstwy. Szablony leżą w `%APPDATA%\GIMP\3.2\podpis-zdjecia\szablony.json`.
 
 Margines nie działa w osi, w której pozycja to „środek”.
 
@@ -64,7 +70,7 @@ Margines nie działa w osi, w której pozycja to „środek”.
 
 | id | Opis | Domyślnie |
 |---|---|---|
-| `text` | Treść podpisu (w dialogu pole wielolinijkowe) | © Marek Zettel |
+| `text` | Treść podpisu (w dialogu pole wielolinijkowe) | „© ” + imię i nazwisko z konta systemowego (albo samo „©”) |
 | `font` | Font | bieżący font z kontekstu GIMP-a (zwykle Sans-serif) |
 | `size-mode` | `percent` (% szerokości obrazu) albo `pixels` | `percent` |
 | `font-size-percent` | 0.5–50 % szerokości obrazu | 4.0 |
@@ -92,7 +98,7 @@ cfg = proc.create_config()
 cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
 cfg.set_property("image", image)
 cfg.set_core_object_array("drawables", image.get_selected_drawables())
-cfg.set_property("text", "© Marek Zettel")
+cfg.set_property("text", "© Anna Nowak")
 cfg.set_property("position", "bottom-right")
 proc.run(cfg)
 ```
