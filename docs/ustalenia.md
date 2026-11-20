@@ -23,5 +23,5 @@
 
 ## Założenia / niezweryfikowane
 - Brak Photoshop SDK na dysku; planowane własne minimalne definicje struktur (`src/common/ps_types.h`). Licencja Adobe SDK do sprawdzenia przed jakąkolwiek redystrybucją nagłówków.
-- Czy `ZetmarWatermark_64.8bf` jest filtrem (`8BFM`) — do ustalenia parserem PiPL (Etap 2).
+- `ZetmarWatermark_64.8bf` jest filtrem — opisanym wyłącznie przez JSON PiPL (rozstrzygnięte w Etapie 2).
 - Zachowanie GIMP przy zamykaniu i restarcie (API czystego zamknięcia) — do zbadania w Etapie 6.
