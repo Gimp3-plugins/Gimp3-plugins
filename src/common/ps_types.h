@@ -18,7 +18,12 @@ typedef struct { int16_t v, h; } Point16;                      /* vertical first
 typedef struct { int16_t top, left, bottom, right; } Rect16;
 typedef struct { uint16_t red, green, blue; } PSRGBColor;
 typedef struct { Fixed16 gamma, redX, redY, greenX, greenY, blueX, blueY, whiteX, whiteY, ambient; } PlugInMonitor;
-typedef struct { void *hwnd; } PlatformData;                   /* Windows: parent HWND */
+typedef struct { void *hwnd; } PlatformData;
+typedef struct { int32_t top, left, bottom, right; } PSVRect;                 /* 32-bit rectangle */
+typedef struct PSPixelMask { struct PSPixelMask *next; void *maskData; int32_t rowBytes, colBytes, maskDescription; } PSPixelMask;
+typedef struct { int32_t version; PSVRect bounds; int32_t imageMode, rowBytes, colBytes, planeBytes; void *baseAddr;
+                 PSPixelMask *mat, *masks; int32_t maskPhaseRow, maskPhaseCol; } PSPixelMap;
+typedef int16_t (*PSDisplayPixelsProc) (const PSPixelMap *source, const PSVRect *srcRect, int32_t dstRow, int32_t dstCol, void *platformContext);                   /* Windows: parent HWND */
 typedef struct { uint8_t data[256]; } PStr255;                 /* Pascal string */
 
 enum { ps_selAbout = 0, ps_selParameters = 1, ps_selPrepare = 2, ps_selStart = 3, ps_selContinue = 4, ps_selFinish = 5 };
@@ -108,7 +113,7 @@ typedef struct FilterRecord {
   PSBufferProcs *bufferProcs;
   PSResourceProcs *resourceProcs;
   void   (*processEvent) (void *event);
-  void   (*displayPixels) (const void *dstPixels, const Rect16 *dstRect, int32_t dstRow, int32_t dstCol, const void *srcPixels);
+  PSDisplayPixelsProc displayPixels;
   PSHandleProcs *handleProcs;
   /* 3.0 */
   PSBoolean supportsDummyChannels, supportsAlternateLayouts;

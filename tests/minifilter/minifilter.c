@@ -2,11 +2,26 @@
  *   (default) invert RGB in one go        -DTILED  invert in 16-row tiles driven by Continue
  *   -DCRASH   crash in Prepare            -DHANG   hang in Prepare
  *   -DMISSINGDEP  imports a DLL that does not exist at run time
+ *   -DPICA    dereferences filterRecord->sSPBasic without checking (like the Nik Collection) and uses the PICA Handle suite
  * Parameters handle holds an int counter that is incremented on every Start (tests parameter round trip). */
 #include "../../src/common/ps_types.h"
 #include <windows.h>
 #ifdef MISSINGDEP
 __declspec (dllimport) int absent_fn (void);
+#endif
+
+#ifdef PICA
+typedef struct { int32_t (*Acquire) (const char *, int32_t, const void **); int32_t (*Release) (const char *, int32_t); } MiniSPBasic;
+typedef struct { PSHandle (*New) (int32_t); void (*Dispose) (PSHandle); } MiniHandleSuite;
+/* Returns 0 on success; crashes (NULL call) when the host leaves sSPBasic empty - that is the regression we guard against. */
+static int pica_roundtrip (FilterRecord *fr) {
+  MiniSPBasic *spb = (MiniSPBasic *) fr->sSPBasic;
+  const void *hs = NULL;
+  if (spb->Acquire ("Photoshop Handle Suite for Plug-ins", 1, &hs) != 0 || !hs) return -30;
+  const MiniHandleSuite *h = hs; PSHandle x = h->New (64); if (!x) return -108; h->Dispose (x);
+  spb->Release ("Photoshop Handle Suite for Plug-ins", 1);
+  return 0;
+}
 #endif
 
 static void bump_params (FilterRecord *fr) {
@@ -40,6 +55,9 @@ __declspec (dllexport) void PluginMain (int16_t sel, FilterRecord *fr, intptr_t 
 #endif
       break;
     case ps_selStart:
+#ifdef PICA
+      { int e = pica_roundtrip (fr); if (e) { *res = (int16_t) e; return; } }
+#endif
       bump_params (fr);
 #ifdef TILED
       fr->inRect = fr->outRect = fr->filterRect;

@@ -47,7 +47,7 @@ if os.path.exists(png):
 # --- 2. registered state written by init_procedures
 reg = json.load(open(os.path.join(CFG, "registered.json"), encoding="utf-8"))
 mine = [f for f in reg["filters"] if f["proc"] == proc]
-check(len(reg["filters"]) == 2 and mine and mine[0]["menu"] == "<Image>/Filters/Photoshop/PSHost Tests" and mine[0]["label"] == "PSHost Test invert...", "registered.json lists the 2 usable filters with menu path and label")
+check(len(reg["filters"]) == 3 and mine and mine[0]["menu"] == "<Image>/Filters/Photoshop/PSHost Tests" and mine[0]["label"] == "PSHost Test invert...", "registered.json lists the 3 usable filters with menu path and label")
 
 # --- 3. restart helper: waits for the process, then relaunches (marker file)
 marker = os.path.join(T, "m1.txt")
@@ -56,6 +56,9 @@ helper = subprocess.Popen([RUNNER, "--mode", "restart", "--pid", str(victim.pid)
 time.sleep(1.0)
 check(not os.path.exists(marker), "helper does not relaunch while the old process is still running")
 victim.wait(); helper.wait(timeout=20)
+for _ in range(30):                      # the launched process creates the marker a moment after the helper exits
+    if os.path.exists(marker): break
+    time.sleep(0.2)
 check(helper.returncode == 0 and os.path.exists(marker), "helper relaunches after the old process exited")
 
 # --- 4. cancelled quit: the process never exits within wait-ms -> helper gives up, nothing launched
