@@ -28,6 +28,7 @@
 - **Niezaimplementowane (logowane jako UNSUPPORTED):** channel ports / documentInfo (druga metoda odczytu podglądu w Zetmar), ImageServices (interpolacja), ColorServices, displayPixels, hostProcs, sSPBasic (PICA suites), descriptorParameters (Action Manager), 16/32 bit, alfa jako kanał.
 - Wartości `PS_ERR_HOST_INSUFFICIENT=-30` i `PS_ERR_PROPERTY_UNDEFINED=-31` pochodzą z pamięci — **niezweryfikowane**.
 - Testy: `tests/test_runner.py` (13 kontroli na syntetycznych mini-filtrach: invert, kafle, selekcja, parametry, crash, zawieszenie, brakująca zależność, brak entry) — wszystkie przechodzą.
+- Dodatkowe wtyczki testowe (wskazane przez użytkownika): `C:\Program Files (x86)\Topaz Labs` — 8 plików: 4 × x86 (Adjust 5, B&W 2, Lens Effects, ReStyle → NIE/32bit) i 4 × x64 (`PS_Plugins_x64`, `Plugins_x64`; wszystkie statycznie OK, entry `PluginMain`, kategoria „Topaz Labs”). Probe dynamiczny — w Etapie 4. Fusion Express 2 nie zawiera `.8bf`.
 - Probe (sam `Prepare`, 64×64) na 10 filtrach x64 testowych (Zetmar ×2, Nik: Analog, Color, Dfine 2, HDR, Sharpener ×2, Silver, Viveza): wszystkie `noErr`, bez nieobsługiwanych callbacków. **Uwaga:** `Prepare` to słaby test — filtry z własnym oknem (Zetmar, Nik) robią całą pracę w `Start`.
 - Zetmar Color uruchomiony przez runner: okno otwiera się, podgląd działa (metoda `inputRate`). Pełnego przebiegu (OK → zapis) nie udało się potwierdzić automatycznie.
 
