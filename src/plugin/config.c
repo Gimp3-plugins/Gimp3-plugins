@@ -30,17 +30,20 @@ char *ps_item_proc_name (const char *path, const char *entry, const char *name) 
   g_free (key); g_free (h); return r;
 }
 
+static void ignored_free (PsIgnored *i) { if (i) { g_free (i->path); g_free (i->name); g_free (i); } }
+
 static PsConfig *defaults (void) {
   PsConfig *c = g_new0 (PsConfig, 1);
   c->dirs = g_ptr_array_new_with_free_func ((GDestroyNotify) ps_dir_free);
   c->items = g_ptr_array_new_with_free_func ((GDestroyNotify) ps_item_free);
+  c->ignored = g_ptr_array_new_with_free_func ((GDestroyNotify) ignored_free);
   c->language = g_strdup ("auto"); c->probe_timeout_ms = 10000; c->default_recursive = TRUE;
   return c;
 }
 
 void ps_config_free (PsConfig *c) {
   if (!c) return;
-  g_ptr_array_free (c->dirs, TRUE); g_ptr_array_free (c->items, TRUE); g_free (c->language); g_free (c);
+  g_ptr_array_free (c->dirs, TRUE); g_ptr_array_free (c->items, TRUE); g_ptr_array_free (c->ignored, TRUE); g_free (c->language); g_free (c);
 }
 
 static Pe8Verdict verdict_from (const char *s) { return !g_strcmp0 (s, "OK") ? PE8_VERDICT_OK : !g_strcmp0 (s, "WARN") ? PE8_VERDICT_WARN : PE8_VERDICT_NO; }
@@ -68,6 +71,11 @@ PsConfig *ps_config_load (void) {
         for (guint i = 0; i < json_array_get_length (a); i++) {
           JsonObject *d = json_array_get_object_element (a, i);
           if (d && obj_str (d, "path")) g_ptr_array_add (c->dirs, ps_dir_new (obj_str (d, "path"), !json_object_has_member (d, "recursive") || json_object_get_boolean_member (d, "recursive")));
+        }
+      if (json_object_has_member (o, "ignored") && (a = json_object_get_array_member (o, "ignored")))
+        for (guint i = 0; i < json_array_get_length (a); i++) {
+          JsonObject *d = json_array_get_object_element (a, i);
+          if (d && obj_str (d, "path")) { PsIgnored *ig = g_new0 (PsIgnored, 1); ig->path = g_strdup (obj_str (d, "path")); ig->name = g_strdup (obj_str (d, "name") ? obj_str (d, "name") : ""); g_ptr_array_add (c->ignored, ig); }
         }
       if (json_object_has_member (o, "plugins") && (a = json_object_get_array_member (o, "plugins")))
         for (guint i = 0; i < json_array_get_length (a); i++) {
@@ -104,6 +112,15 @@ gboolean ps_config_save (const PsConfig *c) {
     json_builder_begin_object (b);
     json_builder_set_member_name (b, "path"); json_builder_add_string_value (b, d->path);
     json_builder_set_member_name (b, "recursive"); json_builder_add_boolean_value (b, d->recursive);
+    json_builder_end_object (b);
+  }
+  json_builder_end_array (b);
+  json_builder_set_member_name (b, "ignored"); json_builder_begin_array (b);
+  for (guint i = 0; i < c->ignored->len; i++) {
+    PsIgnored *ig = g_ptr_array_index (c->ignored, i);
+    json_builder_begin_object (b);
+    json_builder_set_member_name (b, "path"); json_builder_add_string_value (b, ig->path);
+    json_builder_set_member_name (b, "name"); json_builder_add_string_value (b, ig->name);
     json_builder_end_object (b);
   }
   json_builder_end_array (b);
@@ -144,6 +161,21 @@ PsItem *ps_config_find_item (const PsConfig *c, const char *path, const char *en
   }
   return NULL;
 }
+
+gboolean ps_config_is_ignored (const PsConfig *c, const char *path, const char *name) {
+  for (guint i = 0; i < c->ignored->len; i++) {
+    PsIgnored *ig = g_ptr_array_index (c->ignored, i);
+    if (!g_ascii_strcasecmp (ig->path, path) && !g_strcmp0 (ig->name, name ? name : "")) return TRUE;
+  }
+  return FALSE;
+}
+void ps_config_ignore_item (PsConfig *c, const PsItem *it) {
+  if (!ps_config_is_ignored (c, it->path, it->name)) {
+    PsIgnored *ig = g_new0 (PsIgnored, 1); ig->path = g_strdup (it->path); ig->name = g_strdup (it->name ? it->name : ""); g_ptr_array_add (c->ignored, ig);
+  }
+  for (guint i = 0; i < c->items->len; i++) if (g_ptr_array_index (c->items, i) == it) { g_ptr_array_remove_index (c->items, i); break; }
+}
+void ps_config_clear_ignored (PsConfig *c) { g_ptr_array_set_size (c->ignored, 0); }
 
 gboolean ps_path_is_under (const char *path, const char *dir) {
   size_t n = strlen (dir);
@@ -212,6 +244,32 @@ static const Tr table[] = {
   { "This directory is already on the list.", "Ten katalog jest już na liście." },
   { "Close", "Zamknij" },
   { "The plug-in is disabled", "Wtyczka jest wyłączona" },
+  { "Filters", "Filtry" },
+  { "Manage", "Zarządzanie" },
+  { "Run on current layer", "Uruchom na bieżącej warstwie" },
+  { "Select a filter and click Run to apply it to the active layer (double-click also works).", "Wybierz filtr i kliknij Uruchom, aby zastosować go na aktywnej warstwie (działa też dwuklik)." },
+  { "No filters yet. Add a directory with plug-ins in the Manage tab.", "Brak filtrów. Dodaj katalog z wtyczkami na karcie Zarządzanie." },
+  { "Applies to: %s", "Zastosowane zostanie do: %s" },
+  { "No image is open. Open an image to run a filter.", "Nie ma otwartego obrazu. Otwórz obraz, aby uruchomić filtr." },
+  { "Remove rejected", "Usuń odrzucone" },
+  { "Remove selected", "Usuń zaznaczone" },
+  { "Restore removed", "Przywróć usunięte" },
+  { "Removes entries from this list only. Files on disk are not deleted.", "Usuwa wpisy tylko z tej listy. Pliki na dysku nie są kasowane." },
+  { "Remove %d rejected plug-ins from the list?", "Usunąć z listy odrzucone wtyczki (%d)?" },
+  { "The plug-in file no longer exists.", "Plik wtyczki już nie istnieje." },
+  { "Layers larger than 32000 pixels are not supported.", "Warstwy większe niż 32000 pikseli nie są obsługiwane." },
+  { "The selection does not overlap the layer.", "Zaznaczenie nie przecina się z warstwą." },
+  { "Cannot create a temporary directory.", "Nie można utworzyć katalogu tymczasowego." },
+  { "Cannot write the temporary image.", "Nie można zapisać obrazu tymczasowego." },
+  { "Cannot start the filter process", "Nie można uruchomić procesu filtra" },
+  { "The filter did not produce a valid result.", "Filtr nie zwrócił poprawnego wyniku." },
+  { "The filter did not finish in time and was stopped. The image was not changed.", "Filtr nie zakończył pracy w czasie i został zatrzymany. Obraz nie został zmieniony." },
+  { "The filter crashed. The image was not changed.", "Filtr uległ awarii. Obraz nie został zmieniony." },
+  { "The plug-in could not be loaded (Windows error %s).", "Nie udało się załadować wtyczki (kod błędu Windows %s)." },
+  { "The filter reported an error", "Filtr zgłosił błąd" },
+  { "The filter reported an error (code %s).", "Filtr zgłosił błąd (kod %s)." },
+  { "The filter process ended unexpectedly (code %u).", "Proces filtra zakończył się nieoczekiwanie (kod %u)." },
+  { "Filter error", "Błąd filtra" },
 };
 const char *ps_tr (const char *en) {
   if (cur_lang == PE8_LANG_EN) return en;

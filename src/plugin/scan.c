@@ -68,6 +68,8 @@ GPtrArray *ps_scan_files (GPtrArray *files, const char *runner, int timeout_ms, 
 }
 
 void ps_config_merge_scan (PsConfig *c, const char *dir, GPtrArray *fresh) {
+  /* 0) entries the user removed from the list are not brought back */
+  for (guint i = fresh->len; i-- > 0;) { PsItem *n = g_ptr_array_index (fresh, i); if (ps_config_is_ignored (c, n->path, n->name)) g_ptr_array_remove_index (fresh, i); }
   /* 1) carry over the user's on/off choice from the entries being replaced */
   for (guint i = 0; i < fresh->len; i++) {
     PsItem *n = g_ptr_array_index (fresh, i);

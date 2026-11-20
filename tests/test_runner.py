@@ -91,13 +91,19 @@ if os.path.isdir(os.path.join(GIMP, "bin")):
     def ui(lang, *dirs):
         return subprocess.run([os.path.join(B, "ui_snapshot.exe"), png, lang, *dirs], capture_output=True, text=True, env=env, timeout=120).stdout
     o = ui("en", os.path.join(B, "mini"))
-    check("items=5 ok=2 warn=0 no=3 dirs=1 png=yes" in o, "UI: scanning mini dir -> 2 usable, 3 rejected")
+    check("items=5 ok=2 warn=0 no=3 dirs=1 ignored=0 png=yes" in o, "UI: scanning mini dir -> 2 usable, 3 rejected")
     cfg = open(os.path.join(cfgdir, "config.json"), encoding="utf-8").read()
     import re
     has = lambda k, v: re.search(r'"%s"\s*:\s*"%s"' % (k, v), cfg) is not None
     check(has("verdict", "NO") and has("reason", "probe-crash") and has("reason", "missing-dep") and has("language", "en"), "UI: config.json written with verdicts/reasons")
     o = ui("pl", os.path.join(B, "mini"))   # same dir again: no duplicate, config reloaded
     check("items=5" in o and "dirs=1" in o, "UI: config reload, directory not duplicated")
+    def ui_act(act):
+        e = dict(env, PSHOST_TEST=act)
+        return subprocess.run([os.path.join(B, "ui_snapshot.exe"), png, "en", os.path.join(B, "mini")], capture_output=True, text=True, env=e, timeout=120).stdout
+    o = ui_act("remove-rejected"); check("items=2 ok=2 warn=0 no=0" in o and "ignored=3" in o, "UI: 'Remove rejected' drops the 3 rejected entries and remembers them")
+    o = ui_act("rescan"); check("items=2" in o and "ignored=3" in o, "UI: rescan does not bring removed entries back")
+    o = ui_act("restore"); check("items=5" in o and "ignored=0" in o, "UI: 'Restore removed' + rescan brings them back")
 else:
     print("skip UI tests (GIMP runtime not found)")
 
