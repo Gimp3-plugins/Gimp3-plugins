@@ -397,6 +397,28 @@ test_lens (void)
   g_assert_cmpfloat (flat[((h / 2) * w + w / 2) * 3 + 1], <, 0.27f);
   g_free (flat);
 
+  /* hostile metadata must not crash or read out of bounds */
+  {
+    LensInfo bad = info;
+    gfloat  *buf = g_new0 (gfloat, (gsize) w * h * 3);
+
+    bad.focal = NAN;
+    g_assert_cmpint (rawheic_lens_correct (buf, w, h, w, h, 0, 0, &bad,
+                                           RAWHEIC_LENS_DISTORTION | RAWHEIC_LENS_TCA), ==, 0);
+    bad = info;
+    bad.focal35  = INFINITY;
+    bad.aperture = NAN;
+    rawheic_lens_correct (buf, w, h, w, h, 0, 0, &bad,
+                          RAWHEIC_LENS_DISTORTION | RAWHEIC_LENS_TCA | RAWHEIC_LENS_VIGNETTING);
+    bad = info;
+    bad.focal35 = 1e30f;
+    rawheic_lens_correct (buf, w, h, w, h, -100000, 100000, &bad,
+                          RAWHEIC_LENS_DISTORTION | RAWHEIC_LENS_TCA);
+    for (i = 0; i < w * h * 3; i++)
+      g_assert_true (isfinite (buf[i]));
+    g_free (buf);
+  }
+
   /* full develop with all corrections reports what was applied */
   raw_settings_defaults (&s);
   s.half_size       = TRUE;

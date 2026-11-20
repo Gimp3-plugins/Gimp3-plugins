@@ -155,9 +155,13 @@ sample (const gfloat *src,
   gint   x0, y0, x1, y1;
   gfloat fx, fy, a, b;
 
+  /* NaN/Inf would slip through CLAMP (comparisons are false) */
+  if (! isfinite (x)) x = 0.0f;
+  if (! isfinite (y)) y = 0.0f;
   x = CLAMP (x, 0.0f, (gfloat) (w - 1));
   y = CLAMP (y, 0.0f, (gfloat) (h - 1));
-  x0 = (gint) x; y0 = (gint) y;
+  x0 = CLAMP ((gint) x, 0, w - 1);
+  y0 = CLAMP ((gint) y, 0, h - 1);
   x1 = MIN (x0 + 1, w - 1);
   y1 = MIN (y0 + 1, h - 1);
   fx = x - x0;  fy = y - y0;
@@ -190,19 +194,22 @@ rawheic_lens_correct (gfloat         *rgb,
   gfloat          crop;
   gint            lf_flags = 0, done, y;
 
-  if (! db || ! flags || w < 2 || h < 2 || full_w < 2 || full_h < 2 || info->focal <= 0)
+  /* metadata comes from the file: only accept finite, plausible values */
+  if (! db || ! flags || w < 2 || h < 2 || full_w < 2 || full_h < 2 ||
+      ! isfinite (info->focal) || info->focal < 1.0f || info->focal > 5000.0f)
     return 0;
 
   lens = find_lens (db, info, &cam);
   if (! lens)
     return 0;
 
-  if (info->focal35 > 0 && info->focal > 0)
+  crop = 0.0f;
+  if (isfinite (info->focal35) && info->focal35 >= 1.0f && info->focal35 <= 5000.0f)
     crop = info->focal35 / info->focal;
-  else if (cam && cam->CropFactor > 0)
+  if (! (crop >= 0.1f && crop <= 20.0f) && cam && cam->CropFactor >= 0.1f && cam->CropFactor <= 20.0f)
     crop = cam->CropFactor;
-  else
-    crop = lens->CropFactor > 0 ? lens->CropFactor : 1.0f;
+  if (! (crop >= 0.1f && crop <= 20.0f))
+    crop = (lens->CropFactor >= 0.1f && lens->CropFactor <= 20.0f) ? lens->CropFactor : 1.0f;
 
   if (flags & RAWHEIC_LENS_VIGNETTING) lf_flags |= LF_MODIFY_VIGNETTING;
   if (flags & RAWHEIC_LENS_DISTORTION) lf_flags |= LF_MODIFY_DISTORTION;
@@ -211,7 +218,8 @@ rawheic_lens_correct (gfloat         *rgb,
   mod  = lf_modifier_new (lens, crop, full_w, full_h);
   /* scale 0 = lensfun picks the scale that leaves no empty corners */
   done = lf_modifier_initialize (mod, lens, LF_PF_F32, info->focal,
-                                 info->aperture > 0 ? info->aperture : 8.0f,
+                                 (isfinite (info->aperture) && info->aperture >= 0.5f &&
+                                  info->aperture <= 128.0f) ? info->aperture : 8.0f,
                                  1000.0f, (lf_flags & LF_MODIFY_DISTORTION) ? 0.0f : 1.0f,
                                  lens->Type, lf_flags, FALSE);
 
