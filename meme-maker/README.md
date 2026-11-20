@@ -35,7 +35,7 @@ Linux/macOS: `~/.config/GIMP/3.x/plug-ins/meme-maker/`, plik musi mieć prawo wy
 3. Wpisz tekst górny i/lub dolny (Enter = nowa linia) i kliknij OK.
 4. Opcjonalnie **Filtry → Memy → Eksportuj mema…**, żeby zapisać JPG/PNG.
 
-Całość to **jeden krok cofania**: jedno Ctrl+Z usuwa mema. Oryginalna warstwa ze zdjęciem zostaje nietknięta. Tekst trafia do grupy warstw „Mem”: każdy blok to warstwa tekstowa i pod nią osobna warstwa obrysu.
+Całość to **jeden krok cofania**: jedno Ctrl+Z usuwa mema. Oryginalna warstwa ze zdjęciem zostaje nietknięta. Tekst trafia do grupy warstw „Mem”: każdy blok to warstwa tekstowa i pod nią osobna warstwa obrysu. Twoje zaznaczenie zostaje bez zmian.
 
 ### Opcje okna „Stwórz mema”
 
@@ -54,6 +54,7 @@ Całość to **jeden krok cofania**: jedno Ctrl+Z usuwa mema. Oryginalna warstwa
 | Pasek na tekst | Brak / nad zdjęciem (tekst górny) / pod zdjęciem (tekst dolny) | Brak |
 | Kolor paska | Biały (czarny tekst) albo czarny (biały tekst) | Biały |
 | Edytowalne warstwy tekstowe | Wyłączone: mem spłaszczony do jednej warstwy „Mem” nad zdjęciem | włączone |
+| Podgląd na obrazie | Mem pojawia się na zdjęciu na bieżąco, w trakcie zmian w oknie (bez wpisów w historii cofania); Anuluj usuwa podgląd | włączone |
 
 **Kolejność automatycznego wyboru czcionki:** Anton → Impact (jeśli zainstalowany) → Arial Black → Sans-serif Bold.
 
@@ -78,7 +79,7 @@ cfg.set_property("bottom-text", "za pierwszym razem")
 proc.run(cfg)
 ```
 
-Identyfikatory argumentów: `top-text`, `bottom-text`, `font-mode` (`auto`/`custom`), `font`, `font-size`, `text-color`, `outline-color`, `outline-percent`, `uppercase`, `align` (`center`/`left`/`right`), `margin-percent`, `bar` (`none`/`top`/`bottom`), `bar-color` (`white`/`black`), `editable`. Eksport: `python-fu-meme-export` z `file`, `format` (`jpg`/`png`), `quality`, `png-compression`.
+Identyfikatory argumentów: `top-text`, `bottom-text`, `font-mode` (`auto`/`custom`), `font`, `font-size`, `text-color`, `outline-color`, `outline-percent`, `uppercase`, `align` (`center`/`left`/`right`), `margin-percent`, `bar` (`none`/`top`/`bottom`), `bar-color` (`white`/`black`), `editable`, `live-preview` (tylko w oknie). Eksport: `python-fu-meme-export` z `file`, `format` (`jpg`/`png`), `quality`, `png-compression`.
 
 ## Testy
 

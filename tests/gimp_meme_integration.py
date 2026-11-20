@@ -17,6 +17,9 @@ OUT = os.path.join(tempfile.gettempdir(), "meme_test")
 os.makedirs(OUT, exist_ok=True)
 OK = Gimp.PDBStatusType.SUCCESS
 results = []
+import sys  # noqa: E402
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")   # konsola cp1250
 
 
 def check(name, cond, info=""):
@@ -237,6 +240,65 @@ st, _ = run("python-fu-meme-export", img, [bg], file=Gio.File.new_for_path(wrong
             format="jpg")
 check("eksport: rozszerzenie poprawione na .jpg",
       st == OK and os.path.exists(os.path.join(OUT, "zle_rozszerzenie.jpg")))
+img.delete()
+
+# --- zaznaczenie użytkownika zostaje ----------------------------------------
+img, bg = photo(800, 500)
+img.select_rectangle(Gimp.ChannelOps.REPLACE, 100, 100, 200, 150)
+channels_before = len(img.get_channels())
+st, _ = run(MEME, img, [bg], top_text="zaznaczenie", bottom_text="zostaje")
+ok, non_empty, x1, y1, x2, y2 = Gimp.Selection.bounds(img)
+check("zaznaczenie po memie bez zmian",
+      st == OK and non_empty and (x1, y1, x2, y2) == (100, 100, 300, 250),
+      (x1, y1, x2, y2))
+check("brak kanałów pomocniczych", len(img.get_channels()) == channels_before)
+img.delete()
+
+# --- podgląd na żywo (klasa z wtyczki, bez okna) ----------------------------
+import importlib.util  # noqa: E402
+from gi.repository import GLib  # noqa: E402
+_mm_path = os.path.join(os.environ["APPDATA"], "GIMP", "3.2", "plug-ins",
+                        "meme-maker", "meme-maker.py")
+_spec = importlib.util.spec_from_file_location("meme_live", _mm_path)
+mm = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(mm)
+
+
+def pump(seconds):
+    ctx = GLib.MainContext.default()
+    end = GLib.get_monotonic_time() + int(seconds * 1e6)
+    while GLib.get_monotonic_time() < end:
+        ctx.iteration(False)
+
+
+img, bg = photo(800, 500)
+img.select_rectangle(Gimp.ChannelOps.REPLACE, 10, 10, 50, 50)
+cfg = Gimp.get_pdb().lookup_procedure(MEME).create_config()
+cfg.set_property("top-text", "podgląd")
+cfg.set_property("bar", "top")
+mm._fix_default_colors(cfg)
+preview = mm._LivePreview(img, cfg)
+pump(1.0)
+check("podgląd: mem i pasek widoczne na obrazie",
+      len(img.get_layers()) == 3 and img.get_height() > 500,
+      (len(img.get_layers()), img.get_height()))
+cfg.set_property("bar", "none")
+cfg.set_property("editable", False)
+pump(1.0)
+check("podgląd: odświeżony po zmianie (bez paska, spłaszczony)",
+      len(img.get_layers()) == 2 and img.get_height() == 500,
+      (len(img.get_layers()), img.get_height()))
+cfg.set_property("live-preview", False)
+pump(1.0)
+check("podgląd wyłączony: obraz czysty", len(img.get_layers()) == 1)
+cfg.set_property("live-preview", True)
+pump(1.0)
+preview.stop()
+ok, non_empty, x1, y1, x2, y2 = Gimp.Selection.bounds(img)
+check("podgląd: po zamknięciu obraz jak przed (warstwy, wymiary, zaznaczenie)",
+      len(img.get_layers()) == 1 and img.get_height() == 500
+      and (x1, y1, x2, y2) == (10, 10, 60, 60) and not img.get_channels(),
+      (len(img.get_layers()), img.get_height(), (x1, y1, x2, y2)))
 img.delete()
 
 print("WYNIK: %d/%d PASS" % (sum(results), len(results)), flush=True)

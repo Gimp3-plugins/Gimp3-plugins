@@ -406,6 +406,7 @@ if HAVE_GIMP:
             # znikają, oryginalne zdjęcie zostaje pod spodem bez zmian.
             flat = Gimp.Layer.new_from_visible(image, image, "Mem")
             image.insert_layer(flat, None, 0)
+            state["flat"] = flat
             image.remove_layer(group)
             if state.get("bar") is not None:
                 image.remove_layer(state["bar"])
@@ -414,9 +415,9 @@ if HAVE_GIMP:
         return group
 
     def _cleanup(image, state):
-        """Po błędzie usuwa wszystko, co wtyczka zdążyła dodać."""
+        """Po błędzie (albo po podglądzie) usuwa wszystko, co wtyczka dodała."""
         Gimp.Selection.none(image)
-        for key in ("group", "bar"):
+        for key in ("group", "bar", "flat"):
             item = state.get(key)
             if item is not None and item.is_valid():
                 image.remove_layer(item)
@@ -424,7 +425,86 @@ if HAVE_GIMP:
             w, h, offset_y = state["resize"]
             image.resize(w, h, 0, offset_y)
 
-    def _run_meme_dialog(procedure, config):
+    # --- zaznaczenie użytkownika (obrys korzysta z zaznaczenia) ---------------
+
+    def _save_selection(image):
+        """Kopia zaznaczenia jako kanał (None, gdy nic nie jest zaznaczone)."""
+        if Gimp.Selection.is_empty(image):
+            return None
+        return Gimp.Selection.save(image)
+
+    def _restore_selection(image, saved):
+        if saved is None or not saved.is_valid():
+            Gimp.Selection.none(image)
+            return
+        image.select_item(Gimp.ChannelOps.REPLACE, saved)
+        image.remove_channel(saved)
+
+    # --- podgląd na żywo (warstwy tymczasowe poza historią cofania) ----------
+
+    class _LivePreview:
+        """
+        Buduje mema na obrazie przy każdej zmianie w oknie (z opóźnieniem),
+        bez wpisów w historii cofania. stop() usuwa podgląd.
+        """
+        DELAY_MS = 400
+
+        def __init__(self, image, config):
+            self.image, self.config = image, config
+            self.state = None
+            self.job = None
+            self.handler = config.connect("notify", self._changed)
+            self._changed()
+
+        def _changed(self, *_):
+            if self.job is not None:
+                GLib.source_remove(self.job)
+            self.job = GLib.timeout_add(self.DELAY_MS, self._render)
+
+        def _frozen(self, fn):
+            self.image.undo_freeze()
+            Gimp.context_push()
+            saved = _save_selection(self.image)
+            try:
+                return fn()
+            finally:
+                _restore_selection(self.image, saved)
+                Gimp.context_pop()
+                self.image.undo_thaw()
+
+        def _clear(self):
+            if self.state is not None:
+                state, self.state = self.state, None
+                self._frozen(lambda: _cleanup(self.image, state))
+
+        def _render(self):
+            self.job = None
+            self._clear()
+            if self.config.get_property("live-preview"):
+                state = {}
+
+                def build():
+                    try:
+                        _build_meme(self.image, self.config, [], state)
+                    except Exception:  # noqa – podgląd nie może przerwać okna
+                        _cleanup(self.image, state)
+                        return False
+                    return True
+
+                if self._frozen(build):
+                    self.state = state
+            Gimp.displays_flush()
+            return False
+
+        def stop(self):
+            self.config.disconnect(self.handler)
+            if self.job is not None:
+                GLib.source_remove(self.job)
+                self.job = None
+            self._clear()
+            Gimp.displays_flush()
+
+    def _run_meme_dialog(procedure, config, image):
         GimpUi.init(PLUG_IN_BINARY)
         dialog = GimpUi.ProcedureDialog(procedure=procedure, config=config,
                                         title="Stwórz mema")
@@ -437,9 +517,13 @@ if HAVE_GIMP:
         dialog.fill(["top-text", "bottom-text", "font-mode", "font",
                      "font-size", "text-color", "outline-color",
                      "outline-percent", "uppercase", "align", "margin-percent",
-                     "bar", "bar-color", "editable"])
-        ok = dialog.run()
-        dialog.destroy()
+                     "bar", "bar-color", "editable", "live-preview"])
+        preview = _LivePreview(image, config)
+        try:
+            ok = dialog.run()
+        finally:
+            preview.stop()
+            dialog.destroy()
         return ok
 
     def _fix_default_colors(config):
@@ -459,7 +543,7 @@ if HAVE_GIMP:
                                      "i spróbuj ponownie.")
         _fix_default_colors(config)
         if run_mode == Gimp.RunMode.INTERACTIVE:
-            if not _run_meme_dialog(procedure, config):
+            if not _run_meme_dialog(procedure, config, image):
                 return procedure.new_return_values(Gimp.PDBStatusType.CANCEL,
                                                    None)
 
@@ -467,6 +551,7 @@ if HAVE_GIMP:
         state = {}
         Gimp.context_push()
         image.undo_group_start()
+        saved_selection = _save_selection(image)
         try:
             try:
                 _build_meme(image, config, warnings, state)
@@ -478,6 +563,7 @@ if HAVE_GIMP:
         except Exception as e:  # noqa – żadnych niezłapanych wyjątków
             return _error(procedure, "Nieoczekiwany błąd Kreatora memów: %s" % e)
         finally:
+            _restore_selection(image, saved_selection)
             image.undo_group_end()
             Gimp.context_pop()
         Gimp.displays_flush()
@@ -646,6 +732,11 @@ if HAVE_GIMP:
                     "editable", "Edytowalne warstwy tekstowe",
                     "Włączone: tekst zostaje edytowalny. Wyłączone: mem "
                     "spłaszczony do jednej warstwy nad zdjęciem.",
+                    True, rw)
+                p.add_boolean_argument(
+                    "live-preview", "Podgląd na obrazie",
+                    "Pokazuj mema na zdjęciu na bieżąco, w trakcie zmian "
+                    "w oknie (bez wpisów w historii cofania)",
                     True, rw)
 
             elif name == PROC_EXPORT:
