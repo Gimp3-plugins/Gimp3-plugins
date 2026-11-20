@@ -31,7 +31,8 @@ typedef enum
   WB_CAMERA,
   WB_AUTO,
   WB_MANUAL,
-  WB_SPOT
+  WB_SPOT,
+  WB_MULTIPLIERS
 } WbMode;
 
 typedef enum
@@ -64,6 +65,7 @@ typedef struct
   WbMode        wb_mode;
   gdouble       wb_temperature;   /* K   */
   gdouble       wb_tint;          /* -100 (green) .. +100 (magenta) */
+  gdouble       wb_mul[4];        /* WB_MULTIPLIERS: raw R, G, B, G2 */
   gdouble       spot[4];          /* x, y, w, h in 0..1 of the oriented image */
   gdouble       exposure;         /* EV, -2 .. +3 */
   gdouble       exposure_preserve;/* 0 .. 1 */
@@ -293,6 +295,14 @@ gboolean          rawheic_apple_hdr_tags       (const guint8         *note,
                                                 gdouble              *maker48);
 gdouble           rawheic_apple_headroom       (gdouble               maker33,
                                                 gdouble               maker48);
+
+/* xmp.c */
+const gchar     * rawheic_xmp_apply_data       (const gchar          *xml,
+                                                gsize                 len,
+                                                RawSettings          *s);
+const gchar     * rawheic_xmp_apply            (const gchar          *raw_path,
+                                                RawSettings          *s);
+gchar           * rawheic_xmp_find             (const gchar          *raw_path);
 
 /* util.c */
 gchar           * rawheic_file_path            (GFile                *file);

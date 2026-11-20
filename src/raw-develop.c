@@ -382,6 +382,13 @@ apply_settings (libraw_data_t     *lr,
         p->use_camera_wb = 1;
       break;
 
+    case WB_MULTIPLIERS:
+      p->user_mul[0] = (float) s->wb_mul[0];
+      p->user_mul[1] = 1.0f;
+      p->user_mul[2] = (float) s->wb_mul[2];
+      p->user_mul[3] = 1.0f;
+      break;
+
     case WB_SPOT:
       /* LibRaw applies the cropbox first (it shrinks sizes.width/height),
        * so the grey box is relative to the cropped image, full resolution.

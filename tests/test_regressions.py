@@ -278,5 +278,30 @@ check("network camera profile in XCF ignored (non-interactive)", st == Gimp.PDBS
       pdb.get_last_error()[:60])
 img.delete()
 
+# Step 10: XMP sidecar settings
+xdir = os.path.abspath(os.path.join("build", "test-out", "xmp"))
+shutil.rmtree(xdir, ignore_errors=True)
+os.makedirs(xdir)
+xraw = os.path.join(xdir, "Nikon-D750.nef")
+shutil.copyfile(SRC, xraw)
+with open(os.path.join(xdir, "Nikon-D750.xmp"), "w", encoding="utf-8") as f:
+    f.write('<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="r">'
+            '<rdf:Description xmlns:crs="c" crs:Exposure2012="+1.00"/></rdf:RDF></x:xmpmeta>')
+
+def load_x(use):
+    cfg = lp.create_config()
+    cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+    cfg.set_property("file", Gio.File.new_for_path(xraw))
+    cfg.set_property("half-size", True)
+    cfg.set_property("xmp-sidecar", use)
+    r = lp.run(cfg)
+    im = r.index(1)
+    m, _ = mean_g(im)
+    im.delete()
+    return m
+
+m_off, m_on = load_x(False), load_x(True)
+check("XMP sidecar exposure +1 applied", 1.6 < m_on / m_off < 2.2, "x%.3f" % (m_on / m_off))
+
 with open(os.path.join("build", "test-out", "regressions.txt"), "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")

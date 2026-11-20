@@ -5,6 +5,7 @@
 
 #include "config.h"
 
+#include <math.h>
 #include <string.h>
 
 #include <glib/gstdio.h>
@@ -24,6 +25,7 @@ static const ChoiceItem wb_items[] =
   { "auto",    WB_AUTO,   N_("Automatic") },
   { "manual",  WB_MANUAL, N_("Manual (temperature / tint)") },
   { "spot",    WB_SPOT,   N_("Neutral point (picked area)") },
+  { "multipliers", WB_MULTIPLIERS, N_("Multipliers (from XMP)") },
   { NULL, 0, NULL }
 };
 
@@ -128,6 +130,7 @@ raw_settings_defaults (RawSettings *s)
   s->wb_mode           = WB_CAMERA;
   s->wb_temperature    = 5500.0;
   s->wb_tint           = 0.0;
+  s->wb_mul[0] = s->wb_mul[1] = s->wb_mul[2] = s->wb_mul[3] = 1.0;
   s->spot[0]           = 0.45;
   s->spot[1]           = 0.45;
   s->spot[2]           = 0.1;
@@ -179,6 +182,12 @@ raw_settings_add_arguments (GimpProcedure *procedure)
                                       _("Tint"),
                                       _("Tint for manual white balance: negative = green, positive = magenta"),
                                       -100.0, 100.0, d.wb_tint, RW);
+  gimp_procedure_add_double_argument (procedure, "wb-mul-red", _("Red multiplier"),
+                                      _("Raw red channel multiplier (white balance from XMP)"),
+                                      0.05, 20.0, 1.0, RW);
+  gimp_procedure_add_double_argument (procedure, "wb-mul-blue", _("Blue multiplier"),
+                                      _("Raw blue channel multiplier (white balance from XMP)"),
+                                      0.05, 20.0, 1.0, RW);
   gimp_procedure_add_double_argument (procedure, "spot-x", _("Spot X"),
                                       _("Neutral area left edge (0..1)"),
                                       0.0, 1.0, d.spot[0], RW);
@@ -315,6 +324,8 @@ raw_settings_from_config (RawSettings         *s,
                 "wb-mode",           &wb,
                 "wb-temperature",    &s->wb_temperature,
                 "wb-tint",           &s->wb_tint,
+                "wb-mul-red",        &s->wb_mul[0],
+                "wb-mul-blue",       &s->wb_mul[2],
                 "spot-x",            &s->spot[0],
                 "spot-y",            &s->spot[1],
                 "spot-width",        &s->spot[2],
@@ -375,6 +386,8 @@ raw_settings_to_config (const RawSettings   *s,
                 "wb-mode",           nick_for_id (wb_items, s->wb_mode),
                 "wb-temperature",    s->wb_temperature,
                 "wb-tint",           s->wb_tint,
+                "wb-mul-red",        CLAMP (s->wb_mul[0], 0.05, 20.0),
+                "wb-mul-blue",       CLAMP (s->wb_mul[2], 0.05, 20.0),
                 "spot-x",            s->spot[0],
                 "spot-y",            s->spot[1],
                 "spot-width",        s->spot[2],
@@ -428,6 +441,7 @@ raw_settings_serialize (const RawSettings *s,
   g_key_file_set_double  (kf, GROUP, "wb-temperature", s->wb_temperature);
   g_key_file_set_double  (kf, GROUP, "wb-tint", s->wb_tint);
   g_key_file_set_double_list (kf, GROUP, "spot", (gdouble *) s->spot, 4);
+  g_key_file_set_double_list (kf, GROUP, "wb-mul", (gdouble *) s->wb_mul, 4);
   g_key_file_set_double  (kf, GROUP, "exposure", s->exposure);
   g_key_file_set_double  (kf, GROUP, "exposure-preserve", s->exposure_preserve);
   g_key_file_set_string  (kf, GROUP, "highlight", nick_for_id (hl_items, s->highlight));
@@ -501,6 +515,10 @@ raw_settings_deserialize (RawSettings  *s,
   if (spot && n == 4)
     memcpy (s->spot, spot, sizeof (s->spot));
   g_free (spot);
+  spot = g_key_file_get_double_list (kf, GROUP, "wb-mul", &n, NULL);
+  if (spot && n == 4)
+    memcpy (s->wb_mul, spot, sizeof (s->wb_mul));
+  g_free (spot);
   GET_D ("exposure", s->exposure);
   GET_D ("exposure-preserve", s->exposure_preserve);
   GET_C ("highlight", s->highlight, hl_items);
@@ -542,7 +560,10 @@ raw_settings_deserialize (RawSettings  *s,
   s->ca_blue           = CLAMP (s->ca_blue, 0.99, 1.01);
   s->median_passes     = CLAMP (s->median_passes, 0, 10);
   for (n = 0; n < 4; n++)
-    s->spot[n] = CLAMP (s->spot[n], 0.0, 1.0);
+    {
+      s->spot[n]   = CLAMP (s->spot[n], 0.0, 1.0);
+      s->wb_mul[n] = isfinite (s->wb_mul[n]) ? CLAMP (s->wb_mul[n], 0.05, 20.0) : 1.0;
+    }
 
   if (source_path)
     *source_path = g_key_file_get_string (kf, GROUP, "source", NULL);

@@ -80,6 +80,12 @@ raw_load_procedure_new (GimpPlugIn  *plug_in,
                                         "non-interactive mode (empty = use the arguments)"),
                                       "", G_PARAM_READWRITE);
 
+  gimp_procedure_add_boolean_argument (procedure, "xmp-sidecar",
+                                       _("Use XMP sidecar settings"),
+                                       _("Take white balance, exposure, lens and noise settings "
+                                         "from a Lightroom or darktable XMP file next to the RAW"),
+                                       TRUE, G_PARAM_READWRITE);
+
   gimp_procedure_add_boolean_aux_argument (procedure, "ask-dialog",
                                            _("Always show this dialog"),
                                            _("Show the import settings for every file "
@@ -167,7 +173,24 @@ raw_load_run (GimpProcedure         *procedure,
 
       if (ask != rawheic_shift_pressed ())
         {
-          gchar *title = g_strdup_printf (_("Develop RAW – %s"), name);
+          gchar       *title;
+          const gchar *xmp_src = NULL;
+          gboolean     use_xmp = TRUE;
+
+          g_object_get (config, "xmp-sidecar", &use_xmp, NULL);
+          if (use_xmp)
+            {
+              RawSettings tmp;
+
+              raw_settings_from_config (&tmp, config);
+              xmp_src = rawheic_xmp_apply (path, &tmp);
+              if (xmp_src)
+                raw_settings_to_config (&tmp, config);
+            }
+
+          title = xmp_src ?
+                  g_strdup_printf (_("Develop RAW – %s (settings from %s)"), name, xmp_src) :
+                  g_strdup_printf (_("Develop RAW – %s"), name);
 
           if (! raw_dialog_run (procedure, config, path, title))
             {
@@ -204,6 +227,16 @@ raw_load_run (GimpProcedure         *procedure,
   /* File > Open several RAW files: settings chosen once for the queue */
   if (run_mode == GIMP_RUN_NONINTERACTIVE)
     raw_batch_session_lookup (path, &settings);
+
+  /* a photo's own XMP sidecar wins (interactive: already in the dialog) */
+  if (run_mode != GIMP_RUN_INTERACTIVE)
+    {
+      gboolean use_xmp = TRUE;
+
+      g_object_get (config, "xmp-sidecar", &use_xmp, NULL);
+      if (use_xmp)
+        rawheic_xmp_apply (path, &settings);
+    }
 
   gimp_progress_init_printf (_("Developing '%s'"), name);
 

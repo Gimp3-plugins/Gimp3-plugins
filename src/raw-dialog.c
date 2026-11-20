@@ -685,7 +685,8 @@ raw_dialog_run (GimpProcedure       *procedure,
                                    FALSE, FALSE);
 
   gimp_procedure_dialog_fill_box (dialog, "wb-box",
-                                  "wb-mode", "wb-temperature", "wb-tint", "wb-hint", NULL);
+                                  "wb-mode", "wb-temperature", "wb-tint",
+                                  "wb-mul-red", "wb-mul-blue", "wb-hint", NULL);
   gimp_procedure_dialog_fill_box (dialog, "exp-box",
                                   "exposure", "exposure-preserve", "highlight",
                                   "rebuild-level", "highlight-compensate",
@@ -715,6 +716,8 @@ raw_dialog_run (GimpProcedure       *procedure,
 
   set_sensitive_if (dialog, "wb-temperature", "wb-mode", "manual", NULL);
   set_sensitive_if (dialog, "wb-tint",        "wb-mode", "manual", NULL);
+  set_sensitive_if (dialog, "wb-mul-red",     "wb-mode", "multipliers", NULL);
+  set_sensitive_if (dialog, "wb-mul-blue",    "wb-mode", "multipliers", NULL);
   set_sensitive_if (dialog, "rebuild-level",  "highlight", "rebuild", NULL);
   set_sensitive_if (dialog, "highlight-compensate", "highlight",
                     "unclip", "blend", "rebuild", NULL);

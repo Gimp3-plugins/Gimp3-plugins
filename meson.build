@@ -53,6 +53,7 @@ sources = files(
   'src/lens.c',
   'src/export-batch.c',
   'src/camprofile.c',
+  'src/xmp.c',
 )
 
 link_args = []
@@ -75,7 +76,7 @@ subdir('po')
 unit_tests = executable('unit-tests',
   files('tests/unit/test_core.c', 'src/settings.c', 'src/denoise.c', 'src/util.c',
         'src/presets.c', 'src/lens.c', 'src/heif-load.c', 'src/profiles.c',
-        'src/camprofile.c'),
+        'src/camprofile.c', 'src/xmp.c'),
   dependencies : [gimp_dep, gimpui_dep, gegl_dep, heif_dep, lcms_dep,
                   gexiv2_dep, libraw_dep, lensfun_dep] + extra_deps,
   c_args : ['-DLIBRAW_NODLL', '-D_USE_MATH_DEFINES', '-fopenmp',
