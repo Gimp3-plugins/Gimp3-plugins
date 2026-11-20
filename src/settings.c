@@ -288,24 +288,24 @@ raw_settings_add_arguments (GimpProcedure *procedure)
                                        _("Use the default crop stored in the file (DNG, CR3, ...)"),
                                        d.camera_crop, RW);
   gimp_procedure_add_boolean_argument (procedure, "lens-vignetting",
-                                       _("Correct _vignetting"),
+                                       _("Correct vignetting"),
                                        _("Brighten dark corners using the lensfun lens database"),
                                        d.lens_vignetting, RW);
   gimp_procedure_add_boolean_argument (procedure, "lens-distortion",
-                                       _("Correct _distortion"),
+                                       _("Correct distortion"),
                                        _("Straighten barrel / pincushion distortion (lensfun)"),
                                        d.lens_distortion, RW);
   gimp_procedure_add_boolean_argument (procedure, "lens-tca",
-                                       _("Correct lateral chromatic _aberration"),
+                                       _("Correct lateral chromatic aberration"),
                                        _("Remove colour fringes towards the corners (lensfun)"),
                                        d.lens_tca, RW);
   gimp_procedure_add_file_argument (procedure, "camera-profile",
-                                    _("Camera _profile"),
+                                    _("Camera profile"),
                                     _("Camera input profile (.icc, .icm or Adobe .dcp); "
                                       "empty = LibRaw's built-in colour matrix"),
                                     GIMP_FILE_CHOOSER_ACTION_OPEN, TRUE, NULL, RW);
   gimp_procedure_add_boolean_argument (procedure, "camera-profile-look",
-                                       _("Use the profile's _look (DCP)"),
+                                       _("Use the profile's look (DCP)"),
                                        _("Apply the DCP look table and tone curve, as Adobe "
                                          "Camera Raw does; off = colour only"),
                                        d.camera_profile_look, RW);

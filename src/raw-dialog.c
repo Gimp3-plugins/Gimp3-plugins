@@ -751,6 +751,7 @@ raw_dialog_run (GimpProcedure       *procedure,
   {
     GtkWidget *tools = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 
+    /* xgettext:no-c-format */
     ui.loupe_toggle   = gtk_toggle_button_new_with_label (_("100% loupe"));
     ui.compare_toggle = gtk_toggle_button_new_with_label (_("Before / after"));
     gtk_widget_set_tooltip_text (ui.loupe_toggle,

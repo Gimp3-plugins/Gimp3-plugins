@@ -93,7 +93,7 @@ heif_load_procedure_new (GimpPlugIn  *plug_in,
                                             HEIF_THUMB_PROC);
 
   gimp_procedure_add_choice_argument (procedure, "hdr-mode",
-                                      _("_HDR images"),
+                                      _("HDR images"),
                                       _("What to do with HDR (PQ/HLG) images"),
                                       gimp_choice_new_with_values (
                                         "linear",  HDR_LINEAR,
@@ -105,7 +105,7 @@ heif_load_procedure_new (GimpPlugIn  *plug_in,
                                         NULL),
                                       "linear", G_PARAM_READWRITE);
   gimp_procedure_add_double_argument (procedure, "hdr-exposure",
-                                      _("HDR _exposure (EV)"),
+                                      _("HDR exposure (EV)"),
                                       _("Exposure applied to HDR images before tone mapping"),
                                       -6.0, 6.0, 0.0, G_PARAM_READWRITE);
 

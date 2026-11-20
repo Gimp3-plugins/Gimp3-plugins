@@ -1,5 +1,5 @@
 project('gimp-raw-heic', 'c', 'cpp',
-  version : '0.9.0',
+  version : '1.0.0',
   license : 'GPL-3.0-or-later',
   default_options : ['c_std=c11', 'cpp_std=c++17', 'buildtype=release',
                      'warning_level=2'])

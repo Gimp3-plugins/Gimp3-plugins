@@ -1,9 +1,13 @@
 src/adjust.c
 src/batch.c
+src/camprofile.c
 src/denoise.c
+src/export-batch.c
 src/heif-load.c
 src/image.c
+src/lens.c
 src/plugin.c
+src/presets.c
 src/profiles.c
 src/raw-develop.c
 src/raw-dialog.c
@@ -11,3 +15,4 @@ src/raw-load.c
 src/redevelop.c
 src/settings.c
 src/util.c
+src/xmp.c

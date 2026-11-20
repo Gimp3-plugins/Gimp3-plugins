@@ -86,7 +86,7 @@ if ($Package) {
   New-Item -ItemType Directory -Force $dist | Out-Null
 
   # documents and licence texts next to the plug-in
-  foreach ($f in "README.md","LICENSES.md","CHANGELOG.md") {
+  foreach ($f in "README.md","README.en.md","LICENSES.md","LICENSES.en.md","CHANGELOG.md") {
     Copy-Item (Join-Path $root $f) $stage
   }
   Copy-Item "$Msys\clang64\share\licenses\gimp\COPYING" (Join-Path $stage "COPYING")
@@ -109,7 +109,7 @@ if ($Package) {
   if (Test-Path $srcStage) { Remove-Item -Recurse -Force $srcStage }
   New-Item -ItemType Directory -Force $srcStage | Out-Null
   foreach ($item in "src","po","tests","meson.build","meson_options.txt","build.ps1",
-                    "README.md","LICENSES.md","CHANGELOG.md","COPYING") {
+                    "README.md","README.en.md","LICENSES.md","LICENSES.en.md","CHANGELOG.md","COPYING") {
     $p = Join-Path $root $item
     if (Test-Path $p) { Copy-Item -Recurse $p $srcStage }
   }

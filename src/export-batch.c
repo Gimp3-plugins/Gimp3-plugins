@@ -83,17 +83,17 @@ export_batch_procedure_new (GimpPlugIn  *plug_in,
   gimp_procedure_add_string_array_argument (procedure, "files", _("Files"),
                                             _("Paths of the RAW files to develop"),
                                             G_PARAM_READWRITE);
-  gimp_procedure_add_file_argument (procedure, "output-folder", _("Output _folder"),
+  gimp_procedure_add_file_argument (procedure, "output-folder", _("Output folder"),
                                     _("Folder for the developed files"),
                                     GIMP_FILE_CHOOSER_ACTION_SELECT_FOLDER, TRUE, NULL,
                                     G_PARAM_READWRITE);
-  gimp_procedure_add_choice_argument (procedure, "format", _("_Format"),
+  gimp_procedure_add_choice_argument (procedure, "format", _("Format"),
                                       _("File format of the developed images"),
                                       choice, "tiff16", G_PARAM_READWRITE);
-  gimp_procedure_add_int_argument (procedure, "quality", _("_Quality"),
+  gimp_procedure_add_int_argument (procedure, "quality", _("Quality"),
                                    _("JPEG / AVIF quality"), 1, 100, 92,
                                    G_PARAM_READWRITE);
-  gimp_procedure_add_boolean_argument (procedure, "overwrite", _("_Overwrite existing files"),
+  gimp_procedure_add_boolean_argument (procedure, "overwrite", _("Overwrite existing files"),
                                        _("Otherwise a number is added to the file name"),
                                        FALSE, G_PARAM_READWRITE);
   raw_settings_add_arguments (procedure);

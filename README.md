@@ -1,8 +1,12 @@
 # gimp-raw-heic
 
+**Polski** · [English](README.en.md)
+
 Wtyczka do **GIMP 3.2** (Windows 11 x64), która otwiera **pliki RAW z aparatów** oraz **zdjęcia HEIC/HEIF/AVIF z HDR** bezpośrednio w GIMP. Nie potrzebuje darktable, RawTherapee, dcraw ani żadnego innego programu: wywoływanie RAW robi biblioteka **LibRaw 0.22.2**, wkompilowana w plik wtyczki.
 
-Wersja: **0.9.0** · Licencja: **GPL-3.0-or-later** · Szczegóły licencji bibliotek: [LICENSES.md](LICENSES.md)
+Wersja: **1.0.0** · Licencja: **GPL-3.0-or-later** · Licencje bibliotek: [LICENSES.md](LICENSES.md) · Zmiany: [CHANGELOG.md](CHANGELOG.md)
+
+Interfejs jest **po polsku i po angielsku**, zgodnie z językiem ustawionym w GIMP.
 
 ---
 
@@ -19,7 +23,9 @@ Wersja: **0.9.0** · Licencja: **GPL-3.0-or-later** · Szczegóły licencji bibl
    (Ścieżkę `%APPDATA%` wklej w pasek adresu Eksploratora; nie potrzeba uprawnień administratora.)
 3. Uruchom GIMP. Pierwsze uruchomienie po instalacji trwa kilka sekund dłużej, bo GIMP rejestruje nową wtyczkę.
 
-Wymagania: **GIMP 3.2 lub nowszy 3.x** w wersji instalowanej z gimp.org. Wtyczka korzysta z bibliotek, które GIMP już ma (libheif, lcms2, OpenMP, GEGL), więc nic więcej nie trzeba instalować. Zbudowano i przetestowano na GIMP 3.2.6. Na GIMP 3.0.x wtyczki nie testowano i to nie jest wspierana konfiguracja.
+W folderze są też biblioteka **lensfun** (korekcja obiektywów) z bazą obiektywów i dwie jej zależności. Pozostałe biblioteki (libheif, lcms2, OpenMP, GEGL) wtyczka bierze z GIMP-a.
+
+Wymagania: **GIMP 3.2 lub nowszy 3.x** w wersji z gimp.org. Zbudowano i przetestowano na GIMP 3.2.6. Na GIMP 3.0.x wtyczki nie testowano.
 
 ### Czy GIMP używa tej wtyczki do RAW?
 
@@ -29,70 +35,80 @@ GIMP używa naraz tylko jednego importera RAW. Wtyczka przejmuje tę rolę autom
 
 **RAW (przez LibRaw, ok. 1250 modeli aparatów):** CR2, CR3, CRW (Canon), NEF, NRW (Nikon), ARW, SRF, SR2 (Sony), DNG (także z telefonów, Apple ProRAW, linear DNG), RAF (Fujifilm, także X-Trans), ORF (Olympus / OM System), RW2 (Panasonic), RWL (Leica), PEF (Pentax), SRW (Samsung), 3FR, FFF (Hasselblad), IIQ, CAP (Phase One), ERF (Epson), MRW, MDC (Minolta), KDC, DCR (Kodak), MEF (Mamiya), MOS (Leaf), RAW, RWZ i inne, które otwiera LibRaw.
 
-Nieobsługiwane: **X3F** (Sigma) i **GPR** (GoPro), bo ta kompilacja LibRaw nie zawiera potrzebnych modułów. Aparaty Sigma fp i dp Quattro zapisujące DNG działają normalnie.
+Nieobsługiwane: **X3F** (Sigma) i **GPR** (GoPro), bo ta kompilacja LibRaw nie zawiera potrzebnych modułów. Aparaty Sigma zapisujące DNG działają normalnie.
 
-**HEIC / HEIF / AVIF:** pliki z **HDR** (krzywe PQ i HLG) wtyczka dekoduje sama. Wszystkie pozostałe (zwykłe zdjęcia z iPhone'a, 8/10/12-bit, z kanałem alfa) przekazuje do **wbudowanego w GIMP modułu HEIF**, który robi to dobrze. Wtyczka nie dubluje jego kodu, tylko dodaje to, czego mu brakuje: HDR i szybkie miniatury w oknie Otwórz.
+**HEIC / HEIF / AVIF:** pliki **HDR** (krzywe PQ i HLG oraz zdjęcia HDR z iPhone'a z mapą wzmocnienia) wtyczka dekoduje sama. Zwykłe zdjęcia (8/10/12-bit, z kanałem alfa) przekazuje do **wbudowanego w GIMP modułu HEIF**, który robi to dobrze, i dokłada szybkie miniatury w oknie Otwórz.
 
 ## Jak używać
 
 ### Otwieranie RAW
-*Plik → Otwórz*, przeciągnięcie pliku na okno albo *Otwórz jako warstwy*. Pokaże się okno **Wywołaj RAW** z podglądem na żywo (połowa rozdzielczości, odświeża się ok. 0,5 s po zmianie):
+*Plik → Otwórz*, przeciągnięcie pliku na okno albo *Otwórz jako warstwy*. Pokaże się okno **Wywołaj RAW** z podglądem na żywo:
 
 | Zakładka | Ustawienia |
 |---|---|
-| **Balans bieli** | z aparatu · automatyczny · ręczny (temperatura K + tint) · **punkt neutralny**: kliknij w podglądzie szary obszar |
-| **Ekspozycja** | ekspozycja −2…+3 EV, ochrona świateł, odzyskiwanie prześwietleń (obetnij / nie obcinaj / mieszaj / odbuduj 3–9), jasność, automatyczna jasność |
-| **Szczegóły** | demozaikowanie (dwuliniowe, VNG, PPG, **AHD**, DCB, DHT, AAHD; matryce X-Trans zawsze dostają algorytm X-Trans), redukcja szumu falkowa i FBDD, korekta aberracji chromatycznej (R/B), usuwanie gorących i martwych pikseli, filtr medianowy artefaktów barwnych |
-| **Wyjście** | przestrzeń barw: sRGB, Adobe RGB, Display P3, ProPhoto, Rec. 2020 · światło liniowe lub z krzywą tonalną · precyzja 8/16/32-bit float · połowa rozmiaru · obrót wg aparatu · domyślne kadrowanie aparatu |
+| **Balans bieli** | z aparatu · automatyczny · ręczny (temperatura K + tint) · **punkt neutralny** (kliknij szary obszar w podglądzie) · mnożniki z XMP |
+| **Ekspozycja** | ekspozycja −2…+3 EV, ochrona świateł, odzyskiwanie prześwietleń (obetnij / nie obcinaj / mieszaj / odbuduj 3–9) z **automatyczną kompensacją jasności**, jasność, automatyczna jasność |
+| **Szczegóły** | demozaikowanie (dwuliniowe, VNG, PPG, **AHD**, DCB, DHT, AAHD; X-Trans automatycznie), redukcja szumu falkowa i FBDD, aberracja chromatyczna (R/B), gorące i martwe piksele, mediana artefaktów barwnych |
+| **Obiektyw** | korekcja **winiety**, **dystorsji** i **poprzecznej aberracji chromatycznej** z bazy **lensfun** (obiektyw rozpoznawany z pliku, widoczny pod podglądem) |
+| **Kolor** | **profil aparatu**: ICC (.icc/.icm) albo Adobe **DCP**, opcjonalnie z „wyglądem” profilu (tabela wyglądu i krzywa tonalna) |
+| **Wyjście** | sRGB, Adobe RGB, Display P3, ProPhoto, Rec. 2020 · liniowe lub z krzywą · 8/16/32-bit float · połowa rozmiaru · obrót · kadrowanie aparatu |
 
-- Ustawienia są **zapamiętywane** między sesjami.
-- **„Zawsze pokazuj to okno”** wyłączone: pliki otwierają się od razu z ostatnimi ustawieniami. **Shift** przytrzymany przy otwieraniu odwraca to zachowanie (pokazuje okno albo je pomija).
-- Domyślnie powstaje obraz **16-bit liniowy** w sRGB z poprawnym profilem ICC. Krzywe, poziomy i maski działają bez posteryzacji.
-- **EXIF, XMP i IPTC** z pliku RAW trafiają do obrazu i są zapisywane przy eksporcie. Orientacja jest stosowana do pikseli, a znacznik w EXIF ustawiany na „normalna”, żeby nic nie obracało zdjęcia drugi raz.
+Pod podglądem są dwa przełączniki:
+- **Lupa 100%**: kliknij podgląd, aby zobaczyć to miejsce w pełnej rozdzielczości (szum, ostrość, demozaikowanie). Ponowne kliknięcie wraca do całości.
+- **Przed / po**: lewa połowa podglądu z ustawieniami domyślnymi, prawa z Twoimi.
+
+U góry okna jest lista **presetów**: wbudowane („Domyślne”, „Noc / wysokie ISO”, „Szybki podgląd”) i własne, z przyciskami *Zapisz jako…* i *Usuń*. Preset nie zmienia punktu neutralnego, bo ten zależy od zdjęcia.
+
+Inne zachowania przy otwieraniu:
+- **Pamięć ustawień:** ustawienia są zapamiętywane między sesjami.
+- **„Zawsze pokazuj to okno”:** gdy wyłączone, pliki otwierają się od razu. **Shift** przy otwieraniu odwraca to zachowanie.
+- **Pliki XMP:** jeśli obok pliku RAW leży XMP z **Lightrooma** (`zdjecie.xmp`) albo **darktable** (`zdjecie.nef.xmp`), wtyczka przejmuje z niego balans bieli, ekspozycję, korekcje obiektywu i redukcję szumu. Tytuł okna pokazuje źródło ustawień. Opcja *Użyj ustawień z pliku XMP*.
+- **Obraz wynikowy:** domyślnie **16-bit liniowy** w sRGB z poprawnym profilem ICC. **EXIF, XMP i IPTC** są przenoszone i zapisywane przy eksporcie.
 
 ### Ponowne wywołanie RAW
 **Filtry → RAW → Wywołaj RAW ponownie…**
 
-Obraz pamięta ścieżkę oryginalnego pliku RAW i użyte ustawienia. Zapisuje je w pliku XCF, więc działa to także po zamknięciu i ponownym otwarciu XCF. Okno startuje z ustawieniami użytymi dla tego obrazu. Wynik **zastępuje wywołaną warstwę** albo jest **dodawany jako nowa warstwa** (np. dwie ekspozycje do maskowania nieba). Oryginalny RAW musi leżeć w tym samym miejscu na dysku.
+Obraz pamięta ścieżkę oryginalnego pliku RAW i użyte ustawienia, także w pliku XCF. Wynik **zastępuje piksele wywołanej warstwy**: jej efekty nieniszczące, maska, tryb, krycie, nazwa i pozycja zostają, a całość da się cofnąć. Alternatywnie wynik trafia na **nową warstwę**. Jeśli zapisana ścieżka nie prowadzi na dysk lokalny (np. `\\serwer\...` w cudzym pliku XCF), wtyczka najpierw pyta o zgodę.
 
 ### Szybka korekta nieniszcząca
-**Filtry → RAW → Szybka korekta (nieniszcząca)…**
+**Filtry → RAW → Szybka korekta (nieniszcząca)…** dodaje do warstwy **edytowalne efekty GEGL**: ekspozycję, temperaturę barwową, cienie/światła, kontrast, nasycenie oraz opcjonalnie neutralne **Poziomy** i **Krzywe**.
 
-Dodaje do warstwy **edytowalne efekty GEGL**: ekspozycję i poziom czerni, temperaturę barwową (z/do), cienie i światła, kontrast, nasycenie oraz opcjonalnie neutralne **Poziomy** i **Krzywe** do późniejszego dopracowania. Efekty widać w doku Warstwy (ikona efektów). Można je zmieniać, wyłączać i usuwać, a zapisują się w XCF.
+### Wiele plików
+- **Plik → Otwórz → Otwórz wiele plików RAW…**: ustawienia wybierasz raz, wtyczka otwiera wszystkie pliki z paskiem postępu.
+- **Plik → Eksportuj → Wywołaj pliki RAW do folderu…**: wywołuje pliki i od razu zapisuje je jako **TIFF 16-bit, JPEG, PNG 16-bit, AVIF 10-bit albo XCF**, bez zostawiania ich otwartych. Istniejące pliki dostają numer (`-2`) albo są nadpisywane.
 
-### Wiele plików naraz
-**Plik → Otwórz → Otwórz wiele plików RAW…**
-
-Wybierasz pliki, ustawiasz wywołanie raz (z podglądem pierwszego pliku) i wtyczka otwiera kolejno wszystkie, z paskiem postępu. Anulowanie zatrzymuje kolejkę przed następnym plikiem. Pliki, których nie da się otworzyć, są wymienione na końcu.
+W obu przypadkach XMP danego zdjęcia ma pierwszeństwo przed wspólnymi ustawieniami.
 
 ### HEIC z HDR
-Zdjęcia HDR (PQ / HLG, np. z nowych telefonów i kamer) domyślnie trafiają do GIMP jako **32-bit float liniowy w przestrzeni Rec. 2020 (BT.2100)**. Biel odniesienia SDR (203 cd/m²) ma wartość 1,0, a jaśniejsze partie mają wartości powyżej 1,0 i nie są tracone. Na zwykłym monitorze najjaśniejsze miejsca wyglądają na przepalone, dopóki nie zastosujesz np. *Kolory → Ekspozycja* albo mapowania tonów.
+Przy otwieraniu zdjęcia HDR pokazuje się okno z wyborem:
+- **Liniowy 32-bit float** (domyślnie): BT.2100 / Rec. 2020; dla zdjęć z iPhone'a liniowy Display P3. Biel SDR ma wartość 1,0, jaśniejsze partie są zachowane powyżej 1,0.
+- **SDR**: mapowanie tonów (PQ/HLG) albo obraz bazowy (iPhone).
+- **Wbudowany moduł GIMP.**
 
-Przetestowano na zdjęciach z **realme 14 Pro 5G** (HEIC 4096×2304 złożony z 40 kafelków, profil Display P3, EXIF). Otwierają się w ok. 0,5 s, z zachowanym profilem Display P3 i metadanymi. Te pliki nie zawierają żadnej miniatury (ani w HEIF, ani w EXIF), więc miniatura w oknie Otwórz powstaje z pełnego obrazu (ok. 0,5 s, tylko za pierwszym razem, bo potem GIMP trzyma ją w pamięci podręcznej). Jeśli telefon zapisuje miniaturę w HEIF lub EXIF, wtyczka używa jej od razu.
+Jest też suwak **ekspozycji HDR**. Zdjęcia HDR z iPhone'a (iOS 14–17, mapa wzmocnienia Apple) są odtwarzane według wzoru opisanego przez Apple.
 
-Inne tryby wybierzesz w procedurze `file-raw-heic-heif-load`, parametr *Obrazy HDR*:
-- **Mapowanie tonów do SDR** (16-bit sRGB): od razu dobrze wygląda, ale traci zakres HDR.
-- **Wbudowany moduł GIMP dla wszystkich plików**: całkowicie wyłącza HEIC w tej wtyczce.
+Sprawdzono też na zwykłych zdjęciach HEIC z **realme 14 Pro 5G** (Display P3, EXIF).
 
 ### Informacje
 *Pomoc → O wtyczce RAW / HEIC* pokazuje wersje wtyczki, LibRaw i libheif.
 
-## Ograniczenia (stan na 0.9.0)
+## Ograniczenia
 
-- **Odzyskiwanie prześwietleń** w trybach innych niż „Obetnij” przyciemnia obraz o ok. 1 EV. LibRaw zostawia w ten sposób miejsce na odzyskane światła. Skompensuj suwakiem *Ekspozycja* albo później w GIMP.
-- **Redukcja szumu falkowa** to własna implementacja wtyczki, działająca na wywołanym obrazie. Odpowiednik w LibRaw 0.22.2 (wersja z MSYS2) wywraca program, także jego własne narzędzie `dcraw_emu`.
-- **Algorytmy demozaikowania z pakietów GPL2/GPL3** (AFD, VCD, AMaZE, LMMSE…) nie istnieją w LibRaw od wersji 0.20, więc nie są dostępne. Dostępne algorytmy wymienia tabela wyżej.
-- **Połowa rozmiaru** nie zmniejsza „linear DNG” (np. Apple ProRAW), bo nie mają mozaiki Bayera.
-- **HDR z mapą wzmocnienia** (Apple „HDR photo”, Ultra HDR) nie jest odtwarzane. Takie zdjęcia otwierają się jako zwykłe SDR przez moduł GIMP.
-- **Przy ponownym wywołaniu** precyzja obrazu się nie zmienia, a dane trafiają do jego bieżącego profilu barw. Ustawienia „Precyzja” i „Światło liniowe” działają tylko przy otwieraniu pliku.
-- **8-bit** zawsze używa krzywej tonalnej, bo 8-bit liniowe powoduje posteryzację.
-- **Uszkodzone pliki** nie wywracają GIMP-a (sprawdzone na 50 uszkodzonych próbkach). Część uciętych plików LibRaw jednak otwiera, uzupełniając brakującą część obrazu.
-- **Skrypty** wywołujące `gimp_file_load` dostają ustawienia domyślne. Ustawienia przekażesz, wywołując procedurę `file-raw-heic-raw-load` bezpośrednio.
-- **Linux** nie był budowany ani testowany (kod nie zawiera nic specyficznego dla Windows poza wykrywaniem klawisza Shift).
+- **HDR ISO 21496-1** (iPhone z iOS 18 i nowsze) oraz **Ultra HDR** w plikach JPEG (Android) nie są odtwarzane: libheif 1.23 nie udostępnia tych map, a JPEG obsługuje GIMP. Takie zdjęcia otwierają się jako SDR.
+- **Profile DCP**: obsługiwane są macierze (Forward/Color z interpolacją dwóch oświetlaczy), HueSatMap, LookTable i krzywa tonalna. Pomijane są rzadkie elementy specyfikacji: profile z trzema oświetlaczami, ProfileGainTableMap i BaselineExposureOffset.
+- **Import z XMP** przenosi tylko ustawienia z jednoznacznym odpowiednikiem (tabela w [CHANGELOG.md](CHANGELOG.md)); pozostałe parametry Lightrooma i darktable są pomijane. Temperatura z Lightrooma jest liczona inną metodą, więc kolor może się nieco różnić.
+- **Redukcja szumu falkowa** to własna implementacja wtyczki (odpowiednik w LibRaw 0.22.2 z MSYS2 wywraca program).
+- **Algorytmy demozaikowania z pakietów GPL2/GPL3** (AMaZE, LMMSE…) nie istnieją w LibRaw od wersji 0.20.
+- **Połowa rozmiaru** nie zmniejsza „linear DNG” (np. Apple ProRAW).
+- **Przy ponownym wywołaniu** precyzja obrazu się nie zmienia; „Precyzja” i „Światło liniowe” działają przy otwieraniu.
+- **8-bit** zawsze używa krzywej tonalnej.
+- **Uszkodzone pliki** nie wywracają GIMP-a; część uciętych plików LibRaw otwiera z brakującym fragmentem.
+- **Skrypty** wywołujące `gimp_file_load` dostają ustawienia domyślne (i XMP); wszystkie ustawienia przekażesz przez `file-raw-heic-raw-load`.
+- **Linux** nie był testowany.
 
 ## Odinstalowanie
 
-Usuń folder `%APPDATA%\GIMP\3.2\plug-ins\gimp-raw-heic`. Jeśli w *Preferencje → Import i eksport obrazów → Importer RAW* była wybrana ta wtyczka, GIMP przy następnym starcie wróci do swojego ustawienia domyślnego.
+Usuń folder `%APPDATA%\GIMP\3.2\plug-ins\gimp-raw-heic`. Własne presety leżą w `%APPDATA%\GIMP\3.2\gimp-raw-heic\presets\`.
 
 ## Prywatność
 
@@ -104,19 +120,20 @@ Wtyczka nie łączy się z siecią i nie wysyła żadnych danych.
 
 ### Budowanie (Windows, MSYS2 CLANG64, czyli tym samym toolchainem co GIMP)
 ```powershell
-.\build.ps1 -Setup      # jednorazowo: pakiety MSYS2 (clang, meson, gimp, libraw, libheif, …)
+.\build.ps1 -Setup      # jednorazowo: pakiety MSYS2 (clang, meson, gimp, libraw, libheif, lensfun, …)
 .\build.ps1 -Install    # kompilacja + instalacja do %APPDATA%\GIMP\3.x\plug-ins
 .\build.ps1 -Package    # dist\gimp-raw-heic-<wersja>-win64.zip + paczka źródeł
 .\build.ps1 -UpdatePo   # odśwież po/gimp-raw-heic.pot i po/pl.po
 ```
+GitHub Actions buduje wtyczkę, uruchamia testy jednostkowe i dołącza paczki do wydań oznaczonych `v*`.
 
 ### Testy
 ```powershell
+meson test -C build                       # testy jednostkowe (bez GIMP-a)
 sh tests/fetch-samples.sh                 # próbki RAW z raw.pixls.us (CC0)
 python tests/make_heic_samples.py         # próbki HEIC (SDR, 10-bit, alfa, PQ, HLG)
-.\tests\run-tests.ps1                     # wszystkie testy w gimp-console
+.\tests\run-tests.ps1                     # testy w gimp-console (w tym regresje)
 ```
-Testy: ładowanie wszystkich formatów, porównanie z `dcraw_emu` (referencja LibRaw; najpierw wygeneruj `build\ref\*.tiff` poleceniem `dcraw_emu -w -4 -T -o 1 -q 3 <plik>`), miniatury i uszkodzone pliki, HEIC (wartości PQ/HLG), ponowne wywołanie z XCF i filtry nieniszczące, metadane, macierz opcji.
 
 ### Struktura
-`src/plugin.c` rejestracja procedur · `raw-load.c` loader i miniatury RAW · `raw-develop.c` LibRaw (balans bieli z temperatury, punkt neutralny, gorące piksele, limity bezpieczeństwa) · `denoise.c` redukcja szumu · `raw-dialog.c` okno z podglądem · `image.c` tworzenie obrazu i profile · `profiles.c` profile ICC · `redevelop.c` ponowne wywołanie · `adjust.c` filtry nieniszczące · `batch.c` wiele plików · `heif-load.c` HEIC HDR · `settings.c` ustawienia i ich zapis · `po/` tłumaczenie.
+`plugin.c` rejestracja · `raw-load.c` loader i miniatury RAW · `raw-develop.c` LibRaw · `raw-dialog.c` okno, podgląd, lupa, presety · `settings.c` ustawienia · `presets.c` presety · `denoise.c` redukcja szumu · `lens.c` lensfun · `camprofile.c` ICC/DCP · `xmp.c` XMP · `image.c`, `profiles.c` obraz i profile · `redevelop.c` ponowne wywołanie · `adjust.c` filtry nieniszczące · `batch.c` wiele plików · `export-batch.c` wywołanie do folderu · `heif-load.c` HEIC HDR i mapy Apple · `util.c` · `po/` tłumaczenie.
