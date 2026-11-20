@@ -271,6 +271,84 @@ test_presets (void)
   g_assert_false (raw_presets_load ("does not exist", &t));
 }
 
+
+/* --- 100% loupe: a region must match the same place of a full develop --- */
+
+static void
+region_vs_full (const gchar *file,
+                WbMode       wb,
+                gdouble      rx,
+                gdouble      ry)
+{
+  gchar      *path = g_build_filename (samples_dir, file, NULL);
+  RawSettings s;
+  RawSession *ses;
+  RawImage   *full, *part;
+  GError     *error = NULL;
+  gint        fw, fh, x0, y0, x, y, c;
+  gdouble     region[4], mf[3] = { 0 }, mp[3] = { 0 };
+
+  if (! g_file_test (path, G_FILE_TEST_EXISTS))
+    {
+      g_test_skip ("sample missing");
+      g_free (path);
+      return;
+    }
+
+  raw_settings_defaults (&s);
+  s.wb_mode = wb;
+  s.depth   = DEPTH_FLOAT;
+
+  ses = raw_session_open (path, &error);
+  g_assert_no_error (error);
+  raw_session_size (ses, &s, &fw, &fh);
+
+  full = raw_session_develop (ses, &s, G_MAXINT, NULL, NULL, &error);  /* float, 1:1 */
+  g_assert_no_error (error);
+  g_assert_cmpint (full->width, ==, fw);
+  g_assert_cmpint (full->height, ==, fh);
+
+  region[2] = 640.0 / fw;
+  region[3] = 480.0 / fh;
+  region[0] = rx;
+  region[1] = ry;
+  part = raw_session_develop_region (ses, &s, region, &error);
+  g_assert_no_error (error);
+  g_assert_cmpint (ABS (part->width - 640), <=, 16);
+  g_assert_cmpint (ABS (part->height - 480), <=, 16);
+
+  x0 = (gint) (rx * fw);
+  y0 = (gint) (ry * fh);
+  for (y = 0; y < part->height; y++)
+    for (x = 0; x < part->width; x++)
+      for (c = 0; c < 3; c++)
+        {
+          mp[c] += part->pixels[((gsize) y * part->width + x) * 3 + c];
+          mf[c] += full->pixels[((gsize) (y0 + y) * full->width + (x0 + x)) * 3 + c];
+        }
+
+  for (c = 0; c < 3; c++)
+    g_assert_cmpfloat (fabs (mp[c] / mf[c] - 1.0), <, 0.04);
+
+  raw_image_free (full);
+  raw_image_free (part);
+  raw_session_free (ses);
+  g_free (path);
+}
+
+static void
+test_region_nef (void)
+{
+  region_vs_full ("Nikon-D750.nef", WB_CAMERA, 0.40, 0.45);
+}
+
+static void
+test_region_rotated_auto_wb (void)
+{
+  /* portrait iPhone DNG: exercises the orientation mapping */
+  region_vs_full ("Apple-iPhone_12_Pro.dng", WB_AUTO, 0.05, 0.10);
+}
+
 /* --- batch session -------------------------------------------------------- */
 
 static void
@@ -400,6 +478,8 @@ main (int argc, char **argv)
   g_test_add_func ("/util/remote-paths",        test_remote_paths);
   g_test_add_func ("/develop/errors",           test_develop_errors);
   g_test_add_func ("/develop/sample",           test_develop_sample);
+  g_test_add_func ("/loupe/region-nef",         test_region_nef);
+  g_test_add_func ("/loupe/region-rotated-auto", test_region_rotated_auto_wb);
 
   return g_test_run ();
 }

@@ -18,10 +18,18 @@
 
 typedef struct
 {
+  guchar *rgb;          /* sRGB u8 */
+  gint    w, h;
+} Shot;
+
+typedef struct
+{
   GimpProcedureConfig *config;
   gchar               *path;
   GtkWidget           *area;
   GtkWidget           *status;
+  GtkWidget           *loupe_toggle;
+  GtkWidget           *compare_toggle;
 
   RawSession          *session;
   gboolean             session_failed;
@@ -31,17 +39,27 @@ typedef struct
   gboolean             closing;
   guint                timeout_id;
 
-  /* last rendered preview, sRGB u8 */
-  guchar              *rgb;
-  gint                 rgb_w;
-  gint                 rgb_h;
-  ColorSpace           rgb_cs;
+  Shot                 after;        /* current settings           */
+  Shot                 before;       /* default settings           */
+  gchar               *before_key;   /* what "before" was made for */
+
+  gboolean             loupe_active; /* showing a 100% crop        */
+  gdouble              loupe_cx;     /* its centre, fractions of   */
+  gdouble              loupe_cy;     /* the oriented image         */
+  gint                 full_w;       /* full-resolution size of    */
+  gint                 full_h;       /* the oriented image         */
 } PreviewUI;
 
 typedef struct
 {
   RawSettings  settings;
+  gboolean     loupe;
+  gdouble      region[4];
+  gboolean     want_before;
+  gchar       *before_key;
   RawImage    *image;
+  RawImage    *before;
+  gint         full_w, full_h;
   gchar       *error;
   gint64       usecs;
 } RenderJob;
@@ -54,8 +72,40 @@ static void
 render_job_free (RenderJob *job)
 {
   raw_image_free (job->image);
+  raw_image_free (job->before);
+  g_free (job->before_key);
   g_free (job->error);
   g_free (job);
+}
+
+/* "Before" = default development with the same geometry, so both halves
+ * of the comparison line up.
+ */
+static void
+before_settings (const RawSettings *s,
+                 RawSettings       *b)
+{
+  raw_settings_defaults (b);
+  b->auto_rotate = s->auto_rotate;
+  b->camera_crop = s->camera_crop;
+  b->color_space = s->color_space;
+  memcpy (b->spot, s->spot, sizeof b->spot);
+}
+
+static void
+loupe_region (gdouble  cx,
+              gdouble  cy,
+              gint     full_w,
+              gint     full_h,
+              gdouble  region[4])
+{
+  gdouble w = full_w > 0 ? MIN (1.0, (gdouble) PREVIEW_W / full_w) : 1.0;
+  gdouble h = full_h > 0 ? MIN (1.0, (gdouble) PREVIEW_H / full_h) : 1.0;
+
+  region[0] = CLAMP (cx - w / 2, 0.0, 1.0 - w);
+  region[1] = CLAMP (cy - h / 2, 0.0, 1.0 - h);
+  region[2] = w;
+  region[3] = h;
 }
 
 static void
@@ -87,8 +137,36 @@ render_thread (GTask        *task,
     }
 
   if (ui->session)
-    job->image = raw_session_develop (ui->session, &job->settings,
-                                      PREVIEW_SIZE, NULL, NULL, &error);
+    {
+      raw_session_size (ui->session, &job->settings, &job->full_w, &job->full_h);
+
+      if (job->loupe)
+        {
+          /* a full preview first: it measures automatic white balance,
+           * which the 100% crop then reuses
+           */
+          RawImage *full = raw_session_develop (ui->session, &job->settings,
+                                                PREVIEW_SIZE, NULL, NULL, NULL);
+          raw_image_free (full);
+          job->image = raw_session_develop_region (ui->session, &job->settings,
+                                                   job->region, &error);
+        }
+      else
+        {
+          job->image = raw_session_develop (ui->session, &job->settings,
+                                            PREVIEW_SIZE, NULL, NULL, &error);
+        }
+
+      if (job->image && job->want_before)
+        {
+          RawSettings b;
+
+          before_settings (&job->settings, &b);
+          job->before = job->loupe ?
+                        raw_session_develop_region (ui->session, &b, job->region, NULL) :
+                        raw_session_develop (ui->session, &b, PREVIEW_SIZE, NULL, NULL, NULL);
+        }
+    }
 
   if (error)
     {
@@ -100,6 +178,33 @@ render_thread (GTask        *task,
 }
 
 static void
+shot_from_image (Shot           *shot,
+                 const RawImage *img,
+                 ColorSpace      cs)
+{
+  GimpColorProfile *profile = rawheic_profile_new (cs, TRUE);
+  const Babl       *src;
+  gsize             n = (gsize) img->width * img->height;
+
+  src = gimp_color_profile_get_format (profile, babl_format ("RGB float"),
+                                       GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                                       NULL);
+  g_object_unref (profile);
+
+  g_free (shot->rgb);
+  shot->rgb = g_malloc (n * 3);
+  shot->w   = img->width;
+  shot->h   = img->height;
+  babl_process (babl_fish (src, babl_format ("R'G'B' u8")), img->pixels, shot->rgb, n);
+}
+
+static gboolean
+compare_on (PreviewUI *ui)
+{
+  return gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (ui->compare_toggle));
+}
+
+static void
 draw_preview (PreviewUI *ui)
 {
   GimpPreviewArea *area = GIMP_PREVIEW_AREA (ui->area);
@@ -108,28 +213,58 @@ draw_preview (PreviewUI *ui)
 
   gimp_preview_area_fill (area, 0, 0, PREVIEW_W, PREVIEW_H, 128, 128, 128);
 
-  if (! ui->rgb)
+  if (! ui->after.rgb)
     return;
 
-  ox = (PREVIEW_W - ui->rgb_w) / 2;
-  oy = (PREVIEW_H - ui->rgb_h) / 2;
+  ox = (PREVIEW_W - ui->after.w) / 2;
+  oy = (PREVIEW_H - ui->after.h) / 2;
 
-  gimp_preview_area_draw (area, ox, oy, ui->rgb_w, ui->rgb_h,
-                          GIMP_RGB_IMAGE, ui->rgb, ui->rgb_w * 3);
+  gimp_preview_area_draw (area, ox, oy, ui->after.w, ui->after.h,
+                          GIMP_RGB_IMAGE, ui->after.rgb, ui->after.w * 3);
+
+  /* split view: left half before, right half after */
+  if (compare_on (ui) && ui->before.rgb &&
+      ui->before.w == ui->after.w && ui->before.h == ui->after.h)
+    {
+      gint half = ui->after.w / 2;
+
+      gimp_preview_area_draw (area, ox, oy, half, ui->before.h,
+                              GIMP_RGB_IMAGE, ui->before.rgb, ui->before.w * 3);
+      gimp_preview_area_fill (area, ox + half, oy, 1, ui->after.h, 255, 255, 255);
+    }
 
   raw_settings_from_config (&s, ui->config);
-  if (s.wb_mode == WB_SPOT)
+  if (s.wb_mode == WB_SPOT && ! ui->loupe_active)
     {
-      gint x = ox + (gint) (s.spot[0] * ui->rgb_w);
-      gint y = oy + (gint) (s.spot[1] * ui->rgb_h);
-      gint w = MAX (3, (gint) (s.spot[2] * ui->rgb_w));
-      gint h = MAX (3, (gint) (s.spot[3] * ui->rgb_h));
+      gint x = ox + (gint) (s.spot[0] * ui->after.w);
+      gint y = oy + (gint) (s.spot[1] * ui->after.h);
+      gint w = MAX (3, (gint) (s.spot[2] * ui->after.w));
+      gint h = MAX (3, (gint) (s.spot[3] * ui->after.h));
 
       gimp_preview_area_fill (area, x, y, w, 1, 255, 255, 0);
       gimp_preview_area_fill (area, x, y + h - 1, w, 1, 255, 255, 0);
       gimp_preview_area_fill (area, x, y, 1, h, 255, 255, 0);
       gimp_preview_area_fill (area, x + w - 1, y, 1, h, 255, 255, 0);
     }
+}
+
+static void
+update_status (PreviewUI   *ui,
+               const gchar *camera,
+               gint         ms)
+{
+  GString *msg = g_string_new (camera);
+
+  g_string_append_printf (msg, _(" — %d ms"), ms);
+  if (ui->loupe_active)
+    g_string_append (msg, _(" — 100% (click to return)"));
+  else if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (ui->loupe_toggle)))
+    g_string_append (msg, _(" — click a spot to see it at 100%"));
+  if (compare_on (ui))
+    g_string_append (msg, _(" — left: default, right: your settings"));
+
+  gtk_label_set_text (GTK_LABEL (ui->status), msg->str);
+  g_string_free (msg, TRUE);
 }
 
 static void
@@ -145,31 +280,24 @@ render_done (GObject      *source,
   if (ui->closing)
     return;
 
+  if (job->full_w > 0)
+    {
+      ui->full_w = job->full_w;
+      ui->full_h = job->full_h;
+    }
+
   if (job->image)
     {
-      GimpColorProfile *profile = rawheic_profile_new (job->settings.color_space, TRUE);
-      const Babl       *src;
-      gsize             n = (gsize) job->image->width * job->image->height;
+      shot_from_image (&ui->after, job->image, job->settings.color_space);
 
-      src = gimp_color_profile_get_format (profile, babl_format ("RGB float"),
-                                           GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
-                                           NULL);
-      g_object_unref (profile);
+      if (job->before)
+        {
+          shot_from_image (&ui->before, job->before, job->settings.color_space);
+          g_free (ui->before_key);
+          ui->before_key = g_strdup (job->before_key);
+        }
 
-      g_free (ui->rgb);
-      ui->rgb   = g_malloc (n * 3);
-      ui->rgb_w = job->image->width;
-      ui->rgb_h = job->image->height;
-      babl_process (babl_fish (src, babl_format ("R'G'B' u8")),
-                    job->image->pixels, ui->rgb, n);
-
-      gtk_label_set_text (GTK_LABEL (ui->status), "");
-      {
-        gchar *msg = g_strdup_printf (_("%s — preview %d ms"), job->image->camera,
-                                      (gint) (job->usecs / 1000));
-        gtk_label_set_text (GTK_LABEL (ui->status), msg);
-        g_free (msg);
-      }
+      update_status (ui, job->image->camera, (gint) (job->usecs / 1000));
     }
   else if (job->error)
     {
@@ -200,8 +328,24 @@ render_start (PreviewUI *ui)
   job = g_new0 (RenderJob, 1);
   raw_settings_from_config (&job->settings, ui->config);
 
+  job->loupe = ui->loupe_active;
+  if (job->loupe)
+    loupe_region (ui->loupe_cx, ui->loupe_cy, ui->full_w, ui->full_h, job->region);
+
+  /* "before" only changes with the view and the geometry */
+  job->before_key = g_strdup_printf ("%d %.4f %.4f %d %d %d",
+                                     job->loupe,
+                                     job->loupe ? job->region[0] : 0.0,
+                                     job->loupe ? job->region[1] : 0.0,
+                                     job->settings.auto_rotate,
+                                     job->settings.camera_crop,
+                                     job->settings.color_space);
+  job->want_before = compare_on (ui) &&
+                     (! ui->before.rgb || g_strcmp0 (ui->before_key, job->before_key));
+
   ui->busy = TRUE;
-  gtk_label_set_text (GTK_LABEL (ui->status), _("Developing preview…"));
+  gtk_label_set_text (GTK_LABEL (ui->status),
+                      job->loupe ? _("Developing the 100% view…") : _("Developing preview…"));
 
   task = g_task_new (NULL, NULL, render_done, ui);
   g_object_set_data (G_OBJECT (task), "ui", ui);
@@ -222,23 +366,45 @@ render_timeout (gpointer data)
 }
 
 static void
+schedule_render (PreviewUI *ui,
+                 guint      delay)
+{
+  if (ui->timeout_id)
+    g_source_remove (ui->timeout_id);
+
+  ui->timeout_id = g_timeout_add (delay, render_timeout, ui);
+}
+
+static void
 config_changed (GObject    *config,
                 GParamSpec *pspec,
                 PreviewUI  *ui)
 {
-  /* properties that do not change the preview */
-  if (! strcmp (pspec->name, "ask-dialog") ||
-      ! strcmp (pspec->name, "depth")      ||
-      ! strcmp (pspec->name, "half-size")  ||
-      ! strcmp (pspec->name, "linear")     ||
-      ! strcmp (pspec->name, "demosaic")   ||
-      ! strcmp (pspec->name, "median-passes"))
+  /* properties that never change the preview */
+  if (! strcmp (pspec->name, "ask-dialog")     ||
+      ! strcmp (pspec->name, "redevelop-mode") ||
+      ! strcmp (pspec->name, "preset")         ||
+      ! strcmp (pspec->name, "depth")          ||
+      ! strcmp (pspec->name, "half-size")      ||
+      ! strcmp (pspec->name, "linear"))
     return;
 
-  if (ui->timeout_id)
-    g_source_remove (ui->timeout_id);
+  /* only visible at 100% */
+  if (! ui->loupe_active &&
+      (! strcmp (pspec->name, "demosaic") || ! strcmp (pspec->name, "median-passes")))
+    return;
 
-  ui->timeout_id = g_timeout_add (250, render_timeout, ui);
+  schedule_render (ui, 250);
+}
+
+static void
+view_toggled (GtkToggleButton *button,
+              PreviewUI       *ui)
+{
+  if (GTK_WIDGET (button) == ui->loupe_toggle && ! gtk_toggle_button_get_active (button))
+    ui->loupe_active = FALSE;
+
+  schedule_render (ui, 10);
 }
 
 static gboolean
@@ -248,14 +414,31 @@ area_clicked (GtkWidget      *widget,
 {
   gdouble fx, fy;
 
-  if (event->button != 1 || ! ui->rgb)
+  if (event->button != 1 || ! ui->after.rgb)
     return FALSE;
 
-  fx = (event->x - (PREVIEW_W - ui->rgb_w) / 2) / ui->rgb_w;
-  fy = (event->y - (PREVIEW_H - ui->rgb_h) / 2) / ui->rgb_h;
+  /* in the 100% view a click goes back to the whole image */
+  if (ui->loupe_active)
+    {
+      ui->loupe_active = FALSE;
+      schedule_render (ui, 10);
+      return TRUE;
+    }
+
+  fx = (event->x - (PREVIEW_W - ui->after.w) / 2) / ui->after.w;
+  fy = (event->y - (PREVIEW_H - ui->after.h) / 2) / ui->after.h;
 
   if (fx < 0 || fy < 0 || fx > 1 || fy > 1)
     return FALSE;
+
+  if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (ui->loupe_toggle)))
+    {
+      ui->loupe_active = TRUE;
+      ui->loupe_cx     = fx;
+      ui->loupe_cy     = fy;
+      schedule_render (ui, 10);
+      return TRUE;
+    }
 
   g_object_set (ui->config,
                 "spot-x",      CLAMP (fx - SPOT_SIZE / 2, 0.0, 1.0 - SPOT_SIZE),
@@ -539,6 +722,24 @@ raw_dialog_run (GimpProcedure       *procedure,
   g_signal_connect (ui.area, "button-press-event", G_CALLBACK (area_clicked), &ui);
   gtk_container_add (GTK_CONTAINER (frame), ui.area);
 
+  {
+    GtkWidget *tools = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+
+    ui.loupe_toggle   = gtk_toggle_button_new_with_label (_("100% loupe"));
+    ui.compare_toggle = gtk_toggle_button_new_with_label (_("Before / after"));
+    gtk_widget_set_tooltip_text (ui.loupe_toggle,
+                                 _("When on, click the preview to see that spot at full "
+                                   "resolution (noise, sharpness, demosaicing)"));
+    gtk_widget_set_tooltip_text (ui.compare_toggle,
+                                 _("Split view: left half with default settings, right "
+                                   "half with your settings"));
+    gtk_box_pack_start (GTK_BOX (tools), ui.loupe_toggle, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (tools), ui.compare_toggle, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (vbox), tools, FALSE, FALSE, 0);
+    g_signal_connect (ui.loupe_toggle, "toggled", G_CALLBACK (view_toggled), &ui);
+    g_signal_connect (ui.compare_toggle, "toggled", G_CALLBACK (view_toggled), &ui);
+  }
+
   ui.status = gtk_label_new ("");
   gtk_label_set_xalign (GTK_LABEL (ui.status), 0.0);
   gtk_label_set_ellipsize (GTK_LABEL (ui.status), PANGO_ELLIPSIZE_END);
@@ -572,7 +773,9 @@ raw_dialog_run (GimpProcedure       *procedure,
   gtk_widget_destroy (GTK_WIDGET (dialog));
 
   raw_session_free (ui.session);
-  g_free (ui.rgb);
+  g_free (ui.after.rgb);
+  g_free (ui.before.rgb);
+  g_free (ui.before_key);
   g_free (ui.path);
   g_free (ui.open_error);
 

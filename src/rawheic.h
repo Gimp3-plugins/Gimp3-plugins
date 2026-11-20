@@ -142,6 +142,14 @@ RawImage        * raw_session_develop          (RawSession           *ses,
                                                 RawProgressFunc       progress,
                                                 gpointer              progress_data,
                                                 GError              **error);
+RawImage        * raw_session_develop_region   (RawSession           *ses,
+                                                const RawSettings    *s,
+                                                const gdouble         region[4],
+                                                GError              **error);
+void              raw_session_size             (RawSession           *ses,
+                                                const RawSettings    *s,
+                                                gint                 *width,
+                                                gint                 *height);
 const gchar     * raw_session_camera           (RawSession           *ses);
 void              raw_session_free             (RawSession           *ses);
 RawImage        * raw_develop                  (const gchar          *path,

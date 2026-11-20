@@ -520,6 +520,8 @@ struct _RawSession
   ProgressCtx    ctx;
   gboolean       hot_done;
   gpointer       raw_backup;     /* raw data before hot-pixel removal */
+  gfloat         auto_mul[4];    /* multipliers of the last auto/spot WB */
+  gboolean       have_auto_mul;
   gsize          raw_backup_len;
 };
 
@@ -577,13 +579,17 @@ raw_session_camera (RawSession *ses)
 /* Can be called repeatedly with different settings (LibRaw re-copies the
  * unpacked raw data for each dcraw_process()).  Not thread-safe per session.
  */
-RawImage *
-raw_session_develop (RawSession         *ses,
-                     const RawSettings  *s,
-                     gint                max_size,
-                     RawProgressFunc     progress,
-                     gpointer            progress_data,
-                     GError            **error)
+/* @region (x, y, w, h as fractions of the oriented, cropped image) limits
+ * processing to that part at full resolution (preview loupe).
+ */
+static RawImage *
+session_develop (RawSession         *ses,
+                 const RawSettings  *s,
+                 gint                max_size,
+                 const gdouble      *region,
+                 RawProgressFunc     progress,
+                 gpointer            progress_data,
+                 GError            **error)
 {
   libraw_data_t            *lr = ses->lr;
   libraw_processed_image_t *mem;
@@ -612,7 +618,35 @@ raw_session_develop (RawSession         *ses,
       ses->hot_done = FALSE;
     }
 
-  apply_settings (lr, s, max_size > 0 && max_size <= 2048);
+  apply_settings (lr, s, ! region && max_size > 0 && max_size <= 2048);
+
+  if (region)
+    {
+      libraw_output_params_t *p = &lr->params;
+      guint base[4] = { 0, 0, lr->sizes.width, lr->sizes.height };
+      guint box[4];
+
+      if (p->cropbox[2] != 0xffffffff)
+        memcpy (base, p->cropbox, sizeof base);
+
+      spot_to_raw (region, s->auto_rotate ? lr->sizes.flip : 0, base[2], base[3], box);
+      p->cropbox[0] = base[0] + box[0];
+      p->cropbox[1] = base[1] + box[1];
+      p->cropbox[2] = box[2];
+      p->cropbox[3] = box[3];
+      p->half_size  = 0;
+
+      /* automatic white balance must not be re-measured on the crop:
+       * reuse what the full preview measured
+       */
+      if (ses->have_auto_mul && (s->wb_mode == WB_AUTO || s->wb_mode == WB_SPOT))
+        {
+          p->use_auto_wb   = 0;
+          p->use_camera_wb = 0;
+          memcpy (p->user_mul, ses->auto_mul, sizeof p->user_mul);
+          memset (p->greybox, 0, sizeof p->greybox);
+        }
+    }
 
   ret = libraw_dcraw_process (lr);
   if (ret != LIBRAW_SUCCESS)
@@ -640,6 +674,15 @@ raw_session_develop (RawSession         *ses,
       libraw_dcraw_clear_mem (mem);
       ret = LIBRAW_UNSUFFICIENT_MEMORY;
       goto fail;
+    }
+
+  if (! region && (s->wb_mode == WB_AUTO || s->wb_mode == WB_SPOT))
+    {
+      gint c;
+
+      for (c = 0; c < 4; c++)
+        ses->auto_mul[c] = lr->color.pre_mul[c];
+      ses->have_auto_mul = TRUE;
     }
 
   gain = recovery_compensation (lr, s);
@@ -681,6 +724,48 @@ fail:
   set_libraw_error (error, ses->path, ret);
 
   return NULL;
+}
+
+RawImage *
+raw_session_develop (RawSession         *ses,
+                     const RawSettings  *s,
+                     gint                max_size,
+                     RawProgressFunc     progress,
+                     gpointer            progress_data,
+                     GError            **error)
+{
+  return session_develop (ses, s, max_size, NULL, progress, progress_data, error);
+}
+
+/* Full-resolution develop of a part of the image, float pixels. */
+RawImage *
+raw_session_develop_region (RawSession         *ses,
+                            const RawSettings  *s,
+                            const gdouble       region[4],
+                            GError            **error)
+{
+  return session_develop (ses, s, G_MAXINT, region, NULL, NULL, error);
+}
+
+/* Size of the developed image at full resolution: after the camera crop
+ * (if enabled) and the rotation (if enabled).
+ */
+void
+raw_session_size (RawSession        *ses,
+                  const RawSettings *s,
+                  gint              *width,
+                  gint              *height)
+{
+  libraw_data_t *lr = ses->lr;
+  guint          box[4] = { 0, 0, lr->sizes.width, lr->sizes.height };
+  gboolean       swap;
+
+  if (s->camera_crop)
+    camera_crop_box (lr, box);
+
+  swap = s->auto_rotate && (lr->sizes.flip == 5 || lr->sizes.flip == 6);
+  *width  = swap ? box[3] : box[2];
+  *height = swap ? box[2] : box[3];
 }
 
 void
