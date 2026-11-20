@@ -1,0 +1,62 @@
+# Paczka wydania po wypchnięciu tagu w postaci <wtyczka>-v<wersja>,
+# np. lut-cube-v1.1.0, meme-maker-v1.1.0, podpis-zdjecia-v1.1.0.
+# Dla lut-cube dołączany jest numpy z MSYS2 (tools/fetch-numpy.ps1).
+# Paczka trafia do wydania GitHuba o tej samej nazwie co tag (tworzonego,
+# jeśli jeszcze nie istnieje).
+name: Wydanie
+
+on:
+  push:
+    tags:
+      - "podpis-zdjecia-v*"
+      - "meme-maker-v*"
+      - "lut-cube-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  paczka:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Wtyczka i wersja z tagu
+        id: tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^(podpis-zdjecia|meme-maker|lut-cube)-v(\d+\.\d+\.\d+)$') {
+            throw "Tag $tag nie ma postaci <wtyczka>-v<X.Y.Z>"
+          }
+          "plugin=$($Matches[1])" >> $env:GITHUB_OUTPUT
+          "version=$($Matches[2])" >> $env:GITHUB_OUTPUT
+      - name: zstd (zapas, gdyby tar nie obsługiwał .zst)
+        if: steps.tag.outputs.plugin == 'lut-cube'
+        shell: pwsh
+        run: choco install zstandard -y --no-progress
+      - name: numpy dla lut-cube
+        if: steps.tag.outputs.plugin == 'lut-cube'
+        shell: pwsh
+        run: ./tools/fetch-numpy.ps1
+      - name: Paczka zip
+        shell: pwsh
+        run: |
+          $buildArgs = @("tools/build_dist.py", "${{ steps.tag.outputs.plugin }}", "${{ steps.tag.outputs.version }}")
+          if ("${{ steps.tag.outputs.plugin }}" -eq "lut-cube") { $buildArgs += "--require-vendor" }
+          python @buildArgs
+      - name: Wydanie na GitHubie
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $zip = "dist/${{ steps.tag.outputs.plugin }}-v${{ steps.tag.outputs.version }}.zip"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag $zip --title $tag --notes "Paczka zbudowana automatycznie z tagu $tag. Instalacja: rozpakuj i uruchom install.ps1."
+          } else {
+            gh release upload $tag $zip --clobber
+          }
