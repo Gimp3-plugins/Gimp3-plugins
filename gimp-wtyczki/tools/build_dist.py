@@ -45,6 +45,10 @@ def build(plugin, version, require_vendor=False, out_dir=None):
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for path, arc in plugin_files(plugin):
             z.write(path, arc)
+        # Wtyczka bez własnej licencji/opisu (Podpis) dostaje wspólne pliki.
+        for name in ("LICENSE", "README.md"):
+            if not os.path.isfile(os.path.join(REPO, plugin, name)):
+                z.write(os.path.join(REPO, name), name)
         z.write(os.path.join(REPO, "install.ps1"), "install.ps1")
         if plugin == "lut-cube":
             z.write(os.path.join(REPO, "tools", "fetch-numpy.ps1"),
