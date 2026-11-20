@@ -51,6 +51,7 @@ sources = files(
   'src/denoise.c',
   'src/presets.c',
   'src/lens.c',
+  'src/export-batch.c',
 )
 
 link_args = []

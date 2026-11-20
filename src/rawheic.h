@@ -15,6 +15,7 @@
 #define HEIF_THUMB_PROC      "file-raw-heic-heif-load-thumb"
 #define REDEVELOP_PROC       "plug-in-raw-heic-redevelop"
 #define BATCH_PROC           "plug-in-raw-heic-batch-open"
+#define EXPORT_BATCH_PROC    "plug-in-raw-heic-batch-export"
 #define ADJUST_PROC          "plug-in-raw-heic-quick-adjust"
 #define ABOUT_PROC           "plug-in-raw-heic-about"
 
@@ -251,6 +252,9 @@ gboolean          raw_dialog_run               (GimpProcedure        *procedure,
 GimpProcedure   * redevelop_procedure_new      (GimpPlugIn           *plug_in,
                                                 const gchar          *name);
 GimpProcedure   * batch_procedure_new          (GimpPlugIn           *plug_in,
+                                                const gchar          *name);
+gchar          ** rawheic_choose_raw_files     (const gchar          *title);
+GimpProcedure   * export_batch_procedure_new   (GimpPlugIn           *plug_in,
                                                 const gchar          *name);
 
 /* adjust.c */

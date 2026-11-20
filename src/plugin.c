@@ -89,6 +89,7 @@ raw_heic_query_procedures (GimpPlugIn *plug_in)
   list = g_list_append (list, g_strdup (REDEVELOP_PROC));
   list = g_list_append (list, g_strdup (ADJUST_PROC));
   list = g_list_append (list, g_strdup (BATCH_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_BATCH_PROC));
   list = g_list_append (list, g_strdup (ABOUT_PROC));
 
   return list;
@@ -116,6 +117,10 @@ raw_heic_create_procedure (GimpPlugIn  *plug_in,
   else if (! g_strcmp0 (name, REDEVELOP_PROC))
     {
       procedure = redevelop_procedure_new (plug_in, name);
+    }
+  else if (! g_strcmp0 (name, EXPORT_BATCH_PROC))
+    {
+      procedure = export_batch_procedure_new (plug_in, name);
     }
   else if (! g_strcmp0 (name, BATCH_PROC))
     {

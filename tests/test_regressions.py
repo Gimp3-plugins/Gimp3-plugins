@@ -228,5 +228,35 @@ if os.path.exists(apple):
         if im:
             im.delete()
 
+# Step 8: develop RAW files straight to a folder
+import shutil
+outdir = os.path.abspath(os.path.join("build", "test-out", "export"))
+shutil.rmtree(outdir, ignore_errors=True)
+os.makedirs(outdir)
+srcs = [os.path.abspath(os.path.join("samples", f))
+        for f in ("Nikon-D750.nef", "Canon-EOS_6D.cr2", "Olympus-E-M10_Mark_II.orf")]
+ep = pdb.lookup_procedure("plug-in-raw-heic-batch-export")
+for fmt in ("jpeg", "tiff16", "jpeg"):
+    cfg = ep.create_config()
+    cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+    cfg.set_property("files", srcs)
+    cfg.set_property("output-folder", Gio.File.new_for_path(outdir))
+    cfg.set_property("format", fmt)
+    cfg.set_property("half-size", True)
+    st = ep.run(cfg).index(0)
+    check("export %s status" % fmt, st == Gimp.PDBStatusType.SUCCESS, pdb.get_last_error()[:60])
+names = sorted(os.listdir(outdir))
+check("export files written (3 jpg, 3 tif, 3 jpg -2)",
+      len([n for n in names if n.endswith(".jpg")]) == 6 and
+      len([n for n in names if n.endswith(".tif")]) == 3 and
+      "Nikon-D750-2.jpg" in names, " ".join(names))
+# re-open one result: 16-bit TIFF with a colour profile
+tif = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(os.path.join(outdir, "Nikon-D750.tif")))
+check("exported TIFF is 16-bit, half size",
+      tif is not None and "U16" in str(tif.get_precision().value_nick).upper() and tif.get_width() == 3016,
+      "%s %dx%d" % (tif.get_precision().value_nick, tif.get_width(), tif.get_height()) if tif else "")
+if tif:
+    tif.delete()
+
 with open(os.path.join("build", "test-out", "regressions.txt"), "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")

@@ -64,15 +64,15 @@ batch_procedure_new (GimpPlugIn  *plug_in,
   return procedure;
 }
 
-static gchar **
-choose_files (void)
+gchar **
+rawheic_choose_raw_files (const gchar *title)
 {
   GtkWidget     *chooser;
   GtkFileFilter *filter;
   GPtrArray     *paths = g_ptr_array_new ();
   gint           i;
 
-  chooser = gtk_file_chooser_dialog_new (_("Open several RAW files"), NULL,
+  chooser = gtk_file_chooser_dialog_new (title, NULL,
                                          GTK_FILE_CHOOSER_ACTION_OPEN,
                                          _("_Cancel"), GTK_RESPONSE_CANCEL,
                                          _("_Open"),   GTK_RESPONSE_ACCEPT,
@@ -151,7 +151,7 @@ batch_run (GimpProcedure       *procedure,
     {
       gimp_ui_init (PLUGIN_NAME);
       g_strfreev (files);
-      files = choose_files ();
+      files = rawheic_choose_raw_files (_("Open several RAW files"));
 
       if (! files || ! files[0])
         {
