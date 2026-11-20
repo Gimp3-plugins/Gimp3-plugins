@@ -19,6 +19,7 @@ import zlib
 from array import array
 
 from cube_parser import CubeError, CubeLUT, parse_cube_file
+from lut_i18n import tr  # noqa: E402
 
 LUT_EXTENSIONS = (".cube", ".3dl", ".png")
 HALD_LEVELS = (4, 5, 6, 7, 8)        # siatka 16, 25, 36, 49, 64
@@ -27,7 +28,7 @@ HALD_LEVELS = (4, 5, 6, 7, 8)        # siatka 16, 25, 36, 49, 64
 # --- .3dl -------------------------------------------------------------------------
 
 def parse_3dl_text(text, source=""):
-    name = os.path.basename(source) if source else "plik"
+    name = os.path.basename(source) if source else tr("plik")
     shaper = None
     out_bits = None
     rows = []
@@ -43,28 +44,28 @@ def parse_3dl_text(text, source=""):
             try:
                 out_bits = int(parts[2])
             except ValueError:
-                raise CubeError("%s, wiersz %d: niepoprawny nagłówek Mesh." % (name, lineno))
+                raise CubeError(tr("%s, wiersz %d: niepoprawny nagłówek Mesh.") % (name, lineno))
             continue
         if head[0].isalpha():
             continue                      # inne słowa kluczowe (np. LUT8, gamma)
         try:
             values = [int(p) for p in parts]
         except ValueError:
-            raise CubeError("%s, wiersz %d: oczekiwano liczb całkowitych: %s"
+            raise CubeError(tr("%s, wiersz %d: oczekiwano liczb całkowitych: %s")
                             % (name, lineno, line))
         if shaper is None:
             shaper = values
             continue
         if len(values) != 3:
-            raise CubeError("%s, wiersz %d: wiersz danych musi mieć 3 liczby."
+            raise CubeError(tr("%s, wiersz %d: wiersz danych musi mieć 3 liczby.")
                             % (name, lineno))
         rows.append(values)
     if not shaper or len(shaper) < 2:
-        raise CubeError("%s: brak siatki wejścia – to nie wygląda na plik .3dl." % name)
+        raise CubeError(tr("%s: brak siatki wejścia – to nie wygląda na plik .3dl.") % name)
     n = len(shaper)
     if len(rows) != n ** 3:
-        raise CubeError("%s: zła liczba wierszy danych – jest %d, a powinno być "
-                        "%d³ = %d." % (name, len(rows), n, n ** 3))
+        raise CubeError(tr("%s: zła liczba wierszy danych – jest %d, a powinno być "
+                        "%d³ = %d.") % (name, len(rows), n, n ** 3))
     if out_bits:
         out_max = float((1 << out_bits) - 1)
     else:
@@ -139,7 +140,7 @@ def read_png_rgb(path):
     with open(path, "rb") as f:
         data = f.read()
     if data[:8] != _PNG_SIG:
-        raise CubeError("%s: to nie jest plik PNG." % os.path.basename(path))
+        raise CubeError(tr("%s: to nie jest plik PNG.") % os.path.basename(path))
     pos, idat, ihdr = 8, bytearray(), None
     while pos < len(data):
         length, kind = struct.unpack(">I4s", data[pos:pos + 8])
@@ -152,11 +153,11 @@ def read_png_rgb(path):
             break
         pos += 12 + length
     if ihdr is None:
-        raise CubeError("%s: uszkodzony PNG (brak IHDR)." % os.path.basename(path))
+        raise CubeError(tr("%s: uszkodzony PNG (brak IHDR).") % os.path.basename(path))
     w, h, depth, ctype, _comp, _filt, interlace = ihdr
     if ctype not in (2, 6) or depth not in (8, 16) or interlace:
-        raise CubeError("%s: obsługiwany jest PNG RGB/RGBA 8 lub 16 bitów bez "
-                        "przeplotu (zapisz obraz Hald ponownie z GIMP-a)."
+        raise CubeError(tr("%s: obsługiwany jest PNG RGB/RGBA 8 lub 16 bitów bez "
+                        "przeplotu (zapisz obraz Hald ponownie z GIMP-a).")
                         % os.path.basename(path))
     channels = 3 if ctype == 2 else 4
     bpp = channels * depth // 8
@@ -226,8 +227,8 @@ def hald_to_lut(width, height, rgb, title=""):
     """Obraz Hald (rgb 0–1) → CubeLUT 3D."""
     level = hald_level(width, height)
     if level is None:
-        raise CubeError("To nie jest obraz Hald CLUT: wymiary %d×%d (oczekiwano "
-                        "kwadratu L³×L³, np. 512×512)." % (width, height))
+        raise CubeError(tr("To nie jest obraz Hald CLUT: wymiary %d×%d (oczekiwano "
+                        "kwadratu L³×L³, np. 512×512).") % (width, height))
     n = level * level
     return CubeLUT(title, 0, None, n, array("f", rgb[:3 * n ** 3]))
 
@@ -287,9 +288,9 @@ def load_lut_file(path):
         if ext == ".png":
             return parse_hald_png(path)
     except OSError as e:
-        raise CubeError("Nie można odczytać pliku %s: %s"
+        raise CubeError(tr("Nie można odczytać pliku %s: %s")
                         % (os.path.basename(path), e.strerror or e))
     except (zlib.error, struct.error) as e:
-        raise CubeError("Uszkodzony plik %s: %s" % (os.path.basename(path), e))
-    raise CubeError("Nieobsługiwany format pliku: %s (obsługiwane: .cube, .3dl, "
-                    "Hald CLUT .png)." % os.path.basename(path))
+        raise CubeError(tr("Uszkodzony plik %s: %s") % (os.path.basename(path), e))
+    raise CubeError(tr("Nieobsługiwany format pliku: %s (obsługiwane: .cube, .3dl, "
+                    "Hald CLUT .png).") % os.path.basename(path))

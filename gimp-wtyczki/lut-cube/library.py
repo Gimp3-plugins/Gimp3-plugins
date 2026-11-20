@@ -21,6 +21,7 @@ import zipfile
 import cube_parser
 import lut_formats
 from cube_parser import CubeError
+from lut_i18n import tr  # noqa: E402
 
 EXPORT_INDEX = "lut-cube-biblioteka.json"
 
@@ -69,16 +70,16 @@ class ImportResult:
 
     def summary(self):
         """Krótki opis wyniku importu po polsku."""
-        lines = ["Dodano: %d" % len(self.added)]
+        lines = [tr("Dodano: %d") % len(self.added)]
         if self.duplicates:
-            lines.append("Pominięto duplikaty (ta sama treść pliku): %d"
+            lines.append(tr("Pominięto duplikaty (ta sama treść pliku): %d")
                          % len(self.duplicates))
         if self.errors:
-            lines.append("Błędy: %d" % len(self.errors))
+            lines.append(tr("Błędy: %d") % len(self.errors))
             for path, msg in self.errors[:10]:
                 lines.append("  • %s – %s" % (os.path.basename(path), msg))
             if len(self.errors) > 10:
-                lines.append("  • … i %d więcej" % (len(self.errors) - 10))
+                lines.append(tr("  • … i %d więcej") % (len(self.errors) - 10))
         return "\n".join(lines)
 
 
@@ -150,7 +151,7 @@ class Library:
             os.makedirs(self.luts_dir, exist_ok=True)
             os.makedirs(self.cache_dir, exist_ok=True)
         except OSError as e:
-            raise LibraryError("Brak uprawnień do folderu biblioteki %s: %s"
+            raise LibraryError(tr("Brak uprawnień do folderu biblioteki %s: %s")
                                % (self.root, e.strerror or e))
 
     def load(self):
@@ -160,7 +161,7 @@ class Library:
             with open(self.index_path, encoding="utf-8") as f:
                 data = json.load(f)
             if not isinstance(data, dict):
-                raise ValueError("zły format")
+                raise ValueError(tr("zły format"))
         except (OSError, ValueError) as e:
             # Uszkodzony indeks: odkładamy kopię i zaczynamy od nowa.
             backup = self.index_path + ".uszkodzony"
@@ -168,8 +169,8 @@ class Library:
                 shutil.copyfile(self.index_path, backup)
             except OSError:
                 pass
-            self.load_warning = ("Indeks biblioteki był uszkodzony (%s). "
-                                 "Kopia: %s" % (e, backup))
+            self.load_warning = (tr("Indeks biblioteki był uszkodzony (%s). "
+                                 "Kopia: %s") % (e, backup))
             return
         for e in data.get("entries", []):
             if isinstance(e, dict) and e.get("id") and e.get("file"):
@@ -206,7 +207,7 @@ class Library:
                 json.dump(data, f, ensure_ascii=False, indent=1)
             os.replace(tmp, self.index_path)
         except OSError as e:
-            raise LibraryError("Nie można zapisać indeksu biblioteki %s: %s"
+            raise LibraryError(tr("Nie można zapisać indeksu biblioteki %s: %s")
                                % (self.index_path, e.strerror or e))
 
     # --- wpisy ---------------------------------------------------------------
@@ -215,7 +216,7 @@ class Library:
         """Ścieżka pliku w luts/ – tylko sama nazwa, bez wychodzenia poza folder."""
         name = os.path.basename(filename or "")
         if not name or name != filename or name in (".", ".."):
-            raise LibraryError("Niepoprawna nazwa pliku w indeksie biblioteki: %r"
+            raise LibraryError(tr("Niepoprawna nazwa pliku w indeksie biblioteki: %r")
                                % filename)
         return os.path.join(self.luts_dir, name)
 
@@ -253,7 +254,7 @@ class Library:
         try:
             sha = file_sha256(src)
         except OSError as e:
-            result.errors.append((src, "nie można odczytać: %s"
+            result.errors.append((src, tr("nie można odczytać: %s")
                                   % (e.strerror or e)))
             return result
         existing = self._find_by_hash(sha)
@@ -277,7 +278,7 @@ class Library:
             try:
                 shutil.copyfile(src, dest)
             except OSError as e:
-                result.errors.append((src, "nie można skopiować: %s"
+                result.errors.append((src, tr("nie można skopiować: %s")
                                       % (e.strerror or e)))
                 return result
         lut_id = sha[:16]
@@ -312,7 +313,7 @@ class Library:
         try:
             files = find_lut_files(folder, recursive)
         except OSError as e:
-            raise LibraryError("Nie można odczytać folderu %s: %s"
+            raise LibraryError(tr("Nie można odczytać folderu %s: %s")
                                % (folder, e.strerror or e))
         return self.add_files(files, category)
 
@@ -344,7 +345,7 @@ class Library:
                     os.remove(path)
                 except OSError as err:
                     self.save()
-                    raise LibraryError("Nie można usunąć pliku %s: %s"
+                    raise LibraryError(tr("Nie można usunąć pliku %s: %s")
                                        % (path, err.strerror or err))
         self.save()
 
@@ -367,7 +368,7 @@ class Library:
                 os.remove(path)
                 removed.append(path)
             except OSError as e:
-                raise LibraryError("Nie można usunąć pliku %s: %s"
+                raise LibraryError(tr("Nie można usunąć pliku %s: %s")
                                    % (path, e.strerror or e))
         return removed
 
@@ -383,7 +384,7 @@ class Library:
         """
         name = name.strip()
         if not name:
-            raise LibraryError("Nazwa presetu nie może być pusta.")
+            raise LibraryError(tr("Nazwa presetu nie może być pusta."))
         preset = {k: values[k] for k in self.PRESET_KEYS if k in values}
         preset["lut"] = lut_key
         self.presets[name] = preset
@@ -422,7 +423,7 @@ class Library:
                 z.writestr(EXPORT_INDEX, json.dumps(data, ensure_ascii=False, indent=1))
             os.replace(tmp, path)
         except OSError as e:
-            raise LibraryError("Nie można zapisać pliku %s: %s" % (path, e.strerror or e))
+            raise LibraryError(tr("Nie można zapisać pliku %s: %s") % (path, e.strerror or e))
         return len(data["entries"])
 
     def import_zip(self, path):
@@ -434,12 +435,12 @@ class Library:
         try:
             z = zipfile.ZipFile(path)
         except (OSError, zipfile.BadZipFile) as e:
-            raise LibraryError("To nie jest poprawny plik biblioteki (.zip): %s" % e)
+            raise LibraryError(tr("To nie jest poprawny plik biblioteki (.zip): %s") % e)
         with z, tempfile.TemporaryDirectory() as tmpdir:
             try:
                 data = json.loads(z.read(EXPORT_INDEX).decode("utf-8"))
             except (KeyError, ValueError) as e:
-                raise LibraryError("W pliku brak indeksu biblioteki (%s)." % e)
+                raise LibraryError(tr("W pliku brak indeksu biblioteki (%s).") % e)
             id_map = {}
             for e in data.get("entries", []):
                 name = os.path.basename(str(e.get("file", "")))   # bez ścieżek
@@ -448,7 +449,7 @@ class Library:
                 try:
                     blob = z.read("luts/" + name)
                 except KeyError:
-                    result.errors.append((name, "brak pliku w archiwum"))
+                    result.errors.append((name, tr("brak pliku w archiwum")))
                     continue
                 src = os.path.join(tmpdir, name)
                 with open(src, "wb") as f:
@@ -494,18 +495,18 @@ class Library:
     def add_category(self, name):
         name = name.strip()
         if not name:
-            raise LibraryError("Nazwa kategorii nie może być pusta.")
+            raise LibraryError(tr("Nazwa kategorii nie może być pusta."))
         if name in self.categories:
-            raise LibraryError("Kategoria „%s” już istnieje." % name)
+            raise LibraryError(tr("Kategoria „%s” już istnieje.") % name)
         self.categories.append(name)
         self.save()
 
     def rename_category(self, old, new):
         new = new.strip()
         if not new:
-            raise LibraryError("Nazwa kategorii nie może być pusta.")
+            raise LibraryError(tr("Nazwa kategorii nie może być pusta."))
         if new != old and new in self.categories:
-            raise LibraryError("Kategoria „%s” już istnieje." % new)
+            raise LibraryError(tr("Kategoria „%s” już istnieje.") % new)
         self.categories[self.categories.index(old)] = new
         for e in self.entries.values():
             if e.get("category") == old:
@@ -582,7 +583,7 @@ class Library:
             lut = None
         if lut is None:
             if not os.path.isfile(src):
-                raise CubeError("Brak pliku LUT-a w bibliotece: %s" % src)
+                raise CubeError(tr("Brak pliku LUT-a w bibliotece: %s") % src)
             lut = lut_formats.load_lut_file(src)
             self._write_cache(lut_id, lut)
         self._luts[lut_id] = lut

@@ -6,6 +6,7 @@ import os
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GdkPixbuf, GLib  # noqa: E402
+from lut_i18n import tr  # noqa: E402
 
 
 # --- pomocnicze ----------------------------------------------------------------
@@ -42,7 +43,7 @@ def _ask(parent, text, secondary, buttons, kind=Gtk.MessageType.QUESTION):
 
 def _ask_text(parent, title, label, value=""):
     dlg = Gtk.Dialog(title=title, transient_for=parent, modal=True)
-    dlg.add_buttons("_Anuluj", Gtk.ResponseType.CANCEL, "_OK", Gtk.ResponseType.OK)
+    dlg.add_buttons(tr("_Anuluj"), Gtk.ResponseType.CANCEL, tr("_OK"), Gtk.ResponseType.OK)
     dlg.set_default_response(Gtk.ResponseType.OK)
     box = dlg.get_content_area()
     box.set_spacing(6)
@@ -68,12 +69,12 @@ def _choose(parent, title, action, settings, multiple=False, cube_filter=True,
     save_name (proponowana nazwa pliku).
     """
     if action == Gtk.FileChooserAction.SELECT_FOLDER:
-        accept = "_Wybierz"
+        accept = tr("_Wybierz")
     elif action == Gtk.FileChooserAction.SAVE:
-        accept = "_Zapisz"
+        accept = tr("_Zapisz")
     else:
-        accept = "_Otwórz"
-    chooser = Gtk.FileChooserNative.new(title, parent, action, accept, "_Anuluj")
+        accept = tr("_Otwórz")
+    chooser = Gtk.FileChooserNative.new(title, parent, action, accept, tr("_Anuluj"))
     chooser.set_select_multiple(multiple)
     if action != Gtk.FileChooserAction.SELECT_FOLDER and (cube_filter or patterns):
         flt = Gtk.FileFilter()

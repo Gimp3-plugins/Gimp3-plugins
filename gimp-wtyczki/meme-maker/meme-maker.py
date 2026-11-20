@@ -19,6 +19,9 @@ import re
 import shutil
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from meme_i18n import tr  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Czyste funkcje (bez GIMP-a) – testowane pytest-em
 # ---------------------------------------------------------------------------
@@ -167,7 +170,7 @@ except (ImportError, ValueError):
 PLUG_IN_BINARY = "meme-maker"
 PROC_MEME = "python-fu-meme-maker"
 PROC_EXPORT = "python-fu-meme-export"
-MENU_PATH = "<Image>/Filters/Memy"
+MENU_PATH = "<Image>/Filters/" + tr("Memy")
 DEFAULT_COLORS = {"text-color": "white", "outline-color": "black"}
 
 
@@ -244,15 +247,15 @@ if HAVE_GIMP:
                 return font
         font = _auto_font()
         if font is None:
-            raise MemeError("Nie znaleziono żadnej czcionki. Zainstaluj "
-                            "czcionkę Anton (jest w paczce z wtyczką).")
+            raise MemeError(tr("Nie znaleziono żadnej czcionki. Zainstaluj "
+                            "czcionkę Anton (jest w paczce z wtyczką)."))
         return font
 
     def _measure(font):
         def measure(text, size):
             ok, w, h, _asc, _desc = Gimp.text_get_extents_font(text, size, font)
             if not ok:
-                raise MemeError("Nie udało się zmierzyć tekstu tą czcionką.")
+                raise MemeError(tr("Nie udało się zmierzyć tekstu tą czcionką."))
             return w, h
         return measure
 
@@ -269,7 +272,7 @@ if HAVE_GIMP:
         """Tworzy warstwę tekstową na górze grupy `parent`."""
         layer = Gimp.TextLayer.new(image, text, font, size, Gimp.Unit.pixel())
         if layer is None:
-            raise MemeError("Nie udało się utworzyć warstwy tekstowej.")
+            raise MemeError(tr("Nie udało się utworzyć warstwy tekstowej."))
         image.insert_layer(layer, parent, 0)
         layer.set_name(name)
         layer.set_color(color)
@@ -289,7 +292,7 @@ if HAVE_GIMP:
         if outline <= 0:
             return None
         W, H = image.get_width(), image.get_height()
-        stroke = Gimp.Layer.new(image, text_layer.get_name() + " – obrys",
+        stroke = Gimp.Layer.new(image, text_layer.get_name() + tr(" – obrys"),
                                 W, H, Gimp.ImageType.RGBA_IMAGE, 100,
                                 Gimp.LayerMode.NORMAL)
         position = image.get_item_position(text_layer) + 1
@@ -307,7 +310,7 @@ if HAVE_GIMP:
         W, H = image.get_width(), image.get_height()
         offset_y = bar_h if side == "top" else 0
         image.resize(W, H + bar_h, 0, offset_y)
-        bar = Gimp.Layer.new(image, "Mem – pasek", W, H + bar_h,
+        bar = Gimp.Layer.new(image, tr("Mem – pasek"), W, H + bar_h,
                              Gimp.ImageType.RGBA_IMAGE, 100,
                              Gimp.LayerMode.NORMAL)
         # Pasek na samym dole stosu – zdjęcie zostaje nad nim, nietknięte.
@@ -326,8 +329,8 @@ if HAVE_GIMP:
         bottom_text = prepare_text(config.get_property("bottom-text"),
                                    config.get_property("uppercase"))
         if not top_text and not bottom_text:
-            raise MemeError("Oba pola tekstu są puste – wpisz tekst górny "
-                            "lub dolny.")
+            raise MemeError(tr("Oba pola tekstu są puste – wpisz tekst górny "
+                            "lub dolny."))
 
         font = _resolve_font(config)
         align = config.get_property("align")
@@ -352,9 +355,9 @@ if HAVE_GIMP:
             in_bar = (side == bar_side)
             wrapped, size, fits = _layout(text, font, config, area_w, max_h)
             if not fits:
-                warnings.append("Tekst %s jest bardzo długi – nie zmieścił się "
-                                "w całości nawet po zmniejszeniu czcionki."
-                                % ("górny" if side == "top" else "dolny"))
+                warnings.append(tr("Tekst %s jest bardzo długi – nie zmieścił się "
+                                "w całości nawet po zmniejszeniu czcionki.")
+                                % (tr("górny") if side == "top" else tr("dolny")))
             if in_bar:
                 # Styl „biały pasek”: kontrastowy tekst, bez obrysu.
                 tcolor = Gegl.Color.new("black" if bar_white else "white")
@@ -362,7 +365,7 @@ if HAVE_GIMP:
             else:
                 tcolor = color
                 outline = outline_px(size, config.get_property("outline-percent"))
-            name = "Tekst górny" if side == "top" else "Tekst dolny"
+            name = tr("Tekst górny") if side == "top" else tr("Tekst dolny")
             layer = _make_text_layer(image, group, wrapped, font, size,
                                      tcolor, align, name)
             created.append((layer, side, outline, in_bar))
@@ -374,8 +377,8 @@ if HAVE_GIMP:
             if bar_layers:
                 bar_h = bar_layers[0][0].get_height() + 2 * m
             else:
-                warnings.append("Pasek pominięty – brak tekstu %s."
-                                % ("górnego" if bar_side == "top" else "dolnego"))
+                warnings.append(tr("Pasek pominięty – brak tekstu %s.")
+                                % (tr("górnego") if bar_side == "top" else tr("dolnego")))
             if bar_h:
                 state["resize"] = (W, H, -bar_h if bar_side == "top" else 0)
                 state["bar"] = _add_bar(
@@ -507,7 +510,7 @@ if HAVE_GIMP:
     def _run_meme_dialog(procedure, config, image):
         GimpUi.init(PLUG_IN_BINARY)
         dialog = GimpUi.ProcedureDialog(procedure=procedure, config=config,
-                                        title="Stwórz mema")
+                                        title=tr("Stwórz mema"))
         dialog.get_widget("top-text", Gtk.TextView)
         dialog.get_widget("bottom-text", Gtk.TextView)
         dialog.set_sensitive_if_in("font", None, "font-mode",
@@ -539,8 +542,8 @@ if HAVE_GIMP:
 
     def _execute_meme(procedure, run_mode, image, config):
         if image is None:
-            return _error(procedure, "Brak otwartego obrazu – otwórz zdjęcie "
-                                     "i spróbuj ponownie.")
+            return _error(procedure, tr("Brak otwartego obrazu – otwórz zdjęcie "
+                                     "i spróbuj ponownie."))
         _fix_default_colors(config)
         if run_mode == Gimp.RunMode.INTERACTIVE:
             if not _run_meme_dialog(procedure, config, image):
@@ -561,7 +564,7 @@ if HAVE_GIMP:
         except MemeError as e:
             return _error(procedure, str(e))
         except Exception as e:  # noqa – żadnych niezłapanych wyjątków
-            return _error(procedure, "Nieoczekiwany błąd Kreatora memów: %s" % e)
+            return _error(procedure, tr("Nieoczekiwany błąd Kreatora memów: %s") % e)
         finally:
             _restore_selection(image, saved_selection)
             image.undo_group_end()
@@ -576,7 +579,7 @@ if HAVE_GIMP:
     def _export(image, config):
         gfile = config.get_property("file")
         if gfile is None or not gfile.get_path():
-            raise MemeError("Nie wybrano pliku docelowego.")
+            raise MemeError(tr("Nie wybrano pliku docelowego."))
         fmt = config.get_property("format")
         path = gfile.get_path()
         ext = os.path.splitext(path)[1].lower()
@@ -610,7 +613,7 @@ if HAVE_GIMP:
                                  config.get_property("png-compression"))
             res = proc.run(cfg)
             if res.index(0) != Gimp.PDBStatusType.SUCCESS:
-                raise MemeError("Nie udało się zapisać pliku:\n%s" % path)
+                raise MemeError(tr("Nie udało się zapisać pliku:\n%s") % path)
         finally:
             dup.delete()
         return path
@@ -618,7 +621,7 @@ if HAVE_GIMP:
     def _run_export_dialog(procedure, config):
         GimpUi.init(PLUG_IN_BINARY)
         dialog = GimpUi.ProcedureDialog(procedure=procedure, config=config,
-                                        title="Eksportuj mema")
+                                        title=tr("Eksportuj mema"))
         dialog.set_sensitive_if_in("quality", None, "format",
                                    _str_values("jpg"), True)
         dialog.set_sensitive_if_in("png-compression", None, "format",
@@ -630,7 +633,7 @@ if HAVE_GIMP:
 
     def _execute_export(procedure, run_mode, image, config):
         if image is None:
-            return _error(procedure, "Brak otwartego obrazu do eksportu.")
+            return _error(procedure, tr("Brak otwartego obrazu do eksportu."))
         if run_mode == Gimp.RunMode.INTERACTIVE:
             # Podpowiedź pliku: obok oryginału, z dopiskiem „-mem”.
             src = image.get_file()
@@ -645,9 +648,9 @@ if HAVE_GIMP:
         except MemeError as e:
             return _error(procedure, str(e))
         except Exception as e:  # noqa
-            return _error(procedure, "Nieoczekiwany błąd eksportu: %s" % e)
+            return _error(procedure, tr("Nieoczekiwany błąd eksportu: %s") % e)
         if run_mode == Gimp.RunMode.INTERACTIVE:
-            Gimp.message("Zapisano mema:\n%s" % path)
+            Gimp.message(tr("Zapisano mema:\n%s") % path)
         return procedure.new_return_values(Gimp.PDBStatusType.SUCCESS, None)
 
     # --- rejestracja ---------------------------------------------------------
@@ -667,95 +670,95 @@ if HAVE_GIMP:
             if name == PROC_MEME:
                 p = Gimp.ImageProcedure.new(self, name, Gimp.PDBProcType.PLUGIN,
                                             self.run_meme, None)
-                p.set_menu_label("Stwórz mema…")
+                p.set_menu_label(tr("Stwórz mema…"))
                 p.set_documentation(
-                    "Robi mema ze zdjęcia: tekst górny i dolny z obrysem.",
-                    "Dodaje tekst górny i dolny (z obrysem jako osobną "
+                    tr("Robi mema ze zdjęcia: tekst górny i dolny z obrysem."),
+                    tr("Dodaje tekst górny i dolny (z obrysem jako osobną "
                     "warstwą) oraz opcjonalny pasek nad lub pod zdjęciem. "
-                    "Oryginalna warstwa zostaje nietknięta.", None)
-                p.add_string_argument("top-text", "Tekst górny",
-                                      "Tekst u góry (może mieć kilka linii)",
+                    "Oryginalna warstwa zostaje nietknięta."), None)
+                p.add_string_argument("top-text", tr("Tekst górny"),
+                                      tr("Tekst u góry (może mieć kilka linii)"),
                                       "", rw)
-                p.add_string_argument("bottom-text", "Tekst dolny",
-                                      "Tekst u dołu (może mieć kilka linii)",
+                p.add_string_argument("bottom-text", tr("Tekst dolny"),
+                                      tr("Tekst u dołu (może mieć kilka linii)"),
                                       "", rw)
                 p.add_choice_argument(
-                    "font-mode", "Czcionka",
-                    "Automatycznie: Anton → Impact → Arial Black → Sans Bold",
-                    _choice([("auto", "Automatycznie (Anton → Impact → "
-                                      "Arial Black → Sans Bold)"),
-                             ("custom", "Wybrana poniżej")]),
+                    "font-mode", tr("Czcionka"),
+                    tr("Automatycznie: Anton → Impact → Arial Black → Sans Bold"),
+                    _choice([("auto", tr("Automatycznie (Anton → Impact → "
+                                      "Arial Black → Sans Bold)")),
+                             ("custom", tr("Wybrana poniżej"))]),
                     "auto", rw)
-                p.add_font_argument("font", "Własna czcionka",
-                                    "Czcionka używana w trybie „Wybrana poniżej”",
+                p.add_font_argument("font", tr("Własna czcionka"),
+                                    tr("Czcionka używana w trybie „Wybrana poniżej”"),
                                     False, None, True, rw)
                 p.add_double_argument(
-                    "font-size", "Rozmiar czcionki (px, 0 = auto)",
-                    "0 = automatycznie, proporcjonalnie do szerokości obrazu",
+                    "font-size", tr("Rozmiar czcionki (px, 0 = auto)"),
+                    tr("0 = automatycznie, proporcjonalnie do szerokości obrazu"),
                     0.0, 2000.0, 0.0, rw)
-                p.add_color_argument("text-color", "Kolor tekstu",
-                                     "Kolor liter", False,
+                p.add_color_argument("text-color", tr("Kolor tekstu"),
+                                     tr("Kolor liter"), False,
                                      Gegl.Color.new(DEFAULT_COLORS["text-color"]), rw)
-                p.add_color_argument("outline-color", "Kolor obrysu",
-                                     "Kolor obrysu liter", False,
+                p.add_color_argument("outline-color", tr("Kolor obrysu"),
+                                     tr("Kolor obrysu liter"), False,
                                      Gegl.Color.new(DEFAULT_COLORS["outline-color"]), rw)
                 p.add_double_argument(
-                    "outline-percent", "Grubość obrysu (% wysokości liter)",
-                    "Grubość obrysu jako % rozmiaru czcionki; 0 = bez obrysu",
+                    "outline-percent", tr("Grubość obrysu (% wysokości liter)"),
+                    tr("Grubość obrysu jako % rozmiaru czcionki; 0 = bez obrysu"),
                     0.0, 20.0, 4.0, rw)
-                p.add_boolean_argument("uppercase", "WIELKIE LITERY",
-                                       "Zamień tekst na wielkie litery",
+                p.add_boolean_argument("uppercase", tr("WIELKIE LITERY"),
+                                       tr("Zamień tekst na wielkie litery"),
                                        True, rw)
                 p.add_choice_argument(
-                    "align", "Wyrównanie", "Wyrównanie tekstu",
-                    _choice([("center", "Do środka"), ("left", "Do lewej"),
-                             ("right", "Do prawej")]),
+                    "align", tr("Wyrównanie"), tr("Wyrównanie tekstu"),
+                    _choice([("center", tr("Do środka")), ("left", tr("Do lewej")),
+                             ("right", tr("Do prawej"))]),
                     "center", rw)
                 p.add_double_argument(
-                    "margin-percent", "Margines (% krótszego boku)",
-                    "Odstęp tekstu od krawędzi zdjęcia",
+                    "margin-percent", tr("Margines (% krótszego boku)"),
+                    tr("Odstęp tekstu od krawędzi zdjęcia"),
                     0.0, 20.0, 4.0, rw)
                 p.add_choice_argument(
-                    "bar", "Pasek na tekst",
-                    "Pasek nad lub pod zdjęciem – trafia do niego tekst "
-                    "z tej strony",
-                    _choice([("none", "Brak"),
-                             ("top", "Nad zdjęciem (tekst górny)"),
-                             ("bottom", "Pod zdjęciem (tekst dolny)")]),
+                    "bar", tr("Pasek na tekst"),
+                    tr("Pasek nad lub pod zdjęciem – trafia do niego tekst "
+                    "z tej strony"),
+                    _choice([("none", tr("Brak")),
+                             ("top", tr("Nad zdjęciem (tekst górny)")),
+                             ("bottom", tr("Pod zdjęciem (tekst dolny)"))]),
                     "none", rw)
                 p.add_choice_argument(
-                    "bar-color", "Kolor paska", "Kolor paska na tekst",
-                    _choice([("white", "Biały (czarny tekst)"),
-                             ("black", "Czarny (biały tekst)")]),
+                    "bar-color", tr("Kolor paska"), tr("Kolor paska na tekst"),
+                    _choice([("white", tr("Biały (czarny tekst)")),
+                             ("black", tr("Czarny (biały tekst)"))]),
                     "white", rw)
                 p.add_boolean_argument(
-                    "editable", "Edytowalne warstwy tekstowe",
-                    "Włączone: tekst zostaje edytowalny. Wyłączone: mem "
-                    "spłaszczony do jednej warstwy nad zdjęciem.",
+                    "editable", tr("Edytowalne warstwy tekstowe"),
+                    tr("Włączone: tekst zostaje edytowalny. Wyłączone: mem "
+                    "spłaszczony do jednej warstwy nad zdjęciem."),
                     True, rw)
                 p.add_boolean_argument(
-                    "live-preview", "Podgląd na obrazie",
-                    "Pokazuj mema na zdjęciu na bieżąco, w trakcie zmian "
-                    "w oknie (bez wpisów w historii cofania)",
+                    "live-preview", tr("Podgląd na obrazie"),
+                    tr("Pokazuj mema na zdjęciu na bieżąco, w trakcie zmian "
+                    "w oknie (bez wpisów w historii cofania)"),
                     True, rw)
 
             elif name == PROC_EXPORT:
                 p = Gimp.ImageProcedure.new(self, name, Gimp.PDBProcType.PLUGIN,
                                             self.run_export, None)
-                p.set_menu_label("Eksportuj mema…")
+                p.set_menu_label(tr("Eksportuj mema…"))
                 p.set_documentation(
-                    "Zapisuje mema do JPG lub PNG.",
-                    "Eksportuje widoczny obraz do JPG (z wybraną jakością) "
-                    "lub PNG. Obraz w GIMP-ie zostaje bez zmian.", None)
-                p.add_file_argument("file", "Plik", "Gdzie zapisać mema",
+                    tr("Zapisuje mema do JPG lub PNG."),
+                    tr("Eksportuje widoczny obraz do JPG (z wybraną jakością) "
+                    "lub PNG. Obraz w GIMP-ie zostaje bez zmian."), None)
+                p.add_file_argument("file", tr("Plik"), tr("Gdzie zapisać mema"),
                                     Gimp.FileChooserAction.SAVE, True, None, rw)
                 p.add_choice_argument(
-                    "format", "Format", "Format pliku",
+                    "format", tr("Format"), tr("Format pliku"),
                     _choice([("jpg", "JPG"), ("png", "PNG")]), "jpg", rw)
-                p.add_int_argument("quality", "Jakość JPG (%)",
-                                   "Jakość JPG 1–100", 1, 100, 90, rw)
-                p.add_int_argument("png-compression", "Kompresja PNG (0–9)",
-                                   "Stopień kompresji PNG (bezstratny)",
+                p.add_int_argument("quality", tr("Jakość JPG (%)"),
+                                   tr("Jakość JPG 1–100"), 1, 100, 90, rw)
+                p.add_int_argument("png-compression", tr("Kompresja PNG (0–9)"),
+                                   tr("Stopień kompresji PNG (bezstratny)"),
                                    0, 9, 6, rw)
             else:
                 return None

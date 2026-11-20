@@ -19,20 +19,23 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from podpis_i18n import tr  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Czyste funkcje (bez GIMP-a) – testowane pytest-em
 # ---------------------------------------------------------------------------
 
 POSITIONS = [
-    ("top-left", "Góra – lewo"),
-    ("top-center", "Góra – środek"),
-    ("top-right", "Góra – prawo"),
-    ("middle-left", "Środek – lewo"),
-    ("center", "Środek"),
-    ("middle-right", "Środek – prawo"),
-    ("bottom-left", "Dół – lewo"),
-    ("bottom-center", "Dół – środek"),
-    ("bottom-right", "Dół – prawo"),
+    ("top-left", tr("Góra – lewo")),
+    ("top-center", tr("Góra – środek")),
+    ("top-right", tr("Góra – prawo")),
+    ("middle-left", tr("Środek – lewo")),
+    ("center", tr("Środek")),
+    ("middle-right", tr("Środek – prawo")),
+    ("bottom-left", tr("Dół – lewo")),
+    ("bottom-center", tr("Dół – środek")),
+    ("bottom-right", tr("Dół – prawo")),
 ]
 POSITION_IDS = [p for p, _ in POSITIONS]
 
@@ -40,7 +43,7 @@ POSITION_IDS = [p for p, _ in POSITIONS]
 def split_position(position):
     """'bottom-right' -> ('bottom', 'right'); 'center' -> ('middle', 'center')."""
     if position not in POSITION_IDS:
-        raise ValueError("Nieznana pozycja: %r" % (position,))
+        raise ValueError(tr("Nieznana pozycja: %r") % (position,))
     if position == "center":
         return "middle", "center"
     row, col = position.split("-")
@@ -160,7 +163,7 @@ def save_template(path, name, kind, values):
     """Dopisuje (albo nadpisuje) szablon i zapisuje plik atomowo."""
     name = (name or "").strip()
     if not name:
-        raise ValueError("Nazwa szablonu nie może być pusta.")
+        raise ValueError(tr("Nazwa szablonu nie może być pusta."))
     allowed = TEMPLATE_KEYS[kind] + COMMON_TEMPLATE_KEYS
     templates = load_templates(path)
     templates[name] = {"kind": kind,
@@ -220,29 +223,29 @@ if HAVE_GIMP:
     def _add_common_arguments(procedure):
         rw = GObject.ParamFlags.READWRITE
         procedure.add_double_argument(
-            "opacity", "Krycie (%)", "Krycie warstwy podpisu 0–100 %",
+            "opacity", tr("Krycie (%)"), tr("Krycie warstwy podpisu 0–100 %"),
             0.0, 100.0, 70.0, rw)
         procedure.add_choice_argument(
-            "position", "Położenie", "Położenie podpisu na zdjęciu",
+            "position", tr("Położenie"), tr("Położenie podpisu na zdjęciu"),
             _choice(POSITIONS), "bottom-right", rw)
         procedure.add_double_argument(
-            "margin-percent", "Margines (% krótszego boku)",
-            "Margines jako % krótszego boku obrazu – używany, gdy margines w px = 0",
+            "margin-percent", tr("Margines (% krótszego boku)"),
+            tr("Margines jako % krótszego boku obrazu – używany, gdy margines w px = 0"),
             0.0, 25.0, 3.0, rw)
         procedure.add_int_argument(
-            "margin", "Margines (px, 0 = użyj %)",
-            "Margines w pikselach; 0 oznacza: licz z procentu",
+            "margin", tr("Margines (px, 0 = użyj %)"),
+            tr("Margines w pikselach; 0 oznacza: licz z procentu"),
             0, 1000, 0, rw)
         procedure.add_string_argument(
-            "layer-name", "Nazwa warstwy", "Nazwa nowej warstwy", "Podpis", rw)
+            "layer-name", tr("Nazwa warstwy"), tr("Nazwa nowej warstwy"), tr("Podpis"), rw)
         procedure.add_string_argument(
-            "template", "Wczytaj szablon",
-            "Nazwa zapisanego szablonu; jego ustawienia zastępują te z okna "
-            "(puste = bez szablonu)", "", rw)
+            "template", tr("Wczytaj szablon"),
+            tr("Nazwa zapisanego szablonu; jego ustawienia zastępują te z okna "
+            "(puste = bez szablonu)"), "", rw)
         procedure.add_string_argument(
-            "save-template", "Zapisz jako szablon",
-            "Po udanym podpisie zapisz bieżące ustawienia pod tą nazwą "
-            "(puste = nie zapisuj)", "", rw)
+            "save-template", tr("Zapisz jako szablon"),
+            tr("Po udanym podpisie zapisz bieżące ustawienia pod tą nazwą "
+            "(puste = nie zapisuj)"), "", rw)
 
     # --- szablony: ustawienia <-> JSON -----------------------------------------
 
@@ -282,8 +285,8 @@ if HAVE_GIMP:
     def _templates_label():
         names = sorted(load_templates(_templates_path()))
         if not names:
-            return "Brak zapisanych szablonów."
-        return "Zapisane szablony: " + ", ".join(names)
+            return tr("Brak zapisanych szablonów.")
+        return tr("Zapisane szablony: ") + ", ".join(names)
 
     def _common_setup(procedure, menu_label, blurb):
         procedure.set_image_types("*")
@@ -292,7 +295,7 @@ if HAVE_GIMP:
             | Gimp.ProcedureSensitivityMask.DRAWABLES
             | Gimp.ProcedureSensitivityMask.NO_DRAWABLES)
         procedure.set_menu_label(menu_label)
-        procedure.add_menu_path("<Image>/Filters/Podpis")
+        procedure.add_menu_path("<Image>/Filters/" + tr("Podpis"))
         procedure.set_documentation(blurb, blurb, None)
         procedure.set_attribution("Marek Zettel", "Marek Zettel", "2026")
 
@@ -305,17 +308,17 @@ if HAVE_GIMP:
         x, y, clamped = compute_offset(W, H, layer.get_width(),
                                        layer.get_height(), position, m)
         if clamped:
-            warnings.append("Podpis jest większy niż zdjęcie – został "
-                            "przyciągnięty do krawędzi obrazu.")
+            warnings.append(tr("Podpis jest większy niż zdjęcie – został "
+                            "przyciągnięty do krawędzi obrazu."))
         layer.set_offsets(x, y)
         layer.set_opacity(float(config.get_property("opacity")))
-        name = (config.get_property("layer-name") or "").strip() or "Podpis"
+        name = (config.get_property("layer-name") or "").strip() or tr("Podpis")
         layer.set_name(name)
 
     def _build_text_layer(image, config, warnings):
         text = config.get_property("text") or ""
         if not text.strip():
-            raise PodpisError("Tekst podpisu jest pusty – wpisz tekst.")
+            raise PodpisError(tr("Tekst podpisu jest pusty – wpisz tekst."))
         text = text.rstrip("\r\n")
 
         font = config.get_property("font")
@@ -329,7 +332,7 @@ if HAVE_GIMP:
 
         layer = Gimp.TextLayer.new(image, text, font, size, Gimp.Unit.pixel())
         if layer is None:
-            raise PodpisError("Nie udało się utworzyć warstwy tekstowej.")
+            raise PodpisError(tr("Nie udało się utworzyć warstwy tekstowej."))
         image.insert_layer(layer, None, 0)
 
         # GIMP 3.2 nie przekazuje domyślnej wartości argumentu-koloru (przychodzi
@@ -353,9 +356,9 @@ if HAVE_GIMP:
     def _build_image_layer(image, config, warnings):
         gfile = config.get_property("file")
         if gfile is None:
-            raise PodpisError("Nie wybrano pliku z podpisem.")
+            raise PodpisError(tr("Nie wybrano pliku z podpisem."))
         if not gfile.query_exists(None):
-            raise PodpisError("Plik podpisu nie istnieje:\n%s"
+            raise PodpisError(tr("Plik podpisu nie istnieje:\n%s")
                               % (gfile.get_path() or gfile.get_uri()))
 
         try:
@@ -368,10 +371,10 @@ if HAVE_GIMP:
         if layer is None:
             hint = ""
             if image.get_base_type() == Gimp.ImageBaseType.INDEXED:
-                hint = ("\nObraz jest indeksowany – przekonwertuj go do RGB "
-                        "(Obraz → Tryb → RGB) i spróbuj ponownie.")
-            raise PodpisError("Nie udało się wczytać pliku podpisu "
-                              "(nieobsługiwany lub uszkodzony format):\n%s%s%s"
+                hint = (tr("\nObraz jest indeksowany – przekonwertuj go do RGB "
+                        "(Obraz → Tryb → RGB) i spróbuj ponownie."))
+            raise PodpisError(tr("Nie udało się wczytać pliku podpisu "
+                              "(nieobsługiwany lub uszkodzony format):\n%s%s%s")
                               % (gfile.get_path() or gfile.get_uri(),
                                  ("\n" + load_error) if load_error else "", hint))
 
@@ -388,8 +391,8 @@ if HAVE_GIMP:
                            config.get_property("margin-percent"))
         w, h, shrunk = fit_size(W, H, w, h, config.get_property("position"), m)
         if shrunk:
-            warnings.append("Podpis był większy niż zdjęcie – zmniejszono go "
-                            "proporcjonalnie do %d×%d px." % (w, h))
+            warnings.append(tr("Podpis był większy niż zdjęcie – zmniejszono go "
+                            "proporcjonalnie do %d×%d px.") % (w, h))
 
         if (w, h) != (layer.get_width(), layer.get_height()):
             down = w < layer.get_width()
@@ -425,8 +428,8 @@ if HAVE_GIMP:
 
     def _execute(procedure, run_mode, image, config, text_mode, title):
         if image is None:
-            return _error(procedure, "Brak otwartego obrazu – otwórz zdjęcie "
-                                     "i spróbuj ponownie.")
+            return _error(procedure, tr("Brak otwartego obrazu – otwórz zdjęcie "
+                                     "i spróbuj ponownie."))
         if run_mode == Gimp.RunMode.INTERACTIVE:
             if not _run_dialog(procedure, config, title, text_mode):
                 return procedure.new_return_values(Gimp.PDBStatusType.CANCEL,
@@ -437,9 +440,9 @@ if HAVE_GIMP:
         if tpl_name:
             values = find_template(load_templates(_templates_path()), tpl_name, kind)
             if values is None:
-                return _error(procedure, "Nie ma szablonu „%s” dla podpisu %s. %s"
-                              % (tpl_name, "tekstowego" if text_mode
-                                 else "z obrazu", _templates_label()))
+                return _error(procedure, tr("Nie ma szablonu „%s” dla podpisu %s. %s")
+                              % (tpl_name, tr("tekstowego") if text_mode
+                                 else tr("z obrazu"), _templates_label()))
             _apply_values(config, values)
 
         warnings = []
@@ -464,7 +467,7 @@ if HAVE_GIMP:
         except PodpisError as e:
             return _error(procedure, str(e))
         except Exception as e:  # noqa – żadnych niezłapanych wyjątków
-            return _error(procedure, "Nieoczekiwany błąd wtyczki Podpis: %s" % e)
+            return _error(procedure, tr("Nieoczekiwany błąd wtyczki Podpis: %s") % e)
         finally:
             image.undo_group_end()
             Gimp.context_pop()
@@ -475,9 +478,9 @@ if HAVE_GIMP:
             try:
                 save_template(_templates_path(), save_name, kind,
                               _config_values(config, kind))
-                warnings.append("Zapisano szablon „%s”." % save_name)
+                warnings.append(tr("Zapisano szablon „%s”.") % save_name)
             except (OSError, ValueError) as e:
-                warnings.append("Nie udało się zapisać szablonu: %s" % e)
+                warnings.append(tr("Nie udało się zapisać szablonu: %s") % e)
         # Szablon działa jednorazowo – przy następnym otwarciu okna pola są puste.
         config.set_property("template", "")
         config.set_property("save-template", "")
@@ -506,36 +509,36 @@ if HAVE_GIMP:
             if name == PROC_TEXT:
                 procedure = Gimp.ImageProcedure.new(
                     self, name, Gimp.PDBProcType.PLUGIN, self.run_text, None)
-                _common_setup(procedure, "Podpis tekstowy…",
-                              "Dodaje podpis tekstowy jako nową, edytowalną "
-                              "warstwę tekstową.")
+                _common_setup(procedure, tr("Podpis tekstowy…"),
+                              tr("Dodaje podpis tekstowy jako nową, edytowalną "
+                              "warstwę tekstową."))
                 procedure.add_string_argument(
-                    "text", "Tekst", "Treść podpisu",
+                    "text", tr("Tekst"), tr("Treść podpisu"),
                     default_text(GLib.get_real_name()), rw)
                 procedure.add_font_argument(
-                    "font", "Font", "Font podpisu", False, None, True, rw)
+                    "font", tr("Font"), tr("Font podpisu"), False, None, True, rw)
                 procedure.add_choice_argument(
-                    "size-mode", "Tryb rozmiaru", "Jak liczyć rozmiar fontu",
-                    _choice([("percent", "% szerokości obrazu"),
-                             ("pixels", "Piksele")]),
+                    "size-mode", tr("Tryb rozmiaru"), tr("Jak liczyć rozmiar fontu"),
+                    _choice([("percent", tr("% szerokości obrazu")),
+                             ("pixels", tr("Piksele"))]),
                     "percent", rw)
                 procedure.add_double_argument(
-                    "font-size-percent", "Rozmiar (% szerokości obrazu)",
-                    "Rozmiar fontu jako % szerokości obrazu",
+                    "font-size-percent", tr("Rozmiar (% szerokości obrazu)"),
+                    tr("Rozmiar fontu jako % szerokości obrazu"),
                     0.5, 50.0, 4.0, rw)
                 procedure.add_double_argument(
-                    "font-size-px", "Rozmiar (px)", "Rozmiar fontu w pikselach",
+                    "font-size-px", tr("Rozmiar (px)"), tr("Rozmiar fontu w pikselach"),
                     4.0, 2000.0, 48.0, rw)
                 procedure.add_color_argument(
-                    "color", "Kolor", "Kolor tekstu", False,
+                    "color", tr("Kolor"), tr("Kolor tekstu"), False,
                     Gegl.Color.new("white"), rw)
                 procedure.add_choice_argument(
-                    "justify", "Wyrównanie linii",
-                    "Wyrównanie linii w bloku tekstu",
-                    _choice([("auto", "Automatycznie (wg położenia)"),
-                             ("left", "Do lewej"),
-                             ("center", "Do środka"),
-                             ("right", "Do prawej")]),
+                    "justify", tr("Wyrównanie linii"),
+                    tr("Wyrównanie linii w bloku tekstu"),
+                    _choice([("auto", tr("Automatycznie (wg położenia)")),
+                             ("left", tr("Do lewej")),
+                             ("center", tr("Do środka")),
+                             ("right", tr("Do prawej"))]),
                     "auto", rw)
                 _add_common_arguments(procedure)
                 return procedure
@@ -543,21 +546,21 @@ if HAVE_GIMP:
             if name == PROC_IMAGE:
                 procedure = Gimp.ImageProcedure.new(
                     self, name, Gimp.PDBProcType.PLUGIN, self.run_image, None)
-                _common_setup(procedure, "Podpis z obrazu…",
-                              "Dodaje podpis z pliku graficznego (logo, "
-                              "sygnatura) jako nową warstwę.")
+                _common_setup(procedure, tr("Podpis z obrazu…"),
+                              tr("Dodaje podpis z pliku graficznego (logo, "
+                              "sygnatura) jako nową warstwę."))
                 procedure.add_file_argument(
-                    "file", "Plik podpisu",
-                    "PNG z przezroczystością, JPG, WebP, SVG…",
+                    "file", tr("Plik podpisu"),
+                    tr("PNG z przezroczystością, JPG, WebP, SVG…"),
                     Gimp.FileChooserAction.OPEN, True, None, rw)
                 procedure.add_choice_argument(
-                    "scale-mode", "Tryb skali", "Jak skalować podpis",
-                    _choice([("percent-width", "% szerokości obrazu"),
-                             ("original", "Oryginalny rozmiar")]),
+                    "scale-mode", tr("Tryb skali"), tr("Jak skalować podpis"),
+                    _choice([("percent-width", tr("% szerokości obrazu")),
+                             ("original", tr("Oryginalny rozmiar"))]),
                     "percent-width", rw)
                 procedure.add_double_argument(
-                    "scale-percent", "Skala (% szerokości obrazu)",
-                    "Szerokość podpisu jako % szerokości obrazu",
+                    "scale-percent", tr("Skala (% szerokości obrazu)"),
+                    tr("Szerokość podpisu jako % szerokości obrazu"),
                     1.0, 100.0, 15.0, rw)
                 _add_common_arguments(procedure)
                 return procedure
@@ -566,11 +569,11 @@ if HAVE_GIMP:
 
         def run_text(self, procedure, run_mode, image, drawables, config, data):
             return _execute(procedure, run_mode, image, config, True,
-                            "Podpis tekstowy")
+                            tr("Podpis tekstowy"))
 
         def run_image(self, procedure, run_mode, image, drawables, config, data):
             return _execute(procedure, run_mode, image, config, False,
-                            "Podpis z obrazu")
+                            tr("Podpis z obrazu"))
 
 
 if __name__ == "__main__":

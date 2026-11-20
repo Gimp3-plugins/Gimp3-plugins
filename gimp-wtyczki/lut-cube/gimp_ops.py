@@ -20,6 +20,7 @@ gi.require_version("Gegl", "0.4")
 from gi.repository import Gimp, Gegl  # noqa: E402
 
 import lut_apply  # noqa: E402
+from lut_i18n import tr  # noqa: E402
 
 FORMAT = "R'G'B'A float"
 STRIP_PIXELS = 1 << 21          # ok. 2 Mpx na pasek przy zapisie (32 MB)
@@ -45,8 +46,8 @@ def needs_rgb_conversion(image):
 
 
 def base_type_name(image):
-    return {Gimp.ImageBaseType.GRAY: "w skali szarości",
-            Gimp.ImageBaseType.INDEXED: "indeksowany"}.get(
+    return {Gimp.ImageBaseType.GRAY: tr("w skali szarości"),
+            Gimp.ImageBaseType.INDEXED: tr("indeksowany")}.get(
                 image.get_base_type(), "")
 
 
@@ -69,7 +70,7 @@ def convert_to_srgb(image):
     if not image.convert_color_profile(Gimp.ColorProfile.new_rgb_srgb(),
                                        Gimp.ColorRenderingIntent.PERCEPTUAL,
                                        True):
-        raise PluginError("Nie udało się skonwertować obrazu do sRGB.")
+        raise PluginError(tr("Nie udało się skonwertować obrazu do sRGB."))
 
 
 def target_layers(image, drawables):
@@ -83,11 +84,11 @@ def target_layers(image, drawables):
     if not layers:
         if skipped:
             raise PluginError(
-                "Wybrany element (%s) nie jest zwykłą warstwą – LUT można "
+                tr("Wybrany element (%s) nie jest zwykłą warstwą – LUT można "
                 "nałożyć tylko na warstwę z pikselami, nie na grupę, maskę "
-                "ani kanał." % ", ".join(skipped))
-        raise PluginError("Nie wybrano żadnej warstwy – zaznacz warstwę "
-                          "w oknie Warstwy.")
+                "ani kanał.") % ", ".join(skipped))
+        raise PluginError(tr("Nie wybrano żadnej warstwy – zaznacz warstwę "
+                          "w oknie Warstwy."))
     return layers
 
 
@@ -144,7 +145,7 @@ def new_hald_image(level):
     side, rgb = lut_formats.hald_identity(level)
     image = Gimp.Image.new_with_precision(side, side, Gimp.ImageBaseType.RGB,
                                           Gimp.Precision.U16_NON_LINEAR)
-    layer = Gimp.Layer.new(image, "Hald %d (siatka %d)" % (level, level * level),
+    layer = Gimp.Layer.new(image, tr("Hald %d (siatka %d)") % (level, level * level),
                            side, side, Gimp.ImageType.RGB_IMAGE, 100,
                            Gimp.LayerMode.NORMAL)
     image.insert_layer(layer, None, 0)
@@ -168,9 +169,9 @@ def image_to_lut(image, title=""):
     w, h = image.get_width(), image.get_height()
     if lut_formats.hald_level(w, h) is None:
         raise PluginError(
-            "Ten obraz nie jest obrazem Hald (ma %d×%d px). Utwórz go przez "
+            tr("Ten obraz nie jest obrazem Hald (ma %d×%d px). Utwórz go przez "
             "Filtry → LUT → Utwórz obraz Hald…, popraw kolory i zapisz ponownie. "
-            "Nie zmieniaj rozmiaru ani nie kadruj obrazu Hald." % (w, h))
+            "Nie zmieniaj rozmiaru ani nie kadruj obrazu Hald.") % (w, h))
     dup = image.duplicate()
     try:
         layer = dup.merge_visible_layers(Gimp.MergeType.CLIP_TO_IMAGE)
@@ -202,8 +203,8 @@ def apply_to_layer(image, layer, lut, params, output="new-layer",
     """
     ok, x, y, w, h = layer.mask_intersect()
     if not ok or w <= 0 or h <= 0:
-        raise PluginError("Zaznaczenie nie obejmuje warstwy „%s” – nie ma "
-                          "czego zmieniać." % layer.get_name())
+        raise PluginError(tr("Zaznaczenie nie obejmuje warstwy „%s” – nie ma "
+                          "czego zmieniać.") % layer.get_name())
 
     pixel_params = params
     if output == "new-layer" and strength_as_opacity:

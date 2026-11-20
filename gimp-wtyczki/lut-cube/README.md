@@ -1,5 +1,7 @@
 # LUT-y (.cube) – wtyczka GIMP 3
 
+*[English](README.en.md)*
+
 Darmowa wtyczka open source (GPL-3.0), która nakłada kolorystyczne tablice LUT w formatach `.cube`, `.3dl` i Hald CLUT (`.png`) (te same, których używasz w Lightroomie, Photoshopie czy DaVinci Resolve). Ma własną bibliotekę LUT-ów, podgląd przed/po z suwakiem dzielącym i suwak siły efektu. Działa w pełni offline: bez kont, kluczy API i zbierania danych.
 
 ![Okno wtyczki: biblioteka i suwak przed/po](../docs/lut-cube/okno-suwak.png)
@@ -7,6 +9,10 @@ Darmowa wtyczka open source (GPL-3.0), która nakłada kolorystyczne tablice LUT
 **Do paczki nie są dołączone żadne LUT-y.** Wtyczka to narzędzie: pliki `.cube` (własne albo kupione) importujesz do biblioteki z dysku.
 
 Przetestowano na GIMP 3.2.6 (Windows 11).
+
+## Język interfejsu (PL / EN)
+
+Wtyczki mają interfejs **po polsku i po angielsku**. Język wybierany jest automatycznie według języka interfejsu GIMP-a (wszystko, co nie jest polskie, dostaje angielski). Wymusić język można zmienną środowiskową `GIMP_WTYCZKI_LANG=pl` albo `en` ustawioną przed uruchomieniem GIMP-a. Teksty są tłumaczone w czasie działania z pliku `en.json` w folderze wtyczki (polski tekst jest kluczem), więc brakujący wpis po prostu pokazuje tekst polski. GIMP zapamiętuje etykiety menu wtyczek: po zmianie języka zainstaluj wtyczki ponownie (`install.ps1`) albo „dotknij” plik `.py` wtyczki, żeby GIMP odczytał je od nowa. Okna i komunikaty zmieniają się od razu.
 
 ## Instalacja (Windows)
 
@@ -225,6 +231,7 @@ proc.run(cfg)
   "%LOCALAPPDATA%\Programs\GIMP 3\bin\gimp-console-3.2.exe" -i --batch-interpreter python-fu-eval -b "exec(open(r'tests/gimp_lut_integration.py', encoding='utf-8').read())" --quit
   ```
 - Okno (budowane poza ekranem, akcje jak z przycisków i klawiszy): to samo polecenie z `tests/gimp_lut_ui.py`. Zrzuty okna trafiają do `docs/lut-cube/` tylko ze zmienną `LUT_CUBE_SCREENSHOTS=1`, inaczej do katalogu tymczasowego.
+- Interfejs angielski: `tests/gimp_i18n_en.py` (opis w nagłówku pliku; uruchamiaj ze zmienną `GIMP_WTYCZKI_LANG=en`). Kompletność tłumaczeń pilnuje `tests/test_i18n.py`.
 
 Obrazy testowe testy generują same. Jeśli w repo jest folder `Luts/` z plikami `.cube`, testy go używają; jeśli nie (jak w publicznym repo), generują kilka syntetycznych LUT-ów.
 

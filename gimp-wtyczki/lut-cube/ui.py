@@ -26,6 +26,7 @@ import library  # noqa: E402
 import lut_apply  # noqa: E402
 import lut_formats  # noqa: E402
 from cube_parser import CubeError  # noqa: E402
+from lut_i18n import tr  # noqa: E402
 
 THUMB_SIDE = 64
 DEBOUNCE_MS = 120
@@ -33,13 +34,13 @@ RESP_APPLY = 1
 FILE_PREFIX = "file:"
 SPLIT_GRAB = 10          # px od linii podziału, w których „łapiemy” suwak
 
-PREVIEW_MODES = [("split", "Suwak przed/po"), ("side", "Obok siebie"),
-                 ("toggle", "Przełącznik przed/po"),
-                 ("grid4", "Siatka LUT-ów 2×2"), ("grid9", "Siatka LUT-ów 3×3")]
+PREVIEW_MODES = [("split", tr("Suwak przed/po")), ("side", tr("Obok siebie")),
+                 ("toggle", tr("Przełącznik przed/po")),
+                 ("grid4", tr("Siatka LUT-ów 2×2")), ("grid9", tr("Siatka LUT-ów 3×3"))]
 GRID_SIDE = 520          # dłuższy bok obrazu w kafelkach siatki porównawczej
-TONAL = [("shadows", "Cienie"), ("midtones", "Półtony"), ("highlights", "Światła")]
-INTERPOLATIONS = [("tetrahedral", "Tetraedralna (dokładniejsza)"),
-                  ("trilinear", "Trójliniowa")]
+TONAL = [("shadows", tr("Cienie")), ("midtones", tr("Półtony")), ("highlights", tr("Światła"))]
+INTERPOLATIONS = [("tetrahedral", tr("Tetraedralna (dokładniejsza)")),
+                  ("trilinear", tr("Trójliniowa"))]
 
 
 from ui_common import (_pixbuf, _message, _ask, _ask_text,  # noqa: E402,F401
@@ -92,17 +93,17 @@ class LutWindow:
     # --- budowa okna -------------------------------------------------------------
 
     def _build(self):
-        title = ("Zastosuj LUT (.cube)" if self.image is not None
-                 else "Biblioteka LUT-ów")
+        title = (tr("Zastosuj LUT (.cube)") if self.image is not None
+                 else tr("Biblioteka LUT-ów"))
         self.dialog = dlg = Gtk.Dialog(title=title)
         GimpUi.window_set_transient(dlg)
         dlg.set_default_size(1240, 800)
         if self.image is not None:
-            dlg.add_button("_Anuluj", Gtk.ResponseType.CANCEL)
-            self.apply_button = dlg.add_button("_Zastosuj", RESP_APPLY)
+            dlg.add_button(tr("_Anuluj"), Gtk.ResponseType.CANCEL)
+            self.apply_button = dlg.add_button(tr("_Zastosuj"), RESP_APPLY)
             dlg.set_default_response(RESP_APPLY)
         else:
-            dlg.add_button("_Zamknij", Gtk.ResponseType.CLOSE)
+            dlg.add_button(tr("_Zamknij"), Gtk.ResponseType.CLOSE)
             self.apply_button = None
         dlg.connect("key-press-event", self._on_key_press)
         dlg.connect("key-release-event", self._on_key_release)
@@ -121,7 +122,7 @@ class LutWindow:
         self.progress_box = Gtk.Box(spacing=6)
         self.progress = Gtk.ProgressBar(show_text=True)
         self.progress_box.pack_start(self.progress, True, True, 0)
-        stop = Gtk.Button(label="Przerwij")
+        stop = Gtk.Button(label=tr("Przerwij"))
         stop.connect("clicked", self._on_cancel_apply)
         self.progress_box.pack_start(stop, False, False, 0)
         area.pack_start(self.progress_box, False, False, 0)
@@ -145,7 +146,7 @@ class LutWindow:
     def _build_library_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
 
-        self.search = Gtk.SearchEntry(placeholder_text="Szukaj LUT-a…")
+        self.search = Gtk.SearchEntry(placeholder_text=tr("Szukaj LUT-a…"))
         self.search.connect("search-changed", lambda *_: self._refill())
         box.pack_start(self.search, False, False, 0)
 
@@ -153,15 +154,15 @@ class LutWindow:
         self.category_combo = Gtk.ComboBoxText()
         self.category_combo.connect("changed", self._on_filter_changed)
         row.pack_start(self.category_combo, True, True, 0)
-        self.fav_toggle = Gtk.ToggleButton(label="★ Ulubione")
-        self.fav_toggle.set_tooltip_text("Pokaż tylko ulubione")
+        self.fav_toggle = Gtk.ToggleButton(label=tr("★ Ulubione"))
+        self.fav_toggle.set_tooltip_text(tr("Pokaż tylko ulubione"))
         self.fav_toggle.set_active(self.settings["favorites_only"])
         self.fav_toggle.connect("toggled", self._on_filter_changed)
         row.pack_start(self.fav_toggle, False, False, 0)
-        self.sort_combo = _combo([("name", "Nazwa"), ("date", "Data dodania")],
+        self.sort_combo = _combo([("name", tr("Nazwa")), ("date", tr("Data dodania"))],
                                  self.settings["sort"])
-        self.sort_combo.set_tooltip_text("Sortowanie (ulubione i ostatnio "
-                                         "użyte zawsze na górze)")
+        self.sort_combo.set_tooltip_text(tr("Sortowanie (ulubione i ostatnio "
+                                         "użyte zawsze na górze)"))
         self.sort_combo.connect("changed", self._on_filter_changed)
         row.pack_start(self.sort_combo, False, False, 0)
         box.pack_start(row, False, False, 0)
@@ -200,33 +201,33 @@ class LutWindow:
         box.pack_start(scroll, True, True, 0)
 
         grid = Gtk.Grid(column_spacing=4, row_spacing=4, column_homogeneous=True)
-        b = Gtk.Button(label="Dodaj pliki…")
-        b.set_tooltip_text("Kopiuje wybrane pliki LUT (.cube, .3dl, Hald .png) do "
-                           "biblioteki (możesz też przeciągnąć pliki na listę)")
+        b = Gtk.Button(label=tr("Dodaj pliki…"))
+        b.set_tooltip_text(tr("Kopiuje wybrane pliki LUT (.cube, .3dl, Hald .png) do "
+                           "biblioteki (możesz też przeciągnąć pliki na listę)"))
         b.connect("clicked", self._on_add_files)
         grid.attach(b, 0, 0, 1, 1)
-        b = Gtk.Button(label="Dodaj folder…")
-        b.set_tooltip_text("Dodaje wszystkie pliki LUT z folderu i podfolderów")
+        b = Gtk.Button(label=tr("Dodaj folder…"))
+        b.set_tooltip_text(tr("Dodaje wszystkie pliki LUT z folderu i podfolderów"))
         b.connect("clicked", self._on_add_folder)
         grid.attach(b, 1, 0, 1, 1)
-        b = Gtk.Button(label="Wczytaj plik LUT…")
-        b.set_tooltip_text("Nakłada dowolny plik .cube, .3dl albo Hald .png bez "
-                           "dodawania do biblioteki")
+        b = Gtk.Button(label=tr("Wczytaj plik LUT…"))
+        b.set_tooltip_text(tr("Nakłada dowolny plik .cube, .3dl albo Hald .png bez "
+                           "dodawania do biblioteki"))
         b.connect("clicked", self._on_load_file)
         grid.attach(b, 0, 1, 1, 1)
-        self.add_temp_button = Gtk.Button(label="Dodaj do biblioteki")
-        self.add_temp_button.set_tooltip_text("Dodaje wczytany plik do biblioteki")
+        self.add_temp_button = Gtk.Button(label=tr("Dodaj do biblioteki"))
+        self.add_temp_button.set_tooltip_text(tr("Dodaje wczytany plik do biblioteki"))
         self.add_temp_button.connect("clicked", self._on_add_temp)
         grid.attach(self.add_temp_button, 1, 1, 1, 1)
         box.pack_start(grid, False, False, 0)
 
         row = Gtk.Box(spacing=4, homogeneous=True)
-        presets = Gtk.Button(label="Presety ▾")
-        presets.set_tooltip_text("Zapisane zestawy: LUT + siła + mieszanie + "
-                                 "zakres tonalny")
+        presets = Gtk.Button(label=tr("Presety ▾"))
+        presets.set_tooltip_text(tr("Zapisane zestawy: LUT + siła + mieszanie + "
+                                 "zakres tonalny"))
         presets.connect("clicked", self._on_presets_button)
         row.pack_start(presets, True, True, 0)
-        more = Gtk.MenuButton(label="Więcej ▾")
+        more = Gtk.MenuButton(label=tr("Więcej ▾"))
         more.set_popup(self._build_menu(for_item=False))
         row.pack_start(more, True, True, 0)
         box.pack_start(row, False, False, 0)
@@ -249,20 +250,20 @@ class LutWindow:
 
         lib_selected = (self.current_key is not None
                         and not self.current_key.startswith(FILE_PREFIX))
-        for mi in (item("Zmień nazwę…", self._on_rename),
-                   item("Kategoria…", self._on_set_category),
-                   item("Ulubiony (włącz/wyłącz)", self._on_toggle_favorite),
-                   item("Usuń z biblioteki…", self._on_remove)):
+        for mi in (item(tr("Zmień nazwę…"), self._on_rename),
+                   item(tr("Kategoria…"), self._on_set_category),
+                   item(tr("Ulubiony (włącz/wyłącz)"), self._on_toggle_favorite),
+                   item(tr("Usuń z biblioteki…"), self._on_remove)):
             mi.set_sensitive(lib_selected or not for_item)
         if not for_item:
             menu.append(Gtk.SeparatorMenuItem())
-            item("Kategorie…", self._on_manage_categories)
-            item("Ustawienia…", self._on_settings)
-            item("Import startowy…", lambda: self._startup_import(force=True))
-            item("Posprzątaj folder biblioteki…", self._on_clean_orphans)
+            item(tr("Kategorie…"), self._on_manage_categories)
+            item(tr("Ustawienia…"), self._on_settings)
+            item(tr("Import startowy…"), lambda: self._startup_import(force=True))
+            item(tr("Posprzątaj folder biblioteki…"), self._on_clean_orphans)
             menu.append(Gtk.SeparatorMenuItem())
-            item("Eksportuj bibliotekę (.zip)…", self._on_export_library)
-            item("Importuj bibliotekę (.zip)…", self._on_import_library)
+            item(tr("Eksportuj bibliotekę (.zip)…"), self._on_export_library)
+            item(tr("Importuj bibliotekę (.zip)…"), self._on_import_library)
         menu.show_all()
         return menu
 
@@ -273,7 +274,7 @@ class LutWindow:
         self.srgb_label = Gtk.Label(xalign=0)
         self.srgb_label.set_line_wrap(True)
         self.srgb_bar.get_content_area().add(self.srgb_label)
-        self.srgb_bar.add_button("Konwertuj do sRGB", 1)
+        self.srgb_bar.add_button(tr("Konwertuj do sRGB"), 1)
         self.srgb_bar.connect("response", self._on_convert_srgb)
         box.pack_start(self.srgb_bar, False, False, 0)
 
@@ -281,19 +282,19 @@ class LutWindow:
         self.mode_combo = _combo(PREVIEW_MODES, self.settings["preview_mode"])
         self.mode_combo.connect("changed", self._on_view_changed)
         bar.pack_start(self.mode_combo, False, False, 0)
-        self.vertical_check = Gtk.CheckButton(label="Pionowo")
-        self.vertical_check.set_tooltip_text("Suwak poziomy (góra: przed, dół: po)")
+        self.vertical_check = Gtk.CheckButton(label=tr("Pionowo"))
+        self.vertical_check.set_tooltip_text(tr("Suwak poziomy (góra: przed, dół: po)"))
         self.vertical_check.set_active(self.settings["split_vertical"])
         self.vertical_check.connect("toggled", self._on_view_changed)
         bar.pack_start(self.vertical_check, False, False, 0)
-        self.before_toggle = Gtk.ToggleButton(label="Pokaż oryginał")
-        self.before_toggle.set_tooltip_text("Kliknij albo przytrzymaj spację / \\")
+        self.before_toggle = Gtk.ToggleButton(label=tr("Pokaż oryginał"))
+        self.before_toggle.set_tooltip_text(tr("Kliknij albo przytrzymaj spację / \\"))
         self.before_toggle.connect("toggled", lambda *_: self.area.queue_draw())
         bar.pack_start(self.before_toggle, False, False, 0)
-        self.zoom_combo = _combo([("fit", "Dopasuj do okna"), ("100", "100 %")],
+        self.zoom_combo = _combo([("fit", tr("Dopasuj do okna")), ("100", "100 %")],
                                  "fit")
-        self.zoom_combo.set_tooltip_text("W trybie 100 % przeciągnij podgląd, "
-                                         "żeby go przesunąć")
+        self.zoom_combo.set_tooltip_text(tr("W trybie 100 % przeciągnij podgląd, "
+                                         "żeby go przesunąć"))
         self.zoom_combo.connect("changed", self._on_zoom_changed)
         bar.pack_end(self.zoom_combo, False, False, 0)
         box.pack_start(bar, False, False, 0)
@@ -337,43 +338,43 @@ class LutWindow:
     def _build_controls(self):
         grid = Gtk.Grid(column_spacing=8, row_spacing=4)
         s = self.settings
-        self.strength = self._slider(grid, 0, "Siła", s["strength"],
-                                     "0 % = oryginał, 100 % = pełny LUT")
-        expander = Gtk.Expander(label="Mieszanie: kolor / jasność / zakres tonalny")
+        self.strength = self._slider(grid, 0, tr("Siła"), s["strength"],
+                                     tr("0 % = oryginał, 100 % = pełny LUT"))
+        expander = Gtk.Expander(label=tr("Mieszanie: kolor / jasność / zakres tonalny"))
         sub = Gtk.Grid(column_spacing=8, row_spacing=4)
-        self.color = self._slider(sub, 0, "Kolor", s["color"],
-                                  "Ile zmiany barwy przenieść z LUT-a")
-        self.luminance = self._slider(sub, 1, "Jasność", s["luminance"],
-                                      "Ile zmiany jasności/kontrastu przenieść "
-                                      "(0 % = look bez zmiany kontrastu)")
+        self.color = self._slider(sub, 0, tr("Kolor"), s["color"],
+                                  tr("Ile zmiany barwy przenieść z LUT-a"))
+        self.luminance = self._slider(sub, 1, tr("Jasność"), s["luminance"],
+                                      tr("Ile zmiany jasności/kontrastu przenieść "
+                                      "(0 % = look bez zmiany kontrastu)"))
         self.tonal = {}
         for i, (key, label) in enumerate(TONAL):
             self.tonal[key] = self._slider(
                 sub, 2 + i, label, s[key],
-                "Siła efektu w %s (np. look tylko w cieniach)" % label.lower())
+                tr("Siła efektu w %s (np. look tylko w cieniach)") % label.lower())
         expander.add(sub)
         expander.set_expanded(any(s[k] != 100.0 for k in
                                   ("color", "luminance", "shadows", "midtones",
                                    "highlights")))
         grid.attach(expander, 0, 1, 4, 1)
 
-        grid.attach(Gtk.Label(label="Interpolacja", xalign=0), 0, 2, 1, 1)
+        grid.attach(Gtk.Label(label=tr("Interpolacja"), xalign=0), 0, 2, 1, 1)
         self.interp_combo = _combo(INTERPOLATIONS, s["interpolation"])
         self.interp_combo.connect("changed", lambda *_: self._schedule_update())
         grid.attach(self.interp_combo, 1, 2, 3, 1)
 
         if self.image is not None:
-            grid.attach(Gtk.Label(label="Wynik", xalign=0), 0, 3, 1, 1)
+            grid.attach(Gtk.Label(label=tr("Wynik"), xalign=0), 0, 3, 1, 1)
             out = Gtk.Box(spacing=8)
-            self.out_new = Gtk.RadioButton(label="Nowa warstwa z efektem")
-            self.out_inplace = Gtk.RadioButton(label="Na aktywnej warstwie",
+            self.out_new = Gtk.RadioButton(label=tr("Nowa warstwa z efektem"))
+            self.out_inplace = Gtk.RadioButton(label=tr("Na aktywnej warstwie"),
                                                group=self.out_new)
             (self.out_inplace if s["output"] == "in-place"
              else self.out_new).set_active(True)
-            self.opacity_check = Gtk.CheckButton(label="Siła jako krycie warstwy")
+            self.opacity_check = Gtk.CheckButton(label=tr("Siła jako krycie warstwy"))
             self.opacity_check.set_tooltip_text(
-                "Warstwa dostaje pełny efekt, a siła trafia do krycia – "
-                "można ją potem zmieniać w oknie Warstwy")
+                tr("Warstwa dostaje pełny efekt, a siła trafia do krycia – "
+                "można ją potem zmieniać w oknie Warstwy"))
             self.opacity_check.set_active(s["strength_as_opacity"])
             self.out_new.connect("toggled", lambda *_: self._update_mode_widgets())
             for w in (self.out_new, self.out_inplace, self.opacity_check):
@@ -518,16 +519,16 @@ class LutWindow:
     def _set_status(self, ms=None):
         parts = []
         if self.current_lut is not None:
-            parts.append("LUT %s, siatka %d" % (self.current_lut.kind,
+            parts.append(tr("LUT %s, siatka %d") % (self.current_lut.kind,
                                                 self.current_lut.grid_size))
-        parts.append("podgląd %d×%d" % (self.fit_w, self.fit_h))
+        parts.append(tr("podgląd %d×%d") % (self.fit_w, self.fit_h))
         if ms is not None:
             parts.append("%.0f ms" % ms)
         parts.append(lut_apply.backend_name(self.use_numpy))
         if self.image is not None and self.layers:
-            parts.append("warstwa: %s" % self.layers[0].get_name())
+            parts.append(tr("warstwa: %s") % self.layers[0].get_name())
             if len(self.layers) > 1:
-                parts.append("(+%d warstw)" % (len(self.layers) - 1))
+                parts.append(tr("(+%d warstw)") % (len(self.layers) - 1))
         self.status.set_text("  •  ".join(parts))
 
     # --- lista LUT-ów ----------------------------------------------------------------
@@ -536,7 +537,7 @@ class LutWindow:
         combo = self.category_combo
         combo.handler_block_by_func(self._on_filter_changed)
         combo.remove_all()
-        combo.append("", "Wszystkie kategorie")
+        combo.append("", tr("Wszystkie kategorie"))
         for c in self.lib.categories:
             combo.append("cat:" + c, c)
         want = self.settings["category_filter"]
@@ -554,7 +555,7 @@ class LutWindow:
     def _row_markup(self, key):
         if key.startswith(FILE_PREFIX):
             name = os.path.splitext(os.path.basename(key[len(FILE_PREFIX):]))[0]
-            return ("%s\n<small><i>spoza biblioteki</i></small>"
+            return (tr("%s\n<small><i>spoza biblioteki</i></small>")
                     % GLib.markup_escape_text(name))
         e = self.lib.entries[key]
         extra = [e.get("category") or "", "%s %d" % (e.get("kind", "3D"),
@@ -567,7 +568,7 @@ class LutWindow:
         if key.startswith(FILE_PREFIX):
             return key[len(FILE_PREFIX):]
         e = self.lib.entries[key]
-        return "%s\nDodano: %s" % (e["file"], e.get("added", "").replace("T", " "))
+        return tr("%s\nDodano: %s") % (e["file"], e.get("added", "").replace("T", " "))
 
     def _keys(self):
         keys = self.lib.query(self.search.get_text(),
@@ -590,9 +591,9 @@ class LutWindow:
                                self._row_markup(key), self._row_tooltip(key)])
         sel.handler_unblock_by_func(self._on_selection_changed)
         n = len(self.lib.entries)
-        self.lib_status.set_text("W bibliotece: %d LUT-ów. Strzałki ↑↓ – "
-                                 "następny/poprzedni LUT." % n if n else
-                                 "Biblioteka jest pusta – dodaj pliki .cube.")
+        self.lib_status.set_text(tr("W bibliotece: %d LUT-ów. Strzałki ↑↓ – "
+                                 "następny/poprzedni LUT.") % n if n else
+                                 tr("Biblioteka jest pusta – dodaj pliki .cube."))
         self.add_temp_button.set_sensitive(bool(self.temp_path))
         if select:
             self._select_key(select)
@@ -629,7 +630,7 @@ class LutWindow:
             self.current_lut = self._load_lut(key)
         except CubeError as e:
             self.current_lut = None
-            self.status.set_text("Błąd LUT-a: %s" % e)
+            self.status.set_text(tr("Błąd LUT-a: %s") % e)
             self.after_pb = self.before_pb
             self.area.queue_draw()
             return
@@ -703,34 +704,34 @@ class LutWindow:
         try:
             return fn(*args)
         except (library.LibraryError, CubeError, OSError) as e:
-            _message(self.dialog, "Błąd biblioteki", str(e), Gtk.MessageType.ERROR)
+            _message(self.dialog, tr("Błąd biblioteki"), str(e), Gtk.MessageType.ERROR)
             return None
 
     def _on_add_files(self, *_):
-        paths = _choose(self.dialog, "Dodaj pliki .cube do biblioteki",
+        paths = _choose(self.dialog, tr("Dodaj pliki .cube do biblioteki"),
                         Gtk.FileChooserAction.OPEN, self.settings, multiple=True)
         if paths:
             res = self._guard(self.lib.add_files, paths)
             if res:
-                self._after_import(res, "Import plików .cube")
+                self._after_import(res, tr("Import plików .cube"))
 
     def _on_add_folder(self, *_):
-        paths = _choose(self.dialog, "Dodaj folder z plikami .cube",
+        paths = _choose(self.dialog, tr("Dodaj folder z plikami .cube"),
                         Gtk.FileChooserAction.SELECT_FOLDER, self.settings)
         if paths:
             res = self._guard(self.lib.add_folder, paths[0], True)
             if res:
-                self._after_import(res, "Import folderu")
+                self._after_import(res, tr("Import folderu"))
 
     def _on_load_file(self, *_):
-        paths = _choose(self.dialog, "Wczytaj plik LUT (bez dodawania do "
-                        "biblioteki)", Gtk.FileChooserAction.OPEN, self.settings)
+        paths = _choose(self.dialog, tr("Wczytaj plik LUT (bez dodawania do "
+                        "biblioteki)"), Gtk.FileChooserAction.OPEN, self.settings)
         if not paths:
             return
         try:
             lut_formats.load_lut_file(paths[0])
         except CubeError as e:
-            _message(self.dialog, "Nie można wczytać pliku .cube", str(e),
+            _message(self.dialog, tr("Nie można wczytać pliku .cube"), str(e),
                      Gtk.MessageType.ERROR)
             return
         self.temp_path = paths[0]
@@ -750,7 +751,7 @@ class LutWindow:
             self._refill(select=res.added[0])
         else:
             self._refill()
-            _message(self.dialog, "Dodawanie do biblioteki", res.summary())
+            _message(self.dialog, tr("Dodawanie do biblioteki"), res.summary())
 
     def _on_drop(self, widget, context, x, y, data, info, time_):
         paths = []
@@ -769,11 +770,11 @@ class LutWindow:
                 r = self._guard(self.lib.add_files, [p])
             else:
                 r = library.ImportResult()
-                r.errors.append((p, "to nie jest plik .cube"))
+                r.errors.append((p, tr("to nie jest plik .cube")))
             if r:
                 result.merge(r)
         if paths:
-            self._after_import(result, "Import przeciągniętych plików")
+            self._after_import(result, tr("Import przeciągniętych plików"))
 
     def _selected_lib_id(self):
         key = self.current_key
@@ -785,9 +786,9 @@ class LutWindow:
         lut_id = self._selected_lib_id()
         if lut_id is None:
             return
-        name = _ask_text(self.dialog, "Zmień nazwę",
-                         "Nazwa wyświetlana (plik na dysku się nie zmienia).\n"
-                         "Pusta nazwa = nazwa z pliku.",
+        name = _ask_text(self.dialog, tr("Zmień nazwę"),
+                         tr("Nazwa wyświetlana (plik na dysku się nie zmienia).\n"
+                         "Pusta nazwa = nazwa z pliku."),
                          self.lib.display_name(lut_id))
         if name is not None:
             self._guard(self.lib.rename, lut_id, name)
@@ -797,12 +798,12 @@ class LutWindow:
         lut_id = self._selected_lib_id()
         if lut_id is None:
             return
-        dlg = Gtk.Dialog(title="Kategoria", transient_for=self.dialog, modal=True)
-        dlg.add_buttons("_Anuluj", Gtk.ResponseType.CANCEL, "_OK", Gtk.ResponseType.OK)
+        dlg = Gtk.Dialog(title=tr("Kategoria"), transient_for=self.dialog, modal=True)
+        dlg.add_buttons(tr("_Anuluj"), Gtk.ResponseType.CANCEL, tr("_OK"), Gtk.ResponseType.OK)
         box = dlg.get_content_area()
         box.set_border_width(12)
         box.set_spacing(6)
-        box.add(Gtk.Label(label="Wybierz kategorię albo wpisz nową:", xalign=0))
+        box.add(Gtk.Label(label=tr("Wybierz kategorię albo wpisz nową:"), xalign=0))
         combo = Gtk.ComboBoxText.new_with_entry()
         combo.append_text("")
         for c in self.lib.categories:
@@ -833,13 +834,13 @@ class LutWindow:
         dlg = Gtk.MessageDialog(transient_for=self.dialog, modal=True,
                                 message_type=Gtk.MessageType.QUESTION,
                                 buttons=Gtk.ButtonsType.NONE,
-                                text="Usunąć „%s” z biblioteki?"
+                                text=tr("Usunąć „%s” z biblioteki?")
                                 % self.lib.display_name(lut_id))
-        check = Gtk.CheckButton(label="Usuń też plik z folderu biblioteki "
-                                "(oryginał, z którego importowano, zostaje)")
+        check = Gtk.CheckButton(label=tr("Usuń też plik z folderu biblioteki "
+                                "(oryginał, z którego importowano, zostaje)"))
         dlg.get_message_area().add(check)
-        dlg.add_button("_Anuluj", Gtk.ResponseType.CANCEL)
-        dlg.add_button("_Usuń", Gtk.ResponseType.OK)
+        dlg.add_button(tr("_Anuluj"), Gtk.ResponseType.CANCEL)
+        dlg.add_button(tr("_Usuń"), Gtk.ResponseType.OK)
         dlg.show_all()
         resp, delete_file = dlg.run(), check.get_active()
         dlg.destroy()
@@ -861,16 +862,16 @@ class LutWindow:
             mi.connect("activate", lambda _m, n=name: self._apply_preset(n))
             menu.append(mi)
         if not names:
-            mi = Gtk.MenuItem(label="(brak presetów)")
+            mi = Gtk.MenuItem(label=tr("(brak presetów)"))
             mi.set_sensitive(False)
             menu.append(mi)
         menu.append(Gtk.SeparatorMenuItem())
-        save = Gtk.MenuItem(label="Zapisz bieżące ustawienia jako preset…")
+        save = Gtk.MenuItem(label=tr("Zapisz bieżące ustawienia jako preset…"))
         save.set_sensitive(self.current_lut is not None)
         save.connect("activate", lambda *_: self._save_preset())
         menu.append(save)
         if names:
-            delete = Gtk.MenuItem(label="Usuń preset")
+            delete = Gtk.MenuItem(label=tr("Usuń preset"))
             sub = Gtk.Menu()
             for name in names:
                 mi = Gtk.MenuItem(label=name)
@@ -894,16 +895,16 @@ class LutWindow:
     def _save_preset(self):
         if self.current_key is None:
             return
-        name = _ask_text(self.dialog, "Zapisz preset",
-                         "Nazwa presetu (ten sam LUT i bieżące ustawienia):",
+        name = _ask_text(self.dialog, tr("Zapisz preset"),
+                         tr("Nazwa presetu (ten sam LUT i bieżące ustawienia):"),
                          self._label(self.current_key))
         if name:
             self._guard(self.lib.save_preset, name, self.current_key,
                         self._preset_values())
 
     def _delete_preset(self, name):
-        if _ask(self.dialog, "Usunąć preset „%s”?" % name, "LUT zostaje w bibliotece.",
-                [("_Anuluj", 0), ("_Usuń", 1)]) == 1:
+        if _ask(self.dialog, tr("Usunąć preset „%s”?") % name, tr("LUT zostaje w bibliotece."),
+                [(tr("_Anuluj"), 0), (tr("_Usuń"), 1)]) == 1:
             self._guard(self.lib.delete_preset, name)
 
     def _apply_preset(self, name):
@@ -934,49 +935,49 @@ class LutWindow:
     # --- eksport / import biblioteki ----------------------------------------------------
 
     def _on_export_library(self):
-        paths = _choose(self.dialog, "Eksportuj bibliotekę LUT-ów",
+        paths = _choose(self.dialog, tr("Eksportuj bibliotekę LUT-ów"),
                         Gtk.FileChooserAction.SAVE, self.settings,
-                        patterns=("*.zip",), filter_name="Archiwum ZIP",
+                        patterns=("*.zip",), filter_name=tr("Archiwum ZIP"),
                         save_name="biblioteka-lut.zip")
         if not paths:
             return
         path = paths[0] if paths[0].lower().endswith(".zip") else paths[0] + ".zip"
         count = self._guard(self.lib.export_zip, path)
         if count is not None:
-            _message(self.dialog, "Biblioteka wyeksportowana",
-                     "Zapisano %d LUT-ów (z nazwami, kategoriami, ulubionymi i "
-                     "presetami) do:\n%s" % (count, path))
+            _message(self.dialog, tr("Biblioteka wyeksportowana"),
+                     tr("Zapisano %d LUT-ów (z nazwami, kategoriami, ulubionymi i "
+                     "presetami) do:\n%s") % (count, path))
 
     def _on_import_library(self):
-        paths = _choose(self.dialog, "Importuj bibliotekę LUT-ów",
+        paths = _choose(self.dialog, tr("Importuj bibliotekę LUT-ów"),
                         Gtk.FileChooserAction.OPEN, self.settings,
-                        patterns=("*.zip", "*.ZIP"), filter_name="Archiwum ZIP")
+                        patterns=("*.zip", "*.ZIP"), filter_name=tr("Archiwum ZIP"))
         if paths:
             res = self._guard(self.lib.import_zip, paths[0])
             if res is not None:
-                self._after_import(res, "Import biblioteki")
+                self._after_import(res, tr("Import biblioteki"))
 
     def _on_clean_orphans(self):
         """Usuwa z folderu biblioteki pliki, których nie ma na liście."""
         orphans = self.lib.orphan_files()
         if not orphans:
-            _message(self.dialog, "Folder biblioteki jest czysty",
-                     "Wszystkie pliki z folderu są na liście LUT-ów.")
+            _message(self.dialog, tr("Folder biblioteki jest czysty"),
+                     tr("Wszystkie pliki z folderu są na liście LUT-ów."))
             return
         names = "\n".join(os.path.basename(p) for p in orphans[:15])
         if len(orphans) > 15:
-            names += "\n… i %d więcej" % (len(orphans) - 15)
-        if _ask(self.dialog, "Usunąć %d plików spoza listy?" % len(orphans),
-                "Te pliki leżą w folderze biblioteki, ale nie ma ich na liście "
-                "(np. po „Usuń tylko z listy”). Usunięcia nie da się cofnąć.\n\n"
-                + names, [("_Anuluj", 0), ("_Usuń", 1)]) == 1:
+            names += tr("\n… i %d więcej") % (len(orphans) - 15)
+        if _ask(self.dialog, tr("Usunąć %d plików spoza listy?") % len(orphans),
+                tr("Te pliki leżą w folderze biblioteki, ale nie ma ich na liście "
+                "(np. po „Usuń tylko z listy”). Usunięcia nie da się cofnąć.\n\n")
+                + names, [(tr("_Anuluj"), 0), (tr("_Usuń"), 1)]) == 1:
             removed = self._guard(self.lib.remove_orphans)
             if removed is not None:
-                _message(self.dialog, "Gotowe", "Usunięto plików: %d" % len(removed))
+                _message(self.dialog, tr("Gotowe"), tr("Usunięto plików: %d") % len(removed))
 
     def _on_manage_categories(self):
-        dlg = Gtk.Dialog(title="Kategorie", transient_for=self.dialog, modal=True)
-        dlg.add_button("_Zamknij", Gtk.ResponseType.CLOSE)
+        dlg = Gtk.Dialog(title=tr("Kategorie"), transient_for=self.dialog, modal=True)
+        dlg.add_button(tr("_Zamknij"), Gtk.ResponseType.CLOSE)
         dlg.set_default_size(320, 320)
         box = dlg.get_content_area()
         box.set_border_width(12)
@@ -998,7 +999,7 @@ class LutWindow:
             return model[it][0] if it else None
 
         def add(*_):
-            name = _ask_text(dlg, "Nowa kategoria", "Nazwa kategorii:")
+            name = _ask_text(dlg, tr("Nowa kategoria"), tr("Nazwa kategorii:"))
             if name:
                 self._guard(self.lib.add_category, name)
                 reload()
@@ -1006,23 +1007,23 @@ class LutWindow:
         def rename(*_):
             old = selected()
             if old:
-                new = _ask_text(dlg, "Zmień nazwę kategorii", "Nowa nazwa:", old)
+                new = _ask_text(dlg, tr("Zmień nazwę kategorii"), tr("Nowa nazwa:"), old)
                 if new:
                     self._guard(self.lib.rename_category, old, new)
                     reload()
 
         def remove(*_):
             name = selected()
-            if name and _ask(dlg, "Usunąć kategorię „%s”?" % name,
-                             "LUT-y z tej kategorii zostaną w bibliotece "
-                             "(bez kategorii).",
-                             [("_Anuluj", 0), ("_Usuń", 1)]) == 1:
+            if name and _ask(dlg, tr("Usunąć kategorię „%s”?") % name,
+                             tr("LUT-y z tej kategorii zostaną w bibliotece "
+                             "(bez kategorii)."),
+                             [(tr("_Anuluj"), 0), (tr("_Usuń"), 1)]) == 1:
                 self._guard(self.lib.remove_category, name)
                 reload()
 
         row = Gtk.Box(spacing=4)
-        for label, cb in (("Dodaj…", add), ("Zmień nazwę…", rename),
-                          ("Usuń", remove)):
+        for label, cb in ((tr("Dodaj…"), add), (tr("Zmień nazwę…"), rename),
+                          (tr("Usuń"), remove)):
             b = Gtk.Button(label=label)
             b.connect("clicked", cb)
             row.pack_start(b, True, True, 0)
@@ -1036,21 +1037,21 @@ class LutWindow:
 
     def _on_settings(self):
         s = self.settings
-        dlg = Gtk.Dialog(title="Ustawienia biblioteki LUT", transient_for=self.dialog,
+        dlg = Gtk.Dialog(title=tr("Ustawienia biblioteki LUT"), transient_for=self.dialog,
                          modal=True)
-        dlg.add_buttons("_Anuluj", Gtk.ResponseType.CANCEL, "_OK", Gtk.ResponseType.OK)
+        dlg.add_buttons(tr("_Anuluj"), Gtk.ResponseType.CANCEL, tr("_OK"), Gtk.ResponseType.OK)
         box = dlg.get_content_area()
         box.set_border_width(12)
         box.set_spacing(8)
-        strip = Gtk.CheckButton(label="Skracaj wspólny prefiks w nazwach LUT-ów")
+        strip = Gtk.CheckButton(label=tr("Skracaj wspólny prefiks w nazwach LUT-ów"))
         strip.set_active(s["strip_prefix"])
         box.add(strip)
-        box.add(Gtk.Label(label="Prefiks do pominięcia (pliki na dysku się nie "
-                          "zmieniają):", xalign=0))
+        box.add(Gtk.Label(label=tr("Prefiks do pominięcia (pliki na dysku się nie "
+                          "zmieniają):"), xalign=0))
         prefix = Gtk.Entry(text=s["prefix"], width_chars=40)
         box.add(prefix)
-        box.add(Gtk.Label(label="Folder importu startowego:", xalign=0))
-        folder = Gtk.FileChooserButton(title="Folder z plikami .cube",
+        box.add(Gtk.Label(label=tr("Folder importu startowego:"), xalign=0))
+        folder = Gtk.FileChooserButton(title=tr("Folder z plikami .cube"),
                                        action=Gtk.FileChooserAction.SELECT_FOLDER)
         start = library.suggested_startup_dir(s, self.plugin_dir)
         if start:
@@ -1058,7 +1059,7 @@ class LutWindow:
         box.add(folder)
         info = Gtk.Label(xalign=0, selectable=True)
         info.set_line_wrap(True)
-        info.set_markup("<small>Folder biblioteki: %s\nObliczenia: %s</small>"
+        info.set_markup(tr("<small>Folder biblioteki: %s\nObliczenia: %s</small>")
                         % (GLib.markup_escape_text(self.lib.root),
                            GLib.markup_escape_text(lut_apply.backend_name())))
         box.add(info)
@@ -1079,25 +1080,25 @@ class LutWindow:
         folder = library.suggested_startup_dir(self.settings, self.plugin_dir)
         if folder:
             count = len(library.find_cube_files(folder))
-            text = ("Zaimportować %d plików .cube z folderu:\n%s" % (count, folder))
+            text = (tr("Zaimportować %d plików .cube z folderu:\n%s") % (count, folder))
         else:
-            text = "Nie znaleziono domyślnego folderu z LUT-ami."
+            text = tr("Nie znaleziono domyślnego folderu z LUT-ami.")
         resp = _ask(self.dialog,
-                    "Biblioteka LUT-ów jest pusta" if not force else "Import startowy",
-                    text + "\n\nPliki zostaną skopiowane do biblioteki "
-                    "(oryginały zostają bez zmian).",
-                    ([("_Importuj", 1)] if folder else [])
-                    + [("_Wybierz folder…", 2), ("_Nie teraz", 0)])
+                    tr("Biblioteka LUT-ów jest pusta") if not force else tr("Import startowy"),
+                    text + tr("\n\nPliki zostaną skopiowane do biblioteki "
+                    "(oryginały zostają bez zmian)."),
+                    ([(tr("_Importuj"), 1)] if folder else [])
+                    + [(tr("_Wybierz folder…"), 2), (tr("_Nie teraz"), 0)])
         self.settings["startup_offered"] = True
         if resp == 2:
-            picked = _choose(self.dialog, "Folder z plikami .cube",
+            picked = _choose(self.dialog, tr("Folder z plikami .cube"),
                              Gtk.FileChooserAction.SELECT_FOLDER, self.settings)
             folder = picked[0] if picked else None
         if resp in (1, 2) and folder:
             self.settings["startup_dir"] = folder
             res = self._guard(self.lib.add_folder, folder, True)
             if res:
-                self._after_import(res, "Import startowy")
+                self._after_import(res, tr("Import startowy"))
         else:
             self._guard(self.lib.save)
         return False
@@ -1141,9 +1142,9 @@ class LutWindow:
             self.srgb_bar.hide()
         else:
             self.srgb_label.set_text(
-                "Obraz ma profil kolorów „%s”. LUT-y .cube zakładają sRGB – "
+                tr("Obraz ma profil kolorów „%s”. LUT-y .cube zakładają sRGB – "
                 "bez konwersji kolory wyjdą inaczej niż w Lightroomie czy "
-                "DaVinci." % label)
+                "DaVinci.") % label)
             self.srgb_bar.show_all()
 
     def _on_convert_srgb(self, bar, resp):
@@ -1151,7 +1152,7 @@ class LutWindow:
             gimp_ops.convert_to_srgb(self.image)
             Gimp.displays_flush()
         except gimp_ops.PluginError as e:
-            _message(self.dialog, "Konwersja do sRGB", str(e), Gtk.MessageType.ERROR)
+            _message(self.dialog, tr("Konwersja do sRGB"), str(e), Gtk.MessageType.ERROR)
             return
         self._load_source()
         self._update_srgb_bar()
@@ -1239,7 +1240,7 @@ class LutWindow:
                 boxes = [(0, 0, (aw - gap) / 2.0, ah),
                          ((aw + gap) / 2.0, 0, (aw - gap) / 2.0, ah)]
             for (bx, by, bw, bh), pb, text in zip(boxes, (before, after),
-                                                  ("Przed", "Po")):
+                                                  (tr("Przed"), tr("Po"))):
                 x0, y0, dw, dh, s = self._fit_rect(bx, by, bw, bh, w, h, scale)
                 self._paint(cr, pb, (x0, y0, dw, dh), s, checker)
                 self._label_text(cr, bx + 8, by + 8, text)
@@ -1251,7 +1252,7 @@ class LutWindow:
         if show_before or mode == "toggle":
             self._paint(cr, before if show_before else after, (x0, y0, dw, dh),
                         s, checker)
-            self._label_text(cr, 8, 8, "Przed (oryginał)" if show_before else "Po")
+            self._label_text(cr, 8, 8, tr("Przed (oryginał)") if show_before else tr("Po"))
             return False
 
         # Suwak: lewa/górna część – oryginał, prawa/dolna – efekt.
@@ -1280,9 +1281,9 @@ class LutWindow:
         else:
             cr.arc(cut, y0 + dh / 2.0, 7, 0, 6.2832)
         cr.fill()
-        self._label_text(cr, 8, 8, "Przed")
+        self._label_text(cr, 8, 8, tr("Przed"))
         self._label_text(cr, aw - 46 if not vertical else 8,
-                         8 if not vertical else ah - 28, "Po")
+                         8 if not vertical else ah - 28, tr("Po"))
         return False
 
     def _near_split(self, x, y):
@@ -1445,8 +1446,8 @@ class LutWindow:
     def apply(self):
         """Nakłada wybrany LUT na warstwy. True = gotowe (okno do zamknięcia)."""
         if self.current_lut is None:
-            _message(self.dialog, "Nie wybrano LUT-a",
-                     "Wybierz LUT z listy albo wczytaj plik .cube.")
+            _message(self.dialog, tr("Nie wybrano LUT-a"),
+                     tr("Wybierz LUT z listy albo wczytaj plik .cube."))
             return False
         self._store_settings()
         params = self.params()
@@ -1463,10 +1464,10 @@ class LutWindow:
                 gimp_ops.apply_to_layer(self.image, layer, self.current_lut,
                                         params, output, as_opacity, label, progress)
         except gimp_ops.Cancelled:
-            self.status.set_text("Przerwano – obraz bez zmian.")
+            self.status.set_text(tr("Przerwano – obraz bez zmian."))
             return False
         except (gimp_ops.PluginError, CubeError) as e:
-            _message(self.dialog, "Nie udało się nałożyć LUT-a", str(e),
+            _message(self.dialog, tr("Nie udało się nałożyć LUT-a"), str(e),
                      Gtk.MessageType.ERROR)
             return False
         finally:
@@ -1529,11 +1530,11 @@ def _prepare_image(image):
     """Obraz w skali szarości / indeksowany: propozycja konwersji do RGB."""
     if not gimp_ops.needs_rgb_conversion(image):
         return True
-    resp = _ask(None, "Obraz nie jest w trybie RGB",
-                "Obraz jest %s. LUT-y kolorystyczne działają na obrazach RGB.\n"
-                "Skonwertować obraz do RGB? (można cofnąć: Ctrl+Z)"
+    resp = _ask(None, tr("Obraz nie jest w trybie RGB"),
+                tr("Obraz jest %s. LUT-y kolorystyczne działają na obrazach RGB.\n"
+                "Skonwertować obraz do RGB? (można cofnąć: Ctrl+Z)")
                 % gimp_ops.base_type_name(image),
-                [("_Anuluj", 0), ("_Konwertuj do RGB", 1)])
+                [(tr("_Anuluj"), 0), (tr("_Konwertuj do RGB"), 1)])
     if resp != 1:
         return False
     image.convert_rgb()

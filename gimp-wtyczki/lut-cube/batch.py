@@ -6,6 +6,7 @@ i ma testy; nakładanie i zapis używają GIMP-a (run_batch).
 """
 
 import os
+from lut_i18n import tr  # noqa: E402
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp")
 FORMATS = {"jpg": ".jpg", "png": ".png", "tif": ".tif", "webp": ".webp"}
@@ -53,15 +54,15 @@ def output_path(src, in_root, out_root, fmt, suffix):
 def check_settings(in_root, out_root, fmt, suffix):
     """Rzuca BatchError, gdy ustawienia groziłyby nadpisaniem oryginałów."""
     if not in_root or not os.path.isdir(in_root):
-        raise BatchError("Wybierz istniejący folder ze zdjęciami.")
+        raise BatchError(tr("Wybierz istniejący folder ze zdjęciami."))
     if not out_root:
-        raise BatchError("Wybierz folder, do którego trafią wyniki.")
+        raise BatchError(tr("Wybierz folder, do którego trafią wyniki."))
     same = os.path.normcase(os.path.abspath(in_root)) == \
         os.path.normcase(os.path.abspath(out_root))
     if same and not suffix and fmt == "same":
-        raise BatchError("Folder wynikowy jest taki sam jak folder zdjęć, a nie "
+        raise BatchError(tr("Folder wynikowy jest taki sam jak folder zdjęć, a nie "
                          "ma przyrostka nazwy – oryginały zostałyby nadpisane. "
-                         "Wybierz inny folder albo podaj przyrostek (np. -lut).")
+                         "Wybierz inny folder albo podaj przyrostek (np. -lut)."))
 
 
 # --- część GIMP-owa ------------------------------------------------------------------
@@ -75,7 +76,7 @@ def _export(image, path, fmt_ext, quality):
                  ".tif": "file-tiff-export", ".webp": "file-webp-export"}.get(fmt_ext)
     if proc_name is None:
         if not Gimp.file_save(Gimp.RunMode.NONINTERACTIVE, image, gfile, None):
-            raise BatchError("nie udało się zapisać")
+            raise BatchError(tr("nie udało się zapisać"))
         return
     if fmt_ext == ".jpg":
         image.flatten()                    # JPG nie ma przezroczystości
@@ -90,7 +91,7 @@ def _export(image, path, fmt_ext, quality):
         cfg.set_property("quality", float(quality))
     res = proc.run(cfg)
     if res.index(0) != Gimp.PDBStatusType.SUCCESS:
-        raise BatchError("eksport się nie powiódł")
+        raise BatchError(tr("eksport się nie powiódł"))
 
 
 def run_batch(files, in_root, out_root, fmt, suffix, quality, lut, params,
@@ -113,7 +114,7 @@ def run_batch(files, in_root, out_root, fmt, suffix, quality, lut, params,
         try:
             image = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(src))
             if image is None:
-                raise BatchError("nie udało się wczytać")
+                raise BatchError(tr("nie udało się wczytać"))
             image.undo_disable()           # kopia robocza – cofanie zbędne
             if gimp_ops.needs_rgb_conversion(image):
                 image.convert_rgb()

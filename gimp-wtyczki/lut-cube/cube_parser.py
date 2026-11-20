@@ -14,6 +14,7 @@ Tabele trzymamy jako płaskie array('f') (float32):
 import os
 import struct
 from array import array
+from lut_i18n import tr  # noqa: E402
 
 
 class CubeError(Exception):
@@ -66,33 +67,33 @@ def _floats(parts, lineno, what):
         joined = " ".join(parts)
         if "," in joined:
             raise CubeError(
-                "Wiersz %d: liczby zapisane z przecinkiem dziesiętnym (%s). "
-                "Format .cube wymaga kropki, np. 0.5 zamiast 0,5."
+                tr("Wiersz %d: liczby zapisane z przecinkiem dziesiętnym (%s). "
+                "Format .cube wymaga kropki, np. 0.5 zamiast 0,5.")
                 % (lineno, joined))
-        raise CubeError("Wiersz %d: %s – to nie są poprawne liczby: %s"
+        raise CubeError(tr("Wiersz %d: %s – to nie są poprawne liczby: %s")
                         % (lineno, what, joined))
 
 
 def _int(parts, lineno, keyword):
     if len(parts) != 1:
-        raise CubeError("Wiersz %d: %s wymaga jednej liczby całkowitej."
+        raise CubeError(tr("Wiersz %d: %s wymaga jednej liczby całkowitej.")
                         % (lineno, keyword))
     try:
         return int(parts[0])
     except ValueError:
-        raise CubeError("Wiersz %d: %s – niepoprawna liczba: %s"
+        raise CubeError(tr("Wiersz %d: %s – niepoprawna liczba: %s")
                         % (lineno, keyword, parts[0]))
 
 
 def _triple(parts, lineno, keyword):
     if len(parts) != 3:
-        raise CubeError("Wiersz %d: %s wymaga trzech liczb." % (lineno, keyword))
+        raise CubeError(tr("Wiersz %d: %s wymaga trzech liczb.") % (lineno, keyword))
     return tuple(_floats(parts, lineno, keyword))
 
 
 def _range_pair(parts, lineno, keyword):
     if len(parts) != 2:
-        raise CubeError("Wiersz %d: %s wymaga dwóch liczb." % (lineno, keyword))
+        raise CubeError(tr("Wiersz %d: %s wymaga dwóch liczb.") % (lineno, keyword))
     lo, hi = _floats(parts, lineno, keyword)
     return (lo, lo, lo), (hi, hi, hi)
 
@@ -121,8 +122,8 @@ def parse_cube_text(text, source=""):
             keyword = first.upper()
             parts = line.split()[1:]
             if rows:
-                raise CubeError("Wiersz %d: słowo kluczowe %s po danych "
-                                "tabeli – plik jest uszkodzony."
+                raise CubeError(tr("Wiersz %d: słowo kluczowe %s po danych "
+                                "tabeli – plik jest uszkodzony.")
                                 % (lineno, keyword))
             if keyword == "TITLE":
                 rest = line[len(first):].strip()
@@ -131,13 +132,13 @@ def parse_cube_text(text, source=""):
             elif keyword == "LUT_3D_SIZE":
                 size_3d = _int(parts, lineno, keyword)
                 if not 2 <= size_3d <= MAX_3D_SIZE:
-                    raise CubeError("Wiersz %d: LUT_3D_SIZE = %d poza zakresem "
-                                    "2–%d." % (lineno, size_3d, MAX_3D_SIZE))
+                    raise CubeError(tr("Wiersz %d: LUT_3D_SIZE = %d poza zakresem "
+                                    "2–%d.") % (lineno, size_3d, MAX_3D_SIZE))
             elif keyword == "LUT_1D_SIZE":
                 size_1d = _int(parts, lineno, keyword)
                 if not 2 <= size_1d <= MAX_1D_SIZE:
-                    raise CubeError("Wiersz %d: LUT_1D_SIZE = %d poza zakresem "
-                                    "2–%d." % (lineno, size_1d, MAX_1D_SIZE))
+                    raise CubeError(tr("Wiersz %d: LUT_1D_SIZE = %d poza zakresem "
+                                    "2–%d.") % (lineno, size_1d, MAX_1D_SIZE))
             elif keyword == "DOMAIN_MIN":
                 dmin = _triple(parts, lineno, keyword)
             elif keyword == "DOMAIN_MAX":
@@ -152,16 +153,16 @@ def parse_cube_text(text, source=""):
         parts = line.split()
         if len(parts) != 3:
             if len(parts) > 3 and "," in line:
-                _floats(parts, lineno, "dane")   # rzuci komunikat o przecinku
-            raise CubeError("Wiersz %d: wiersz danych musi mieć 3 liczby "
-                            "(R G B), a ma %d." % (lineno, len(parts)))
-        data.extend(_floats(parts, lineno, "dane"))
+                _floats(parts, lineno, tr("dane"))   # rzuci komunikat o przecinku
+            raise CubeError(tr("Wiersz %d: wiersz danych musi mieć 3 liczby "
+                            "(R G B), a ma %d.") % (lineno, len(parts)))
+        data.extend(_floats(parts, lineno, tr("dane")))
         rows += 1
 
-    name = os.path.basename(source) if source else "plik"
+    name = os.path.basename(source) if source else tr("plik")
     if not size_1d and not size_3d:
-        raise CubeError("%s: brak LUT_3D_SIZE ani LUT_1D_SIZE – to nie wygląda "
-                        "na plik .cube." % name)
+        raise CubeError(tr("%s: brak LUT_3D_SIZE ani LUT_1D_SIZE – to nie wygląda "
+                        "na plik .cube.") % name)
     expected = size_1d + size_3d ** 3
     if rows != expected:
         parts = []
@@ -169,8 +170,8 @@ def parse_cube_text(text, source=""):
             parts.append("%d (1D)" % size_1d)
         if size_3d:
             parts.append("%d³ = %d (3D)" % (size_3d, size_3d ** 3))
-        raise CubeError("%s: zła liczba wierszy danych – jest %d, a powinno "
-                        "być %s." % (name, rows, " + ".join(parts)))
+        raise CubeError(tr("%s: zła liczba wierszy danych – jest %d, a powinno "
+                        "być %s.") % (name, rows, " + ".join(parts)))
 
     dmin = dmin or (0.0, 0.0, 0.0)
     dmax = dmax or (1.0, 1.0, 1.0)
@@ -178,7 +179,7 @@ def parse_cube_text(text, source=""):
     lo3, hi3 = dmin_3d or dmin, dmax_3d or dmax
     for lo, hi in ((lo1, hi1), (lo3, hi3)):
         if any(h <= l for l, h in zip(lo, hi)):
-            raise CubeError("%s: DOMAIN_MAX musi być większe od DOMAIN_MIN."
+            raise CubeError(tr("%s: DOMAIN_MAX musi być większe od DOMAIN_MIN.")
                             % name)
 
     # Wg specyfikacji (Resolve) część 1D jest w pliku przed częścią 3D.
@@ -193,7 +194,7 @@ def read_text(path):
     """Czyta plik tekstowy: UTF-8 (z BOM lub bez), awaryjnie cp1250/latin-1."""
     size = os.path.getsize(path)
     if size > MAX_FILE_BYTES:
-        raise CubeError("Plik %s jest za duży (%d MB) – to raczej nie jest LUT."
+        raise CubeError(tr("Plik %s jest za duży (%d MB) – to raczej nie jest LUT.")
                         % (os.path.basename(path), size // (1024 * 1024)))
     with open(path, "rb") as f:
         raw = f.read()
@@ -210,7 +211,7 @@ def parse_cube_file(path):
     try:
         text = read_text(path)
     except OSError as e:
-        raise CubeError("Nie można odczytać pliku %s: %s"
+        raise CubeError(tr("Nie można odczytać pliku %s: %s")
                         % (os.path.basename(path), e.strerror or e))
     return parse_cube_text(text, path)
 
@@ -238,7 +239,7 @@ def save_binary(lut, path):
             if table is not None:
                 arr = array("f", table)
                 if arr.itemsize != 4:
-                    raise CubeError("Nieobsługiwana platforma (float != 4 B).")
+                    raise CubeError(tr("Nieobsługiwana platforma (float != 4 B)."))
                 if struct.pack("=I", 1) != struct.pack("<I", 1):
                     arr.byteswap()
                 arr.tofile(f)
@@ -252,7 +253,7 @@ def load_binary(path):
             raw = f.read()
         magic, size_1d, size_3d, *dom = _HEADER.unpack_from(raw, 0)
         if magic != _MAGIC:
-            raise ValueError("zły nagłówek")
+            raise ValueError(tr("zły nagłówek"))
         pos = _HEADER.size
         (tlen,) = struct.unpack_from("<I", raw, pos)
         pos += 4
@@ -260,7 +261,7 @@ def load_binary(path):
         pos += tlen
         n1, n3 = size_1d * 3, size_3d ** 3 * 3
         if len(raw) != pos + 4 * (n1 + n3):
-            raise ValueError("zła długość")
+            raise ValueError(tr("zła długość"))
         tables = []
         for n in (n1, n3):
             arr = array("f")
@@ -270,7 +271,7 @@ def load_binary(path):
             tables.append(arr if n else None)
             pos += 4 * n
     except (OSError, ValueError, struct.error, UnicodeDecodeError) as e:
-        raise CubeError("Uszkodzony cache LUT-a (%s): %s"
+        raise CubeError(tr("Uszkodzony cache LUT-a (%s): %s")
                         % (os.path.basename(path), e))
     return CubeLUT(title, size_1d, tables[0], size_3d, tables[1],
                    dom[0:3], dom[3:6], dom[6:9], dom[9:12])

@@ -255,6 +255,7 @@ check("brak kanałów pomocniczych", len(img.get_channels()) == channels_before)
 img.delete()
 
 # --- podgląd na żywo (klasa z wtyczki, bez okna) ----------------------------
+os.environ.setdefault("GIMP_WTYCZKI_LANG", "pl")   # komunikaty testowane po polsku
 import importlib.util  # noqa: E402
 from gi.repository import GLib  # noqa: E402
 _mm_path = os.path.join(os.environ["APPDATA"], "GIMP", "3.2", "plug-ins",

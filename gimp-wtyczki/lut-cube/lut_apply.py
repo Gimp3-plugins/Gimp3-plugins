@@ -27,6 +27,7 @@ podgląd zgadza się z tym, co trafi do obrazu. Kanał alfa nie jest zmieniany.
 import os
 import sys
 from array import array
+from lut_i18n import tr  # noqa: E402
 
 TETRAHEDRAL = "tetrahedral"
 TRILINEAR = "trilinear"
@@ -45,7 +46,7 @@ class Params:
         self.color = float(color)
         self.luminance = float(luminance)
         if interpolation not in (TETRAHEDRAL, TRILINEAR):
-            raise ValueError("Nieznana interpolacja: %s" % interpolation)
+            raise ValueError(tr("Nieznana interpolacja: %s") % interpolation)
         self.interpolation = interpolation
         self.shadows = float(shadows)
         self.midtones = float(midtones)
@@ -502,9 +503,9 @@ def apply_rgba(lut, data, params, mask=None, use_numpy=True, cache=None):
     przy kolejnych kawałkach tego samego obrazu (podaj go z powrotem).
     """
     if len(data) % 16:
-        raise ValueError("Dane muszą być RGBA float32 (wielokrotność 16 B).")
+        raise ValueError(tr("Dane muszą być RGBA float32 (wielokrotność 16 B)."))
     if mask is not None and len(mask) * 4 != len(data):
-        raise ValueError("Maska ma inną liczbę pikseli niż obraz.")
+        raise ValueError(tr("Maska ma inną liczbę pikseli niż obraz."))
     if params.strength == 0.0:
         return bytes(data), cache
     np = get_numpy(use_numpy)
@@ -536,4 +537,4 @@ def backend_name(use_numpy=True):
     """Opis wariantu obliczeń do wyświetlenia w oknie."""
     if get_numpy(use_numpy) is not None:
         return "numpy %s (%s)" % (_np.__version__, NUMPY_SOURCE)
-    return "czysty Python (wolniejszy)"
+    return tr("czysty Python (wolniejszy)")

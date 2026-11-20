@@ -22,6 +22,9 @@ def test_build_each_plugin(tmp_path, plugin):
     assert "%s/%s.py" % (plugin, plugin) in names
     assert not [n for n in names if "__pycache__" in n or n.endswith((".cube", ".pyc"))]
     assert not [n for n in names if n.endswith("startup-dir.txt")]
+    # Tłumaczenia PL/EN muszą trafić do paczki.
+    assert "%s/en.json" % plugin in names
+    assert any(n.startswith("%s/" % plugin) and n.endswith("_i18n.py") for n in names)
     if plugin == "lut-cube":
         assert "tools/fetch-numpy.ps1" in names
         assert "lut-cube/lut_formats.py" in names and "lut-cube/batch.py" in names

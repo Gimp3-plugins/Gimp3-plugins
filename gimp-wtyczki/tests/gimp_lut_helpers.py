@@ -11,6 +11,9 @@ import os
 import sys
 import tempfile
 
+# Komunikaty w testach są po polsku, chyba że test ustawił język wcześniej.
+os.environ.setdefault("GIMP_WTYCZKI_LANG", "pl")
+
 import gi
 gi.require_version("Gimp", "3.0")
 gi.require_version("Gegl", "0.4")

@@ -1,5 +1,7 @@
 # Wtyczki GIMP 3
 
+*[English](README.en.md)*
+
 Darmowe wtyczki open source (GPL-3.0) do GIMP-a 3.x, napisane w Pythonie. Działają w pełni offline: bez kont, kluczy API i zbierania danych. Przetestowano na GIMP 3.2.6 (Windows 11).
 
 | Wtyczka | Menu | Opis | Paczka |
@@ -11,6 +13,10 @@ Darmowe wtyczki open source (GPL-3.0) do GIMP-a 3.x, napisane w Pythonie. Dział
 Ten folder jest częścią repozytorium [Gimp3-plugins](../README.md). Polecenia poniżej (instalacja, testy) uruchamiaj z folderu `gimp-wtyczki`.
 
 `install.ps1` bez parametrów instaluje wszystkie wtyczki leżące obok skryptu; jedną wybierzesz przez `-Plugin podpis-zdjecia`, `-Plugin meme-maker` albo `-Plugin lut-cube`.
+
+## Język interfejsu (PL / EN)
+
+Wtyczki mają interfejs **po polsku i po angielsku**. Język wybierany jest automatycznie według języka interfejsu GIMP-a (wszystko, co nie jest polskie, dostaje angielski). Wymusić język można zmienną środowiskową `GIMP_WTYCZKI_LANG=pl` albo `en` ustawioną przed uruchomieniem GIMP-a. Teksty są tłumaczone w czasie działania z pliku `en.json` w folderze wtyczki (polski tekst jest kluczem), więc brakujący wpis po prostu pokazuje tekst polski. GIMP zapamiętuje etykiety menu wtyczek: po zmianie języka zainstaluj wtyczki ponownie (`install.ps1`) albo „dotknij” plik `.py` wtyczki, żeby GIMP odczytał je od nowa. Okna i komunikaty zmieniają się od razu.
 
 ## Podpis na zdjęciu
 
