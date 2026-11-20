@@ -1,4 +1,4 @@
-# Ustalenia (PSHost) — stan: Etap 2
+# Ustalenia (PSHost) — stan: Etap 3
 
 ## Zweryfikowane na tej maszynie (fakty)
 - GIMP **3.2.6**, instalacja per-user: `%LOCALAPPDATA%\Programs\GIMP 3`. Katalog użytkownika: `%APPDATA%\GIMP\3.2` (instrukcja zakładała 3.0 — używamy 3.2).
@@ -20,6 +20,16 @@
 - Zależności importów sprawdzane przez `SearchPathW` (katalog wtyczki, potem standardowa ścieżka); wszystkie pliki testowe je spełniają. Test z brakującą zależnością — po zbudowaniu syntetycznego mini-filtra (Etap 3).
 - Stary format bez PiPL (PIMI/PITL) — **nieobsługiwany**: wynik „no-pipl”.
 - Opis PiPL w pliku może być w CP1252/MacRoman; konwertujemy jako Latin-1 → UTF-8 (przybliżenie).
+
+## Etap 3 — runner (zweryfikowane)
+- Układ `FilterRecord` (pack 4) i tablic callbacków przyjęty z publicznego, MIT-owego hosta PSFilterPdn (src/PSApi) jako referencji binarnej; własne definicje w `src/common/ps_types.h`, bez nagłówków Adobe. Sprawdzone empirycznie: prawdziwe filtry Zetmar (budowane na SDK Adobe) czytają z naszego rekordu poprawny obraz, kolory i callbacki.
+- `pshost_runner.exe`: tryby `about`/`probe`/`run`, osobny proces, watchdog (kod 124), filtr wyjątków (kod 0xC0DE0001 zamiast awarii), ładowanie DLL z katalogiem wtyczki w ścieżce wyszukiwania. Wymiana obrazu: surowe RGBA8; alfa nie jest przekazywana filtrowi (przypadek „flat image”), wraca niezmieniona. Selekcja: maska 8-bit, host miesza wynik tylko gdy wtyczka zostawiła `autoMask=1`.
+- Host realizuje: HandleProcs, BufferProcs, ResourceProcs (puste), PropertyProcs (nuch, mode, wchs), advanceState z kopiowaniem kafli, `samplingSupport` + `inputRate`/`maskRate` (podgląd w oknach wtyczek), parametry (uchwyt zapisywany/odczytywany z pliku).
+- **Niezaimplementowane (logowane jako UNSUPPORTED):** channel ports / documentInfo (druga metoda odczytu podglądu w Zetmar), ImageServices (interpolacja), ColorServices, displayPixels, hostProcs, sSPBasic (PICA suites), descriptorParameters (Action Manager), 16/32 bit, alfa jako kanał.
+- Wartości `PS_ERR_HOST_INSUFFICIENT=-30` i `PS_ERR_PROPERTY_UNDEFINED=-31` pochodzą z pamięci — **niezweryfikowane**.
+- Testy: `tests/test_runner.py` (13 kontroli na syntetycznych mini-filtrach: invert, kafle, selekcja, parametry, crash, zawieszenie, brakująca zależność, brak entry) — wszystkie przechodzą.
+- Probe (sam `Prepare`, 64×64) na 10 filtrach x64 testowych (Zetmar ×2, Nik: Analog, Color, Dfine 2, HDR, Sharpener ×2, Silver, Viveza): wszystkie `noErr`, bez nieobsługiwanych callbacków. **Uwaga:** `Prepare` to słaby test — filtry z własnym oknem (Zetmar, Nik) robią całą pracę w `Start`.
+- Zetmar Color uruchomiony przez runner: okno otwiera się, podgląd działa (metoda `inputRate`). Pełnego przebiegu (OK → zapis) nie udało się potwierdzić automatycznie.
 
 ## Założenia / niezweryfikowane
 - Brak Photoshop SDK na dysku; planowane własne minimalne definicje struktur (`src/common/ps_types.h`). Licencja Adobe SDK do sprawdzenia przed jakąkolwiek redystrybucją nagłówków.

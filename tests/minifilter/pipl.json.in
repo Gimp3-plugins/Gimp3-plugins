@@ -1,0 +1,2 @@
+{ "PiPLs": [ { "Kind": "Filter", "Name": "PSHost Test @VARIANT@...", "Category": "PSHost Tests", "Version": 1,
+  "CodeEntryPointWin64": "PluginMain", "SupportedModes": { "RGBColor": true, "GrayScale": false } } ] }
