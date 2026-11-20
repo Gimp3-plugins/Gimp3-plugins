@@ -12,6 +12,8 @@ pozostałych — dlaczego nie), i dodaje użyteczne do menu **Filtry → Photosh
 
 **Film demonstracyjny (3:55):** [docs/PSHost-demo.mp4](docs/PSHost-demo.mp4) — dodawanie wtyczek, menu Filtry, Nik / Topaz / Podpis (Watermark) działające w GIMP-ie 3.
 
+**Testowane z:** darmowym **Nik Collection od Google w wersji 1.2.11** (filtry 64-bitowe: Analog, Color, Dfine, HDR, Sharpener, Silver, Viveza), wtyczkami Topaz Labs i własnymi wtyczkami autora - zob. [docs/kompatybilnosc.md](docs/kompatybilnosc.md). PSHost **nie zawiera ani nie rozpowszechnia** żadnej z tych wtyczek; należą do swoich właścicieli i są używane na ich własnych licencjach.
+
 ## Co robi
 
 - **Zarządzaj wtyczkami…** (Filtry → Photoshop): dodawanie, usuwanie i ponowne skanowanie katalogów (opcjonalnie z
