@@ -10,6 +10,8 @@ Plug-ins for **GIMP 3** (Windows). · Wtyczki do **GIMP-a 3** (Windows).
 | **[LUT-y (.cube)](gimp-wtyczki/lut-cube/)** (PL) | Nakładanie **LUT-ów kolorystycznych** (`.cube`, `.3dl`, Hald) z biblioteką, podglądem przed/po, siłą efektu, presetami, trybem wsadowym i zapisem *własnego looku jako .cube*. | [Wydania](../../releases) (`lut-cube-v*`) | [Polski](gimp-wtyczki/lut-cube/README.md) |
 | **[Kreator memów](gimp-wtyczki/meme-maker/)** | Meme maker: top/bottom text with outline, text bar, live preview, JPG/PNG export (Anton font included). | [Releases](../../releases) (`meme-maker-v*`) | [Polski](gimp-wtyczki/meme-maker/README.md) |
 | **[Podpis na zdjęciu](gimp-wtyczki/)** | Signature/watermark on a photo: text or logo as a new layer, 9 positions, size in % of the image, saved templates. | [Releases](../../releases) (`podpis-zdjecia-v*`) | [Polski](gimp-wtyczki/README.md#podpis-na-zdjęciu) |
+| **[Instagram filters / Filtry Instagram](gimp-instagram-filtry/)** | 22 Instagram-style filters (1977, Lofi, Toaster, X-Pro II…) and a *Text Border* plug-in, ported from GIMP 2 to GIMP 3 - pure Python, no external libraries. | [Releases](../../releases) (`instagram-filtry-v*`) | [English](gimp-instagram-filtry/README.md) · [Polski](gimp-instagram-filtry/README.pl.md) |
+| **[Filtry Instagram](gimp-instagram-filtry/)** (PL) | 22 filtry w stylu Instagrama (1977, Lofi, Toaster, X-Pro II…) i wtyczka *Obramowanie tekstu*, przeniesione z GIMP 2 na GIMP 3 - Python, bez zewnętrznych bibliotek. | [Wydania](../../releases) (`instagram-filtry-v*`) | [Polski](gimp-instagram-filtry/README.pl.md) |
 
 **PSHost demo video / Film demonstracyjny PSHost:** [pshost/docs/PSHost-demo.mp4](pshost/docs/PSHost-demo.mp4) (3:55)
 

@@ -1,74 +1,76 @@
-# Filtry Instagram dla GIMP 3
+# Instagram Filters for GIMP 3
 
-22 filtry w stylu Instagrama oraz wtyczka „Obramowanie tekstu”. Pierwotnie powstały dla GIMP 2.8 (`gimpfu`), tutaj zostały przeniesione na **GIMP 3.x**.
+[Polski](README.pl.md) · **English**
 
-**Filtry → Instagram:** 1977, Amaro, Apollo, Brannan, Earlybird, Gotham, Hefe, Hudson, Inkwell, Lofi, Lord Kelvin, Mayfair, Nashville, Poprocket, Rise, Sierra, Sutro, Toaster, Valencia, Walden, Willow, X-Pro II.
+22 Instagram-style filters plus a "Text Border" plug-in. They were originally written for GIMP 2.8 (`gimpfu`) and are ported here to **GIMP 3.x**.
 
-**Warstwa → Tekst → Dodaj obramowanie tekstu…** dodaje obrys o wybranej grubości i kolorze wokół warstwy tekstowej.
+**Filters → Instagram:** 1977, Amaro, Apollo, Brannan, Earlybird, Gotham, Hefe, Hudson, Inkwell, Lofi, Lord Kelvin, Mayfair, Nashville, Poprocket, Rise, Sierra, Sutro, Toaster, Valencia, Walden, Willow, X-Pro II.
 
-Każdy filtr tworzy na górze obrazu grupę warstw „&lt;Nazwa&gt; Effect” i nie zmienia oryginalnej warstwy. Efekt można dopracować, zmieniając krycie warstw w grupie albo je ukrywając.
+**Layer → Text → Add text border…** adds an outline of the chosen width and colour around a text layer.
 
-Przetestowano na GIMP 3.2.6 (Windows 11).
+Each filter creates a layer group named "<Name> Effect" on top of the image and leaves the original layer untouched. Fine-tune the result by changing the opacity of the layers in the group or hiding them.
 
-## Instalacja (Windows)
+Tested on GIMP 3.2.6 (Windows 11).
 
-Pobierz ZIP z zakładki Releases, rozpakuj go i uruchom `install.ps1` (prawy przycisk → „Uruchom za pomocą programu PowerShell”). Skrypt sam znajdzie katalog GIMP 3.x:
+## Installation (Windows)
+
+Download the ZIP from Releases, unpack it and run `install.ps1` (right-click → "Run with PowerShell"). The script finds your GIMP 3.x folder by itself:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Możesz też zainstalować ręcznie: skopiuj foldery `instagram-filtry` i `text-border` do `%APPDATA%\GIMP\3.2\plug-ins\` (w GIMP 3.0 jest tam `3.0` zamiast `3.2`), a potem uruchom GIMP ponownie.
+Manual install: copy the `instagram-filtry` and `text-border` folders to `%APPDATA%\GIMP\3.2\plug-ins\` (`3.0` instead of `3.2` for GIMP 3.0), then restart GIMP.
 
-Linux/macOS: skopiuj foldery do `~/.config/GIMP/3.x/plug-ins/` i nadaj prawo wykonania:
+Linux/macOS: copy the folders to `~/.config/GIMP/3.x/plug-ins/` and make the scripts executable:
 `chmod +x instagram-filtry/instagram-filtry.py text-border/text-border.py`.
 
-## Jak to działa
+## How it works
 
-GIMP 3 nie ma już modułu `gimpfu`, a jego API Pythona jest zupełnie inne. Zamiast przepisywać ręcznie 22 filtry (łatwo przy tym zmienić ich wygląd), pakiet zawiera warstwę zgodności:
+GIMP 3 no longer ships the `gimpfu` module and its Python API is completely different. Instead of hand-rewriting all 22 filters (which easily changes how they look), the package contains a compatibility layer:
 
 ```
 instagram-filtry/
-  instagram-filtry.py   # wtyczka GIMP 3 – rejestruje wszystkie filtry
-  gimpfu_compat.py      # udaje gimpfu: tłumaczy ~50 wywołań pdb.* z GIMP 2 na GIMP 3
-  filtry/               # oryginalne skrypty Marco Crippy, bez zmian
+  instagram-filtry.py   # GIMP 3 plug-in - registers all the filters
+  gimpfu_compat.py      # fakes gimpfu: translates ~50 GIMP 2 pdb.* calls to GIMP 3
+  filtry/               # Marco Crippa's original scripts, unchanged
 text-border/
-  text-border.py        # „Obramowanie tekstu” przepisane natywnie na GIMP 3
+  text-border.py        # "Text Border" rewritten natively for GIMP 3
 ```
 
-Nowy filtr w stylu GIMP 2 (z tymi samymi wywołaniami `pdb.*`) wystarczy wrzucić do `filtry/`, a pojawi się w menu.
+To add a new GIMP 2-style filter (using the same `pdb.*` calls), just drop it into `filtry/` and it shows up in the menu.
 
-Co tłumaczy warstwa zgodności:
-- **Tryby warstw** z GIMP 2.8 są mapowane na tryby `*_LEGACY` w GIMP 3, więc mieszanie kolorów wygląda tak jak dawniej.
-- **Krzywe, poziomy i jasność/kontrast** przelicza ze skali 0–255 na 0–1 używaną w GIMP 3.
-- **Kolory** przekazuje jako 8-bitowe sRGB, w zapisie `#rrggbb`.
-- **Typy wypełnienia** przemapowuje, bo GIMP 3 zmienił ich numerację.
-- **`plug-in-rgb-noise` i `plug-in-mblur`**, których już nie ma, zastępuje filtrami GEGL `gegl:noise-rgb` i `gegl:motion-blur-linear`.
+What the compatibility layer translates:
+- **Layer modes** from GIMP 2.8 are mapped to the `*_LEGACY` modes in GIMP 3, so colour blending looks as it used to.
+- **Curves, levels and brightness/contrast** are converted from the 0-255 scale to the 0-1 scale used by GIMP 3.
+- **Colours** are passed as 8-bit sRGB in `#rrggbb` form.
+- **Fill types** are remapped, because GIMP 3 renumbered them.
+- **`plug-in-rgb-noise` and `plug-in-mblur`**, which no longer exist, are replaced with the GEGL filters `gegl:noise-rgb` and `gegl:motion-blur-linear`.
 
-## Różnice względem wersji dla GIMP 2
+## Differences from the GIMP 2 version
 
-- **Jedno Ctrl+Z cofa cały filtr.** W GIMP 2 skrypty wyłączały historię cofania i efektu nie dało się cofnąć.
-- **Aktywne zaznaczenie nie psuje wyniku.** Oryginały liczyły rozmiar nowych warstw z granic zaznaczenia. Teraz filtr działa na całym obrazie, a zaznaczenie wraca na miejsce po zakończeniu.
-- **Kolory pierwszego planu i tła zostają nietknięte.**
-- **Komunikat zamiast cichego błędu.** Gdy nie zaznaczono żadnej warstwy, filtr wyświetla komunikat, a po nieudanym filtrze nie zostają żadne warstwy.
-- **Szum i rozmycie ruchu** pochodzą z GEGL. Wynik jest bardzo podobny, ale nie identyczny co do piksela.
-- **Grubość ramki może się różnić o 1 px.** Python 3 dzieli liczby inaczej niż Python 2, więc przy niektórych szerokościach zdjęcia ramka wychodzi o 1 px szersza.
-- **Obramowanie tekstu** czyści zaznaczenie po wykonaniu. Oryginał zostawiał zaznaczony obrys.
+- **One Ctrl+Z undoes the whole filter.** In GIMP 2 the scripts disabled undo history, so the effect could not be undone.
+- **An active selection no longer breaks the result.** The originals sized new layers from the selection bounds. Now the filter works on the whole image and restores the selection afterwards.
+- **Foreground and background colours are left untouched.**
+- **An error message instead of a silent failure.** If no layer is selected the filter shows a message, and a failed filter leaves no stray layers behind.
+- **Noise and motion blur** come from GEGL. The result is very close but not pixel-identical.
+- **Border width may differ by 1 px.** Python 3 divides numbers differently than Python 2, so for some image widths the border comes out 1 px wider.
+- **Text Border** clears the selection when done. The original left the outline selected.
 
-## Testy
+## Tests
 
-Test integracyjny uruchamia wszystkie filtry w GIMP-ie bez okna i zapisuje siatkę podglądów `podglad.png`:
+The integration test runs every filter in headless GIMP and writes a preview grid `podglad.png`:
 
 ```
-"%LOCALAPPDATA%\Programs\GIMP 3\bin\gimp-console-3.2.exe" -i --batch-interpreter python-fu-eval -b "exec(open(r'C:\ścieżka\do\repo\tests\gimp_integration.py', encoding='utf-8').read())" --quit
+"%LOCALAPPDATA%\Programs\GIMP 3\bin\gimp-console-3.2.exe" -i --batch-interpreter python-fu-eval -b "exec(open(r'C:\path\to\repo\tests\gimp_integration.py', encoding='utf-8').read())" --quit
 ```
 
-Zmienne `TEST_PHOTO` i `TEST_OUT` wskazują zdjęcie testowe i katalog wyjściowy.
+The `TEST_PHOTO` and `TEST_OUT` variables point to the test photo and the output folder.
 
-## Autorzy i licencja
+## Credits and license
 
-- Filtry Instagram: © 2013 Marco Crippa, GNU GPL v2 lub nowsza.
-- Obramowanie tekstu: © 2016 Rebecca Breu, GNU GPL v3.
-- Port na GIMP 3 i warstwa zgodności: Marek Zettel, 2026.
+- Instagram filters: © 2013 Marco Crippa, GNU GPL v2 or later.
+- Text Border: © 2016 Rebecca Breu, GNU GPL v3.
+- GIMP 3 port and compatibility layer: Marek Zettel, 2026.
 
-Całość jest udostępniona na licencji **GNU GPL v3** (plik `LICENSE`).
+Everything is released under the **GNU GPL v3** (see `LICENSE`).
