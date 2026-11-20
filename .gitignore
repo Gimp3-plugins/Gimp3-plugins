@@ -1,0 +1,6 @@
+build/
+third_party/photoshop_sdk/*
+!third_party/photoshop_sdk/README.md
+*.8bf
+*.exe
+*.o
