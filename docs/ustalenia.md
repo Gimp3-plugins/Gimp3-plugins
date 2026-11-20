@@ -1,4 +1,43 @@
-# Ustalenia (PSHost) — stan: Etap 8
+# Ustalenia (PSHost) — stan: Etap 9 (wersja 0.8.0)
+
+## PODSUMOWANIE KOŃCOWE
+
+### Kryteria akceptacji z instrukcji (stan)
+| # | Kryterium | Stan |
+|---|---|---|
+| 1 | W menu Filtry → Photoshop jest „Zarządzaj wtyczkami / Manage plug-ins” | ✔ potwierdził użytkownik w prawdziwym GIMP-ie 3.2.6 |
+| 2 | Dodanie katalogu daje wynik dla każdej wtyczki z komunikatem „zostanie użyta / nie” i powodem | ✔ użytkownik widział listę; komunikaty PL/EN testowane automatycznie |
+| 3 | 32-bitowe i uszkodzone `.8bf` odrzucane z poprawnym komunikatem | ✔ 20 plików x86 odrzuconych (widoczne), uszkodzone — testy automatyczne (fuzz ucięć, nie-PE) |
+| 4 | Po akceptacji GIMP restartuje się (zgoda, ostrzeżenie o niezapisanych), filtry w menu wg kategorii | ◐ filtry w menu po restarcie ✔ użytkownik; **automatyczne ponowne uruchomienie okienkowego GIMP-a nie było obserwowane** (testy z atrapą procesu i gimp-console) |
+| 5 | Co najmniej jeden popularny filtr 64-bit **oraz** własny filtr testowy działają na zaznaczeniu i warstwie, Cofnij działa | ◐ własny filtr testowy: ✔ automat (zaznaczenie prostokątne, eliptyczne, alfa, 3 warianty); własna wtyczka Zetmar Kolor ✔ użytkownik (+ Cofnij ✔); popularny filtr — **Nik Color Efex Pro 4: okno otwiera się bez błędu ✔ użytkownik; zapis wyniku z jego okna do warstwy nie został potwierdzony** |
+| 6 | Awaria lub zawieszenie `.8bf` nie zamyka GIMP-a | ✔ testy automatyczne (crash → kod 0xC0DE0001, zawieszenie → limit czasu, GIMP działa) i realna awaria Nik w 6b nie zamknęła GIMP-a |
+| 7 | UI w pełni PL i EN, polskie znaki w ścieżkach | ◐ katalogi PL/EN kompletne (test), zrzuty okna sprawdzone; ścieżki z polskimi znakami ✔ automat (w tym uruchomienie z menu GIMP-a); **widok okna na żywo w obu językach nie był oglądany przez użytkownika w całości** |
+| 8 | Instalator instaluje i odinstalowuje czysto, bez praw administratora | ◐ ✔ testy ciche (16 kontroli, HKCU, czyste odinstalowanie); **okna kreatora nie były oglądane**, instalacja na prawdziwym katalogu użytkownika z uruchomionym GIMP-em nie wykonana |
+| 9 | W `ustalenia.md` lista tego, co zweryfikowane i założone, oraz znane niedziałające przypadki | ✔ ta sekcja + sekcje etapów; przypadki w `kompatybilnosc.md` |
+
+### Zweryfikowane (automatycznie) — 6 zestawów, `ctest` 100%
+`test_pe8bf` 16 · `test_runner` 28 (w tym 29 kontroli jednostkowych konfiguracji/rejestru/scalania) · `test_i18n` 11 ·
+`test_gimp_e2e` 8 (prawdziwy `gimp-console`) · `test_gimp_stage6` 14 (menu, rejestr, restart, polskie ścieżki) ·
+`test_installer` 16. Łącznie ≈ 93 kontrole zewnętrzne + 29 wewnętrznych. Testy odkryły i pozwoliły naprawić m.in.: błąd
+rozróżniania duplikatów etykiet w menu, komunikaty krytyczne json-glib przy złośliwym `config.json`, różnicę `/` vs `\` w
+porównaniu ścieżek, zawieszanie się runnera przy `ExitProcess`.
+
+### Zweryfikowane przez użytkownika (prawdziwy GIMP 3.2.6)
+Menu „Zarządzaj wtyczkami”; okno wczytuje wtyczki i pokazuje 32-bitowe; filtr uruchomiony z okna działa; Ctrl+Z po zamknięciu
+okna cofa efekt; po restarcie filtry są w menu wg kategorii; Nik Color Efex Pro 4 otwiera się bez błędu po poprawce 6b.
+
+### Założenia (niezweryfikowane)
+- Układ struktur Photoshop API przyjęty z PSFilterPdn i potwierdzony empirycznie dla `FilterRecord`/`sSPBasic`; zestawy PICA
+  Progress/Feature/Action Descriptor niezaimplementowane; kody błędów `-30`/`-31` (host/property) z pamięci.
+- Że helper restartu przeżywa zamknięcie okienkowego GIMP-a (próba wyjścia z obiektu job); że `gimp-quit(force=FALSE)` pyta o zapis.
+- Zgodność z GIMP-em 3.0/3.1 (zbudowano i przetestowano tylko 3.2.x).
+- Zachowanie na obrazach 16/32-bit, bardzo dużych (> ~10 Mpx) i wtyczek z DRM.
+
+### Znane niedziałające / ograniczone przypadki
+Tylko 64-bit, tylko filtry, tylko 8-bit RGB(A); brak channel ports, Action Manager, usług kolorów, Smart Filters, własnych
+okien GPU; brak przycisku przerwania zawieszonego okna filtra (limit 30 min); „powtórz bez okna” pokazuje okno; licencja
+projektu niewybrana (zob. `THIRD_PARTY.md`); instalator niepodpisany (SmartScreen).
+
 
 ## Zweryfikowane na tej maszynie (fakty)
 - GIMP **3.2.6**, instalacja per-user: `%LOCALAPPDATA%\Programs\GIMP 3`. Katalog użytkownika: `%APPDATA%\GIMP\3.2` (instrukcja zakładała 3.0 — używamy 3.2).

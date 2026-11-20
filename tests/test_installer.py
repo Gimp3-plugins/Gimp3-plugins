@@ -1,10 +1,13 @@
 """Installer tests (silent, isolated: uses /GIMPDATA so the real GIMP user directory is never touched).
 Usage: python -I test_installer.py <build_dir>   -- builds the installer with ISCC first."""
+import sys as _s0, os as _o0
+_s0.path.insert(0, _o0.path.dirname(_o0.path.abspath(__file__)))
+from winpaths import appdata, localappdata
 import os, shutil, subprocess, sys, tempfile, time, winreg
 
 B = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ISCC = os.path.join(os.environ["LOCALAPPDATA"], "Programs", "Inno Setup 6", "ISCC.exe")
+ISCC = os.path.join(localappdata(), "Programs", "Inno Setup 6", "ISCC.exe")
 VER = "0.8.0"
 if not os.path.exists(ISCC):
     print("skip installer tests (Inno Setup 6 not found)"); sys.exit(0)
@@ -22,7 +25,7 @@ check(r.returncode == 0 and os.path.exists(SETUP), f"installer compiles: PSHost-
 T = tempfile.mkdtemp(prefix="pshost_inst_")
 DATA = os.path.join(T, "AppData", "GIMP", "3.2")
 PLUG = os.path.join(DATA, "plug-ins", "pshost")
-UNINS = os.path.join(os.environ["LOCALAPPDATA"], "PSHost", "unins000.exe")
+UNINS = os.path.join(localappdata(), "PSHost", "unins000.exe")
 KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{D65CF174-798E-4A08-9E8C-B837FE95990B}_is1"
 
 ENV = dict(os.environ, PSHOST_GIMP_PROCESS="gimp-fake-*")

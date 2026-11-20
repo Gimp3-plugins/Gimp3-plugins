@@ -1,12 +1,15 @@
 """Stage 6 tests in a real GIMP 3 (gimp-console): dynamic menu procedures (init_procedures), registered-state file,
 and the restart mechanism (helper waits for the process to exit, relaunches, never fires on cancelled quit).
 Usage: python -I test_gimp_stage6.py <build_dir>"""
+import sys as _s0, os as _o0
+_s0.path.insert(0, _o0.path.dirname(_o0.path.abspath(__file__)))
+from winpaths import appdata, localappdata
 import hashlib, json, os, subprocess, sys, tempfile, time
 
 B = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build")
 GIMP = r"C:\gimp3"
 CONSOLE = os.path.join(GIMP, "bin", "gimp-console-3.2.exe")
-PLUG = os.path.join(os.environ.get("APPDATA", ""), "GIMP", "3.2", "plug-ins", "pshost", "pshost.exe")
+PLUG = os.path.join(appdata(), "GIMP", "3.2", "plug-ins", "pshost", "pshost.exe")
 if not (os.path.exists(CONSOLE) and os.path.exists(PLUG)):
     print("skip stage 6 tests (GIMP or installed plug-in not found)"); sys.exit(0)
 

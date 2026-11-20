@@ -61,7 +61,6 @@ target_compile_definitions(mini_pica PRIVATE PICA)
 target_link_directories(mini_missingdep PRIVATE ${CMAKE_BINARY_DIR}/stubs)
 target_link_libraries(mini_missingdep PRIVATE absent_dep)
 add_dependencies(mini_missingdep absent_dep)
-add_test(NAME runner COMMAND python -I ${CMAKE_SOURCE_DIR}/tests/test_runner.py ${CMAKE_BINARY_DIR})
 
 add_executable(pshost_check tests/pshost_check.c)
 target_link_libraries(pshost_check PRIVATE pe8bf)
@@ -83,3 +82,14 @@ if(ISCC)
     DEPENDS pshost pshost_runner locale
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/installer)
 endif()
+
+add_executable(test_config tests/test_config.c)
+target_link_libraries(test_config PRIVATE pscore_sa)
+
+# --- ctest: every suite is a Python script taking the build directory ---
+# interpreter for the Python test suites (override with -DPY_EXE=...); the MSYS login shell has no %LOCALAPPDATA%, so glob the usual per-user location
+file(GLOB PY_DIRS "C:/Users/*/AppData/Local/Programs/Python/Python3*")
+find_program(PY_EXE NAMES python.exe python3.exe HINTS ${PY_DIRS})
+foreach(T test_runner test_i18n test_gimp_e2e test_gimp_stage6 test_installer)
+  add_test(NAME ${T} COMMAND ${PY_EXE} -I ${CMAKE_SOURCE_DIR}/tests/${T}.py ${CMAKE_BINARY_DIR})
+endforeach()
