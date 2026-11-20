@@ -1,14 +1,14 @@
 ; SPDX-License-Identifier: GPL-3.0-or-later
 ; Copyright (C) 2026 PSHost contributors
 ; PSHost - Inno Setup script. Per-user installer (no administrator rights), Polish / English.
-;   ISCC.exe /DAppVersion=0.8.0 /DBuildDir=..\build PSHost.iss      ->  installer\output\PSHost-Setup-0.8.0.exe
+;   ISCC.exe /DAppVersion=0.8.1 /DBuildDir=..\build PSHost.iss      ->  installer\output\PSHost-Setup-0.8.1.exe
 ; Command line switches of the installer (besides the standard Inno ones):
 ;   /GIMPDATA="C:\...\GIMP\3.2"   install for this GIMP user-data directory (skips GIMP detection; used by tests)
 ; /NOGIMPDETECT                  (tests) ignore installed GIMP versions
 ;   /PURGE                        silent uninstall also removes the PSHost configuration (config.json, logs, parameters)
 
 #ifndef AppVersion
-  #define AppVersion "0.8.0"
+  #define AppVersion "0.8.1"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\build"

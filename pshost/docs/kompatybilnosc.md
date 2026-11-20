@@ -1,4 +1,4 @@
-# Kompatybilność wtyczek (PSHost 0.8.0)
+# Kompatybilność wtyczek (PSHost 0.8.1)
 
 Kolumny: **Test PSHost** = wynik `pshost_check` (statyczny + probe `Prepare`); **Start w runnerze** = filtr z własnym oknem
 uruchomiony w `pshost_runner` na 8–15 s (`tests/try_plugin.py`): „bez awarii” = okno wtyczki się otworzyło i wczytało

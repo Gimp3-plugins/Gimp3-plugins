@@ -6,7 +6,7 @@ PSHost to wtyczka do **GIMP-a 3 na Windows (x64)**, dzięki której można używ
 (`.8bf`)**. Wskazujesz katalogi z wtyczkami Photoshop, a PSHost sprawdza każdą z nich, mówi, które zostaną użyte (a dla
 pozostałych — dlaczego nie), i dodaje użyteczne do menu **Filtry → Photoshop → \<Kategoria\>**.
 
-> **Stan: 0.8.0 — działa, z ograniczeniami.** Testowane z GIMP-em 3.2.6 na Windows 11. Zobacz
+> **Stan: 0.8.1 — działa, z ograniczeniami.** Testowane z GIMP-em 3.2.6 na Windows 11. Zobacz
 > [Znane ograniczenia](#znane-ograniczenia). Wynik „zostanie użyta” oznacza, że wtyczka przeszła test podstawowy, a
 > **nie** że zadziała w każdej sytuacji.
 
