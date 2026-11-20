@@ -39,6 +39,13 @@
 - W prawdziwym GIMP-ie: procedury `pshost-manage` i `pshost-about` są rejestrowane (komunikaty `gimp-console`). **Otwarcie okna w żywym GIMP-ie — do potwierdzenia przez użytkownika.**
 - Tłumaczenia UI na tym etapie: tabela EN→PL w `config.c` (`_T()`); zamiana na gettext/.po — Etap 7.
 
+## Etap 5b — usuwanie z listy i uruchamianie filtrów z okna (zweryfikowane)
+- „Usuń odrzucone” / „Usuń zaznaczone” usuwają wpisy **tylko z listy** (pliki na dysku nietknięte); wpisy trafiają do `ignored` w `config.json` i kolejne skany ich nie przywracają; „Przywróć usunięte” czyści tę listę i skanuje ponownie. Testy automatyczne: 3 kontrole.
+- Karta „Filtry” w oknie: lista wtyczek użytych (OK/zastrzeżenia, włączonych) pogrupowana wg kategorii; przycisk „Uruchom na bieżącej warstwie” (także dwuklik) → `ps_filter_run`.
+- `ps_filter_run` (src/plugin/filter.c) działa w prawdziwym GIMP-ie: warstwa → RGBA8 (`R'G'B'A u8`), selekcja → maska 8 bit, osobny proces runnera, wynik przez bufor cienia + `gimp_drawable_merge_shadow(undo=TRUE)` w grupie Cofnij, odświeżenie widoku. Parametry filtra zapisują się w `...\pshost\params\<proc>.bin` i są podawane przy następnym uruchomieniu.
+- Procedura skryptowalna `pshost-run-filter(run-mode, image, drawables, filter, interactive)` (bez pozycji w menu). Dzięki niej test end-to-end w `gimp-console` (tests/test_gimp_e2e.py): cała warstwa odwrócona, selekcja prostokątna respektowana (prawa połowa bez zmian), nieznany filtr → czysty błąd PDB. **Cofnij:** w GIMP-ie 3 nie ma procedury PDB Cofnij, więc ten punkt wymaga ręcznego sprawdzenia (jeden krok Cofnij po filtrze).
+- Ograniczenie: filtry, które pokazują okno w `Start`, wymagają interaktywnego uruchomienia; wtyczki zapamiętujące stan w pamięci procesu (np. „bez okna” przy Ctrl+F) pokażą okno ponownie, bo każdy filtr działa w nowym procesie.
+
 ## Założenia / niezweryfikowane
 - Brak Photoshop SDK na dysku; planowane własne minimalne definicje struktur (`src/common/ps_types.h`). Licencja Adobe SDK do sprawdzenia przed jakąkolwiek redystrybucją nagłówków.
 - `ZetmarWatermark_64.8bf` jest filtrem — opisanym wyłącznie przez JSON PiPL (rozstrzygnięte w Etapie 2).

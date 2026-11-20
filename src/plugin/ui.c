@@ -7,8 +7,12 @@ void ps_ui_set_silent (gboolean s) { silent = s; }
 
 enum { C_ENABLED, C_ACTIVATABLE, C_NAME, C_CATEGORY, C_FILE, C_RESULT, C_REASON, C_TOOLTIP, C_ITEM, C_N };
 enum { D_PATH, D_RECURSIVE, D_N };
+enum { R_NAME, R_FILE, R_NOTE, R_ITEM, R_N };
 
 typedef struct {
+  GtkWidget *notebook, *run_view, *b_run, *run_hint, *run_target, *b_rm_rejected, *b_rm_selected, *b_restore;
+  GtkTreeStore *run_store;
+  PsRunFunc run_func; gpointer run_data; char *target; gboolean running;
   GtkWidget *dialog, *dir_view, *item_view, *summary, *progress, *b_add, *b_remove, *b_rescan, *c_recursive, *lang_combo, *spin_timeout, *details, *notice;
   GtkListStore *dir_store, *item_store;
   PsConfig *cfg;
@@ -33,6 +37,15 @@ static void progress_cb (const char *file, int done, int total, gpointer user) {
 }
 
 static void refresh (Ui *ui);
+static int no_rejected_count (Ui *ui) { int n = 0; for (guint i = 0; i < ui->cfg->items->len; i++) if (((PsItem *) g_ptr_array_index (ui->cfg->items, i))->verdict == PE8_VERDICT_NO) n++; return n; }
+static PsItem *selected_run_item (Ui *ui) {
+  GtkTreeModel *m; GtkTreeIter it; PsItem *p = NULL;
+  if (gtk_tree_selection_get_selected (gtk_tree_view_get_selection (GTK_TREE_VIEW (ui->run_view)), &m, &it)) gtk_tree_model_get (m, &it, R_ITEM, &p, -1);
+  return p;
+}
+static void update_run_sensitivity (Ui *ui) {
+  gtk_widget_set_sensitive (ui->b_run, ui->run_func && ui->target && !ui->running && !ui->busy && selected_run_item (ui) != NULL);
+}
 static void show_summary_popup (Ui *ui, GPtrArray *items);
 
 static gboolean job_done_idle (gpointer data) {
@@ -120,6 +133,29 @@ static void refresh (Ui *ui) {
     g_string_append_printf (det, "%s\n", p->verdict != PE8_VERDICT_NO && !p->enabled ? _T ("The plug-in is disabled") : sentence);
     g_free (base);
   }
+  /* launcher list: usable + enabled items grouped by category */
+  gtk_tree_store_clear (ui->run_store);
+  {
+    GHashTable *cats = g_hash_table_new (g_str_hash, g_str_equal); int n_run = 0;
+    for (guint i = 0; i < ui->cfg->items->len; i++) {
+      PsItem *p = g_ptr_array_index (ui->cfg->items, i);
+      if (p->verdict == PE8_VERDICT_NO || !p->enabled) continue;
+      const char *cat = p->category && *p->category ? p->category : "-";
+      GtkTreeIter *par = g_hash_table_lookup (cats, cat);
+      if (!par) { par = g_new0 (GtkTreeIter, 1); gtk_tree_store_append (ui->run_store, par, NULL); gtk_tree_store_set (ui->run_store, par, R_NAME, cat, R_ITEM, NULL, -1); g_hash_table_insert (cats, (gpointer) cat, par); }
+      GtkTreeIter ch; char *base = g_path_get_basename (p->path);
+      gtk_tree_store_append (ui->run_store, &ch, par);
+      gtk_tree_store_set (ui->run_store, &ch, R_NAME, p->name, R_FILE, base, R_NOTE, p->verdict == PE8_VERDICT_WARN ? _T ("With reservations") : "", R_ITEM, p, -1);
+      g_free (base); n_run++;
+    }
+    GHashTableIter hi; gpointer k, v; g_hash_table_iter_init (&hi, cats); while (g_hash_table_iter_next (&hi, &k, &v)) g_free (v);
+    g_hash_table_destroy (cats);
+    gtk_tree_view_expand_all (GTK_TREE_VIEW (ui->run_view));
+    gtk_label_set_text (GTK_LABEL (ui->run_hint), n_run ? _T ("Select a filter and click Run to apply it to the active layer (double-click also works).") : _T ("No filters yet. Add a directory with plug-ins in the Manage tab."));
+  }
+  gtk_widget_set_sensitive (ui->b_rm_rejected, !ui->busy && no_rejected_count (ui) > 0);
+  gtk_widget_set_sensitive (ui->b_restore, !ui->busy && ui->cfg->ignored->len > 0);
+  update_run_sensitivity (ui);
   char *sum;
   if (ui->cfg->items->len == 0) sum = g_strdup (_T ("No plug-ins found yet. Add a directory."));
   else sum = g_strdup_printf (_T ("Used: %d, with reservations: %d, skipped: %d"), ok, warn, no);
@@ -235,6 +271,54 @@ static void on_lang (GtkComboBox *c, gpointer data) {
 static void on_timeout (GtkSpinButton *s, gpointer data) { Ui *ui = data; ui->cfg->probe_timeout_ms = (int) gtk_spin_button_get_value (s) * 1000; ps_config_save (ui->cfg); }
 static void on_default_rec (GtkToggleButton *t, gpointer data) { Ui *ui = data; ui->cfg->default_recursive = gtk_toggle_button_get_active (t); ps_config_save (ui->cfg); }
 
+static void on_run (GtkButton *b, gpointer data) {
+  Ui *ui = data; (void) b; PsItem *p = selected_run_item (ui);
+  if (!p || !ui->run_func || !ui->target) return;
+  ui->running = TRUE; update_run_sensitivity (ui);
+  ui->run_func (p, GTK_WINDOW (ui->dialog), ui->run_data);
+  ui->running = FALSE; update_run_sensitivity (ui);
+}
+static void on_run_activated (GtkTreeView *v, GtkTreePath *path, GtkTreeViewColumn *c, gpointer data) { (void) v; (void) path; (void) c; on_run (NULL, data); }
+static void on_run_sel (GtkTreeSelection *s, gpointer data) { (void) s; update_run_sensitivity (data); }
+
+static gboolean confirm (Ui *ui, const char *text) {
+  if (silent) return TRUE;
+  GtkWidget *m = gtk_message_dialog_new (GTK_WINDOW (ui->dialog), GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO, "%s", text);
+  gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (m), "%s", _T ("Removes entries from this list only. Files on disk are not deleted."));
+  int r = gtk_dialog_run (GTK_DIALOG (m)); gtk_widget_destroy (m); return r == GTK_RESPONSE_YES;
+}
+static void on_rm_rejected (GtkButton *b, gpointer data) {
+  Ui *ui = data; (void) b; int n = no_rejected_count (ui); if (!n) return;
+  char *q = g_strdup_printf (_T ("Remove %d rejected plug-ins from the list?"), n);
+  gboolean yes = confirm (ui, q); g_free (q); if (!yes) return;
+  for (guint i = ui->cfg->items->len; i-- > 0;) { PsItem *p = g_ptr_array_index (ui->cfg->items, i); if (p->verdict == PE8_VERDICT_NO) ps_config_ignore_item (ui->cfg, p); }
+  ps_config_save (ui->cfg); refresh (ui);
+}
+static void on_rm_selected (GtkButton *b, gpointer data) {
+  Ui *ui = data; (void) b; GtkTreeModel *m; GtkTreeIter it; PsItem *p = NULL;
+  if (!gtk_tree_selection_get_selected (gtk_tree_view_get_selection (GTK_TREE_VIEW (ui->item_view)), &m, &it)) return;
+  gtk_tree_model_get (m, &it, C_ITEM, &p, -1); if (!p) return;
+  ps_config_ignore_item (ui->cfg, p); ps_config_save (ui->cfg); refresh (ui);
+}
+static void on_item_sel (GtkTreeSelection *s, gpointer data) { Ui *ui = data; gtk_widget_set_sensitive (ui->b_rm_selected, !ui->busy && gtk_tree_selection_count_selected_rows (s) > 0); }
+static void on_restore (GtkButton *b, gpointer data) {
+  Ui *ui = data; (void) b; ps_config_clear_ignored (ui->cfg); ps_config_save (ui->cfg);
+  if (ui->cfg->dirs->len) on_rescan (NULL, ui); else refresh (ui);
+}
+
+void ps_manage_show_tab (GtkWidget *dlg, int page) { Ui *ui = g_object_get_data (G_OBJECT (dlg), "ps-ui"); gtk_notebook_set_current_page (GTK_NOTEBOOK (ui->notebook), page); }
+void ps_manage_remove_rejected (GtkWidget *dlg) { on_rm_rejected (NULL, g_object_get_data (G_OBJECT (dlg), "ps-ui")); }
+void ps_manage_rescan (GtkWidget *dlg) { on_rescan (NULL, g_object_get_data (G_OBJECT (dlg), "ps-ui")); }
+void ps_manage_restore_removed (GtkWidget *dlg) { on_restore (NULL, g_object_get_data (G_OBJECT (dlg), "ps-ui")); }
+
+void ps_manage_set_launcher (GtkWidget *dlg, PsRunFunc func, gpointer data, const char *target) {
+  Ui *ui = g_object_get_data (G_OBJECT (dlg), "ps-ui");
+  ui->run_func = func; ui->run_data = data; g_free (ui->target); ui->target = g_strdup (target);
+  char *t = target ? g_strdup_printf (_T ("Applies to: %s"), target) : g_strdup (_T ("No image is open. Open an image to run a filter."));
+  gtk_label_set_text (GTK_LABEL (ui->run_target), t); g_free (t);
+  update_run_sensitivity (ui);
+}
+
 /* --------------------------------------------------------------------------- build */
 static GtkWidget *scrolled (GtkWidget *child, int h) {
   GtkWidget *sw = gtk_scrolled_window_new (NULL, NULL);
@@ -261,8 +345,29 @@ GtkWidget *ps_manage_dialog_new (GtkWindow *parent, PsConfig *cfg) {
   gtk_dialog_add_button (GTK_DIALOG (dlg), _T ("Close"), GTK_RESPONSE_CLOSE);
   g_object_set_data_full (G_OBJECT (dlg), "ps-ui", ui, NULL);
 
-  GtkWidget *box = gtk_dialog_get_content_area (GTK_DIALOG (dlg));
-  gtk_container_set_border_width (GTK_CONTAINER (box), 12); gtk_box_set_spacing (GTK_BOX (box), 8);
+  GtkWidget *outer = gtk_dialog_get_content_area (GTK_DIALOG (dlg));
+  gtk_container_set_border_width (GTK_CONTAINER (outer), 12); gtk_box_set_spacing (GTK_BOX (outer), 8);
+  ui->notebook = gtk_notebook_new (); gtk_box_pack_start (GTK_BOX (outer), ui->notebook, TRUE, TRUE, 0);
+  GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);    /* "Manage" page */
+  gtk_container_set_border_width (GTK_CONTAINER (box), 8);
+  /* "Filters" page: launcher */
+  GtkWidget *lp = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
+  gtk_container_set_border_width (GTK_CONTAINER (lp), 8);
+  ui->run_hint = gtk_label_new (""); gtk_label_set_xalign (GTK_LABEL (ui->run_hint), 0); gtk_label_set_line_wrap (GTK_LABEL (ui->run_hint), TRUE);
+  ui->run_store = gtk_tree_store_new (R_N, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_POINTER);
+  ui->run_view = gtk_tree_view_new_with_model (GTK_TREE_MODEL (ui->run_store));
+  add_col (ui->run_view, _T ("Name"), R_NAME, 380); add_col (ui->run_view, _T ("File"), R_FILE, 220); add_col (ui->run_view, _T ("Result"), R_NOTE, 0);
+  g_signal_connect (ui->run_view, "row-activated", G_CALLBACK (on_run_activated), ui);
+  g_signal_connect (gtk_tree_view_get_selection (GTK_TREE_VIEW (ui->run_view)), "changed", G_CALLBACK (on_run_sel), ui);
+  ui->run_target = gtk_label_new (""); gtk_label_set_xalign (GTK_LABEL (ui->run_target), 0);
+  ui->b_run = gtk_button_new_with_label (_T ("Run on current layer")); gtk_widget_set_halign (ui->b_run, GTK_ALIGN_END);
+  g_signal_connect (ui->b_run, "clicked", G_CALLBACK (on_run), ui);
+  GtkWidget *lb = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+  gtk_box_pack_start (GTK_BOX (lb), ui->run_target, TRUE, TRUE, 0); gtk_box_pack_end (GTK_BOX (lb), ui->b_run, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (lp), ui->run_hint, FALSE, FALSE, 0); gtk_box_pack_start (GTK_BOX (lp), scrolled (ui->run_view, 300), TRUE, TRUE, 0); gtk_box_pack_start (GTK_BOX (lp), lb, FALSE, FALSE, 0);
+  gtk_notebook_append_page (GTK_NOTEBOOK (ui->notebook), lp, gtk_label_new (_T ("Filters")));
+  gtk_notebook_append_page (GTK_NOTEBOOK (ui->notebook), box, gtk_label_new (_T ("Manage")));
+  GtkWidget *outer_box = outer;
 
   /* directories */
   GtkWidget *f1 = gtk_frame_new (_T ("Plug-in directories")), *h1 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8), *bv = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
@@ -300,6 +405,16 @@ GtkWidget *ps_manage_dialog_new (GtkWindow *parent, PsConfig *cfg) {
   gtk_box_pack_start (GTK_BOX (v2), scrolled (ui->item_view, 230), TRUE, TRUE, 0);
   ui->summary = gtk_label_new (""); gtk_label_set_xalign (GTK_LABEL (ui->summary), 0); gtk_label_set_line_wrap (GTK_LABEL (ui->summary), TRUE);
   gtk_box_pack_start (GTK_BOX (v2), ui->summary, FALSE, FALSE, 0);
+  {
+    GtkWidget *rb = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    ui->b_rm_rejected = gtk_button_new_with_label (_T ("Remove rejected")); ui->b_rm_selected = gtk_button_new_with_label (_T ("Remove selected")); ui->b_restore = gtk_button_new_with_label (_T ("Restore removed"));
+    gtk_widget_set_tooltip_text (ui->b_rm_rejected, _T ("Removes entries from this list only. Files on disk are not deleted."));
+    gtk_widget_set_tooltip_text (ui->b_rm_selected, _T ("Removes entries from this list only. Files on disk are not deleted."));
+    g_signal_connect (ui->b_rm_rejected, "clicked", G_CALLBACK (on_rm_rejected), ui); g_signal_connect (ui->b_rm_selected, "clicked", G_CALLBACK (on_rm_selected), ui); g_signal_connect (ui->b_restore, "clicked", G_CALLBACK (on_restore), ui);
+    g_signal_connect (gtk_tree_view_get_selection (GTK_TREE_VIEW (ui->item_view)), "changed", G_CALLBACK (on_item_sel), ui);
+    gtk_box_pack_start (GTK_BOX (rb), ui->b_rm_rejected, FALSE, FALSE, 0); gtk_box_pack_start (GTK_BOX (rb), ui->b_rm_selected, FALSE, FALSE, 0); gtk_box_pack_end (GTK_BOX (rb), ui->b_restore, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (v2), rb, FALSE, FALSE, 0);
+  }
   GtkWidget *ex = gtk_expander_new (_T ("Details"));
   ui->details = gtk_text_view_new (); gtk_text_view_set_editable (GTK_TEXT_VIEW (ui->details), FALSE); gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (ui->details), GTK_WRAP_WORD_CHAR);
   gtk_container_add (GTK_CONTAINER (ex), scrolled (ui->details, 130));
@@ -330,9 +445,9 @@ GtkWidget *ps_manage_dialog_new (GtkWindow *parent, PsConfig *cfg) {
   gtk_label_set_xalign (GTK_LABEL (warn), 0); gtk_label_set_line_wrap (GTK_LABEL (warn), TRUE);
   GtkWidget *info = gtk_label_new (_T ("New filters appear in the Filters menu after GIMP is restarted."));
   gtk_label_set_xalign (GTK_LABEL (info), 0);
-  gtk_box_pack_start (GTK_BOX (box), warn, FALSE, FALSE, 0); gtk_box_pack_start (GTK_BOX (box), info, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (outer_box), warn, FALSE, FALSE, 0); gtk_box_pack_start (GTK_BOX (outer_box), info, FALSE, FALSE, 0);
 
-  gtk_widget_show_all (box); gtk_widget_set_visible (ui->progress, FALSE);
+  gtk_widget_show_all (outer); gtk_widget_set_visible (ui->progress, FALSE);
   refresh (ui);
   return dlg;
 }

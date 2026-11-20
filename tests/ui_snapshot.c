@@ -18,6 +18,19 @@ int main (int argc, char **argv) {
     ps_manage_add_directory (dlg, argv[i], TRUE);
     while (ps_manage_is_busy (dlg)) g_main_context_iteration (NULL, TRUE);
   }
+  {
+    const char *t = g_getenv ("PSHOST_TEST");
+    gchar **acts = t ? g_strsplit (t, ",", -1) : NULL;
+    for (int i = 0; acts && acts[i]; i++) {
+      if (!strcmp (acts[i], "remove-rejected")) ps_manage_remove_rejected (dlg);
+      else if (!strcmp (acts[i], "tab2")) ps_manage_show_tab (dlg, 1);
+      else if (!strcmp (acts[i], "launcher")) ps_manage_set_launcher (dlg, NULL, NULL, "photo.xcf / Layer 1");
+      else if (!strcmp (acts[i], "rescan")) ps_manage_rescan (dlg);
+      else if (!strcmp (acts[i], "restore")) ps_manage_restore_removed (dlg);
+      while (ps_manage_is_busy (dlg)) g_main_context_iteration (NULL, TRUE);
+    }
+    g_strfreev (acts);
+  }
   /* render off-screen */
   GtkWidget *ow = gtk_offscreen_window_new ();
   gtk_window_set_default_size (GTK_WINDOW (ow), 980, 720);
@@ -30,7 +43,7 @@ int main (int argc, char **argv) {
   if (pb) gdk_pixbuf_save (pb, argv[1], "png", NULL, NULL);
   int ok = 0, warn = 0, no = 0;
   for (guint i = 0; i < cfg->items->len; i++) { PsItem *p = g_ptr_array_index (cfg->items, i); if (p->verdict == PE8_VERDICT_OK) ok++; else if (p->verdict == PE8_VERDICT_WARN) warn++; else no++; }
-  printf ("items=%u ok=%d warn=%d no=%d dirs=%u png=%s\n", cfg->items->len, ok, warn, no, cfg->dirs->len, pb ? "yes" : "no");
+  printf ("items=%u ok=%d warn=%d no=%d dirs=%u ignored=%u png=%s\n", cfg->items->len, ok, warn, no, cfg->dirs->len, cfg->ignored->len, pb ? "yes" : "no");
   ps_config_free (cfg);
   return 0;
 }

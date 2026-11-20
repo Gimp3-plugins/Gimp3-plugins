@@ -15,9 +15,12 @@ typedef struct {
   char *proc_name;             /* "pshost-filter-<hash>" */
 } PsItem;
 
+typedef struct { char *path, *name; } PsIgnored;   /* entries the user removed from the list */
+
 typedef struct {
   GPtrArray *dirs;             /* PsDir* */
   GPtrArray *items;            /* PsItem* (all scanned entries incl. rejected) */
+  GPtrArray *ignored;          /* PsIgnored*: hidden by the user, skipped by scans */
   char *language;              /* "auto" | "pl" | "en" */
   int probe_timeout_ms;
   gboolean default_recursive;
@@ -33,6 +36,10 @@ void    ps_dir_free (PsDir *d);
 void    ps_item_free (PsItem *i);
 char   *ps_item_proc_name (const char *path, const char *entry, const char *name);
 PsItem *ps_config_find_item (const PsConfig *c, const char *path, const char *entry, const char *name);
+gboolean ps_config_is_ignored (const PsConfig *c, const char *path, const char *name);
+/* Remove the item from the list and remember it so rescans do not bring it back. Never touches files on disk. */
+void     ps_config_ignore_item (PsConfig *c, const PsItem *it);
+void     ps_config_clear_ignored (PsConfig *c);
 /* Keep only items located under one of the configured directories. */
 void    ps_config_prune_items (PsConfig *c);
 gboolean ps_path_is_under (const char *path, const char *dir);
