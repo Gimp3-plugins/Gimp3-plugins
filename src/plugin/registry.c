@@ -35,16 +35,20 @@ GPtrArray *ps_registry_build (const PsConfig *c) {
     r->label = g_strdup (it->name && *it->name ? it->name : "?");
     g_ptr_array_add (regs, r);
   }
-  /* unique labels inside one menu: append the file name, then a counter */
+  /* unique labels inside one menu: first mark every duplicate (comparing the ORIGINAL labels), then append the file name */
+  gboolean *dup = g_new0 (gboolean, regs->len);
   for (guint i = 0; i < regs->len; i++) {
-    PsReg *a = g_ptr_array_index (regs, i); gboolean dup = FALSE;
-    for (guint j = 0; j < regs->len; j++) { PsReg *b = g_ptr_array_index (regs, j); if (i != j && !g_strcmp0 (a->menu, b->menu) && !g_strcmp0 (a->label, b->label)) dup = TRUE; }
-    if (dup) { char *base = g_path_get_basename (a->item->path), *n = g_strdup_printf ("%s (%s)", a->label, base); g_free (base); g_free (a->label); a->label = n; }
+    PsReg *x = g_ptr_array_index (regs, i);
+    for (guint j = 0; j < regs->len; j++) { PsReg *y = g_ptr_array_index (regs, j); if (i != j && !g_strcmp0 (x->menu, y->menu) && !g_strcmp0 (x->label, y->label)) dup[i] = TRUE; }
   }
+  for (guint i = 0; i < regs->len; i++)
+    if (dup[i]) { PsReg *x = g_ptr_array_index (regs, i); char *base = g_path_get_basename (x->item->path), *n = g_strdup_printf ("%s (%s)", x->label, base); g_free (base); g_free (x->label); x->label = n; }
+  g_free (dup);
+  /* still identical (same file, same name): number them */
   for (guint i = 0; i < regs->len; i++) {
-    PsReg *a = g_ptr_array_index (regs, i); int n = 1;
-    for (guint j = 0; j < i; j++) { PsReg *b = g_ptr_array_index (regs, j); if (!g_strcmp0 (a->menu, b->menu) && !g_strcmp0 (a->label, b->label)) n++; }
-    if (n > 1) { char *l = g_strdup_printf ("%s #%d", a->label, n); g_free (a->label); a->label = l; }
+    PsReg *x = g_ptr_array_index (regs, i); int n = 1;
+    for (guint j = 0; j < i; j++) { PsReg *y = g_ptr_array_index (regs, j); if (!g_strcmp0 (x->menu, y->menu) && !g_strcmp0 (x->label, y->label)) n++; }
+    if (n > 1) { char *l = g_strdup_printf ("%s #%d", x->label, n); g_free (x->label); x->label = l; }
   }
   g_ptr_array_sort (regs, reg_cmp);
   return regs;

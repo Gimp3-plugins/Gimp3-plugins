@@ -104,6 +104,9 @@ if os.path.isdir(os.path.join(GIMP, "bin")):
     o = ui_act("remove-rejected"); check("items=3 ok=3 warn=0 no=0" in o and "ignored=3" in o, "UI: 'Remove rejected' drops the 3 rejected entries and remembers them")
     o = ui_act("rescan"); check("items=3" in o and "ignored=3" in o, "UI: rescan does not bring removed entries back")
     o = ui_act("restore"); check("items=6" in o and "ignored=0" in o, "UI: 'Restore removed' + rescan brings them back")
+    # unit tests of configuration / registry / scan merge (GLib + json-glib from GIMP's runtime)
+    r = subprocess.run([os.path.join(B, "test_config.exe")], capture_output=True, text=True, env=dict(env, PSHOST_CONFIG_DIR=os.path.join(T, "cfg_unit")), timeout=120)
+    check(r.returncode == 0 and " 0 failures" in r.stdout and "CRITICAL" not in r.stderr, "unit tests: config.json round trip, corrupt input, registry labels/signature, scan merge (" + r.stdout.strip().splitlines()[-1] + ")")
 else:
     print("skip UI tests (GIMP runtime not found)")
 

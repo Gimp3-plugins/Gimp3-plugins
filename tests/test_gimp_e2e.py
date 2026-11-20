@@ -2,12 +2,15 @@
 pshost plug-in (procedure pshost-run-filter) and checks pixels, selection handling and a single Undo step.
 Requires: GIMP installed, pshost.exe + pshost_runner.exe installed in %APPDATA%\\GIMP\\3.2\\plug-ins\\pshost,
 and build dir with ui_snapshot.exe / mini filters. Usage: python -I test_gimp_e2e.py <build_dir>"""
+import sys as _s0, os as _o0
+_s0.path.insert(0, _o0.path.dirname(_o0.path.abspath(__file__)))
+from winpaths import appdata, localappdata
 import os, subprocess, struct, sys, tempfile, zlib
 
 B = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build")
 GIMP = r"C:\gimp3"
 CONSOLE = os.path.join(GIMP, "bin", "gimp-console-3.2.exe")
-PLUG = os.path.join(os.environ.get("APPDATA", ""), "GIMP", "3.2", "plug-ins", "pshost", "pshost.exe")
+PLUG = os.path.join(appdata(), "GIMP", "3.2", "plug-ins", "pshost", "pshost.exe")
 if not (os.path.exists(CONSOLE) and os.path.exists(PLUG)):
     print("skip GIMP e2e (GIMP or installed plug-in not found)"); sys.exit(0)
 
@@ -76,6 +79,32 @@ check(all(px(x, y) == FG for x in range(w) for y in range(h)), "GIMP: running th
 png = os.path.join(T, "e.png")
 out = run_scm('(pshost-run-filter RUN-NONINTERACTIVE image (vector layer) "no such filter" FALSE)', png)
 check("filter not found or not usable" in out and not os.path.exists(png), "GIMP: unknown filter -> clean PDB error, no result")
+
+# --- irregular (elliptical, anti-aliased) selection: inside inverted, outside untouched, edge blended ---
+png = os.path.join(T, "f.png")
+run_scm('(gimp-image-select-ellipse image CHANNEL-OP-REPLACE 5 3 30 24)\n  ' + run, png)
+w, h, bpp, rows = decode_png(png); px = lambda x, y: tuple(rows[y][x * bpp:x * bpp + 3])
+edge = [px(x, y) for y in range(h) for x in range(w) if px(x, y) not in (FG, INV)]
+check(px(20, 15) == INV and px(0, 0) == FG and px(w - 1, h - 1) == FG and px(0, h - 1) == FG, "GIMP: elliptical selection: centre inverted, corners untouched")
+check(len(edge) > 0 and all(min(a, b) <= c <= max(a, b) for c3 in edge for c, a, b in zip(c3, FG, INV)), f"GIMP: anti-aliased selection edge is blended between original and filtered ({len(edge)} edge pixels)")
+
+# --- layer with an alpha channel: colour filtered, alpha preserved ---
+png = os.path.join(T, "g.png")
+scm = f"""(let* ((image (car (gimp-image-new 40 30 RGB))) (layer (car (gimp-layer-new image "L" 40 30 RGBA-IMAGE 100 LAYER-MODE-NORMAL))))
+  (gimp-image-insert-layer image layer 0 0)
+  (gimp-context-set-foreground '(51 102 153))
+  (gimp-context-set-opacity 50)
+  (gimp-drawable-edit-fill layer FILL-FOREGROUND)
+  {run}
+  (file-png-export RUN-NONINTERACTIVE image "{png.replace(chr(92), '/')}" 0 0 0 0 0 0 0 0 0))"""
+if os.path.exists(png): os.remove(png)
+subprocess.run([CONSOLE, "-i", "--batch-interpreter", "plug-in-script-fu-eval", "--batch", scm, "--quit"], env=env, capture_output=True, text=True, timeout=180)
+w, h, bpp, rows = decode_png(png)
+a = {rows[y][x * bpp + 3] for y in range(h) for x in range(w)}
+rgb = {tuple(rows[y][x * bpp:x * bpp + 3]) for y in range(h) for x in range(w)}
+near = lambda c, t: all(abs(i - j) <= 2 for i, j in zip(c, t))
+check(bpp == 4 and len(a) == 1 and 120 <= min(a) <= 135, f"GIMP: alpha channel preserved by the filter (alpha={sorted(a)})")
+check(len(rgb) <= 3 and all(near(c, INV) for c in rgb), f"GIMP: colour of a semi-transparent layer filtered as straight (non-premultiplied) RGB ({sorted(rgb)[:2]})")
 
 print("failures:", fails)
 sys.exit(1 if fails else 0)

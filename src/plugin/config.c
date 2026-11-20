@@ -51,7 +51,24 @@ static Pe8Reason reason_from (const char *s) {
   for (int r = 0; r <= PE8_R_UNSUPPORTED_CB; r++) if (!g_strcmp0 (pe8_reason_key ((Pe8Reason) r), s)) return (Pe8Reason) r;
   return PE8_R_NONE;
 }
-static const char *obj_str (JsonObject *o, const char *k) { return json_object_has_member (o, k) ? json_object_get_string_member (o, k) : NULL; }
+/* Type-safe accessors: a hand-edited or corrupted config.json must never trigger json-glib assertions. */
+static JsonNode *member (JsonObject *o, const char *k) { return json_object_has_member (o, k) ? json_object_get_member (o, k) : NULL; }
+static const char *obj_str (JsonObject *o, const char *k) {
+  JsonNode *n = member (o, k);
+  return n && JSON_NODE_HOLDS_VALUE (n) && json_node_get_value_type (n) == G_TYPE_STRING ? json_node_get_string (n) : NULL;
+}
+static gboolean obj_int (JsonObject *o, const char *k, gint64 *out) {
+  JsonNode *n = member (o, k);
+  if (!n || !JSON_NODE_HOLDS_VALUE (n) || json_node_get_value_type (n) != G_TYPE_INT64) return FALSE;
+  *out = json_node_get_int (n); return TRUE;
+}
+static gboolean obj_bool (JsonObject *o, const char *k, gboolean *out) {
+  JsonNode *n = member (o, k);
+  if (!n || !JSON_NODE_HOLDS_VALUE (n) || json_node_get_value_type (n) != G_TYPE_BOOLEAN) return FALSE;
+  *out = json_node_get_boolean (n); return TRUE;
+}
+static JsonArray *obj_array (JsonObject *o, const char *k) { JsonNode *n = member (o, k); return n && JSON_NODE_HOLDS_ARRAY (n) ? json_node_get_array (n) : NULL; }
+static JsonObject *arr_object (JsonArray *a, guint i) { JsonNode *n = json_array_get_element (a, i); return n && JSON_NODE_HOLDS_OBJECT (n) ? json_node_get_object (n) : NULL; }
 
 PsConfig *ps_config_load (void) {
   PsConfig *c = defaults ();
@@ -62,32 +79,31 @@ PsConfig *ps_config_load (void) {
     JsonNode *root = json_parser_get_root (p);
     if (root && JSON_NODE_HOLDS_OBJECT (root)) {
       JsonObject *o = json_node_get_object (root);
-      const char *s;
+      const char *s; gint64 iv; gboolean bv; JsonArray *a;
       if ((s = obj_str (o, "language")) && (!strcmp (s, "pl") || !strcmp (s, "en") || !strcmp (s, "auto"))) { g_free (c->language); c->language = g_strdup (s); }
-      if (json_object_has_member (o, "probe_timeout_ms")) { int t = (int) json_object_get_int_member (o, "probe_timeout_ms"); if (t >= 1000 && t <= 300000) c->probe_timeout_ms = t; }
-      if (json_object_has_member (o, "default_recursive")) c->default_recursive = json_object_get_boolean_member (o, "default_recursive");
-      JsonArray *a;
-      if (json_object_has_member (o, "directories") && (a = json_object_get_array_member (o, "directories")))
+      if (obj_int (o, "probe_timeout_ms", &iv) && iv >= 1000 && iv <= 300000) c->probe_timeout_ms = (int) iv;
+      if (obj_bool (o, "default_recursive", &bv)) c->default_recursive = bv;
+      if ((a = obj_array (o, "directories")))
         for (guint i = 0; i < json_array_get_length (a); i++) {
-          JsonObject *d = json_array_get_object_element (a, i);
-          if (d && obj_str (d, "path")) g_ptr_array_add (c->dirs, ps_dir_new (obj_str (d, "path"), !json_object_has_member (d, "recursive") || json_object_get_boolean_member (d, "recursive")));
+          JsonObject *d = arr_object (a, i);
+          if (d && obj_str (d, "path")) { gboolean rec = TRUE; obj_bool (d, "recursive", &rec); g_ptr_array_add (c->dirs, ps_dir_new (obj_str (d, "path"), rec)); }
         }
-      if (json_object_has_member (o, "ignored") && (a = json_object_get_array_member (o, "ignored")))
+      if ((a = obj_array (o, "ignored")))
         for (guint i = 0; i < json_array_get_length (a); i++) {
-          JsonObject *d = json_array_get_object_element (a, i);
+          JsonObject *d = arr_object (a, i);
           if (d && obj_str (d, "path")) { PsIgnored *ig = g_new0 (PsIgnored, 1); ig->path = g_strdup (obj_str (d, "path")); ig->name = g_strdup (obj_str (d, "name") ? obj_str (d, "name") : ""); g_ptr_array_add (c->ignored, ig); }
         }
-      if (json_object_has_member (o, "plugins") && (a = json_object_get_array_member (o, "plugins")))
+      if ((a = obj_array (o, "plugins")))
         for (guint i = 0; i < json_array_get_length (a); i++) {
-          JsonObject *d = json_array_get_object_element (a, i);
+          JsonObject *d = arr_object (a, i);
           if (!d || !obj_str (d, "path")) continue;
           PsItem *it = g_new0 (PsItem, 1);
           it->path = g_strdup (obj_str (d, "path")); it->name = g_strdup (obj_str (d, "name")); it->category = g_strdup (obj_str (d, "category"));
           it->entry = g_strdup (obj_str (d, "entry")); it->kind = g_strdup (obj_str (d, "kind")); it->detail = g_strdup (obj_str (d, "detail"));
           it->verdict = verdict_from (obj_str (d, "verdict")); it->reason = reason_from (obj_str (d, "reason"));
-          it->enabled = json_object_has_member (d, "enabled") ? json_object_get_boolean_member (d, "enabled") : (it->verdict != PE8_VERDICT_NO);
-          it->mtime = json_object_has_member (d, "mtime") ? json_object_get_int_member (d, "mtime") : 0;
-          it->size = json_object_has_member (d, "size") ? json_object_get_int_member (d, "size") : 0;
+          if (!obj_bool (d, "enabled", &it->enabled)) it->enabled = it->verdict != PE8_VERDICT_NO;
+          if (obj_int (d, "mtime", &iv)) it->mtime = iv;
+          if (obj_int (d, "size", &iv)) it->size = iv;
           it->proc_name = ps_item_proc_name (it->path, it->entry, it->name);
           g_ptr_array_add (c->items, it);
         }
@@ -177,11 +193,17 @@ void ps_config_ignore_item (PsConfig *c, const PsItem *it) {
 }
 void ps_config_clear_ignored (PsConfig *c) { g_ptr_array_set_size (c->ignored, 0); }
 
+static gboolean sep (char ch) { return ch == '\\' || ch == '/'; }
+/* TRUE when `path` is located below `dir` (case-insensitive, "/" and "\" are equivalent, trailing separators ignored). */
 gboolean ps_path_is_under (const char *path, const char *dir) {
   size_t n = strlen (dir);
-  while (n > 0 && (dir[n - 1] == '\\' || dir[n - 1] == '/')) n--;
-  if (g_ascii_strncasecmp (path, dir, n) != 0) return FALSE;
-  return path[n] == '\\' || path[n] == '/';
+  while (n > 0 && sep (dir[n - 1])) n--;
+  if (n == 0 || strlen (path) <= n) return FALSE;
+  for (size_t i = 0; i < n; i++) {
+    if (sep (dir[i]) && sep (path[i])) continue;
+    if (g_ascii_tolower (dir[i]) != g_ascii_tolower (path[i])) return FALSE;
+  }
+  return sep (path[n]);
 }
 
 void ps_config_prune_items (PsConfig *c) {
