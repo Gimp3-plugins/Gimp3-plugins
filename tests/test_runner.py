@@ -93,7 +93,9 @@ if os.path.isdir(os.path.join(GIMP, "bin")):
     o = ui("en", os.path.join(B, "mini"))
     check("items=5 ok=2 warn=0 no=3 dirs=1 png=yes" in o, "UI: scanning mini dir -> 2 usable, 3 rejected")
     cfg = open(os.path.join(cfgdir, "config.json"), encoding="utf-8").read()
-    check('"verdict": "NO"' in cfg and '"reason": "probe-crash"' in cfg and '"reason": "missing-dep"' in cfg and '"language": "en"' in cfg, "UI: config.json written with verdicts/reasons")
+    import re
+    has = lambda k, v: re.search(r'"%s"\s*:\s*"%s"' % (k, v), cfg) is not None
+    check(has("verdict", "NO") and has("reason", "probe-crash") and has("reason", "missing-dep") and has("language", "en"), "UI: config.json written with verdicts/reasons")
     o = ui("pl", os.path.join(B, "mini"))   # same dir again: no duplicate, config reloaded
     check("items=5" in o and "dirs=1" in o, "UI: config reload, directory not duplicated")
 else:
