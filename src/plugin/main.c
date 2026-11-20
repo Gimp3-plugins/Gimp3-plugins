@@ -30,7 +30,7 @@ about_run (GimpProcedure *procedure, GimpRunMode run_mode, GimpImage *image, Gim
 
 typedef struct { GimpImage *image; GimpDrawable *drawable; } Target;
 
-static void launch_filter (const PsItem *item, GtkWindow *parent, gpointer data)
+static gboolean launch_filter (const PsItem *item, GtkWindow *parent, gpointer data)
 {
   Target *t = data; char *err = NULL;
   PsRunStatus st = ps_filter_run (item, t->image, t->drawable, parent, TRUE, &err);
@@ -41,6 +41,7 @@ static void launch_filter (const PsItem *item, GtkWindow *parent, gpointer data)
       gtk_dialog_run (GTK_DIALOG (m)); gtk_widget_destroy (m);
     }
   g_free (err);
+  return st == PS_RUN_OK;
 }
 
 static GimpValueArray *

@@ -275,8 +275,9 @@ static void on_run (GtkButton *b, gpointer data) {
   Ui *ui = data; (void) b; PsItem *p = selected_run_item (ui);
   if (!p || !ui->run_func || !ui->target) return;
   ui->running = TRUE; update_run_sensitivity (ui);
-  ui->run_func (p, GTK_WINDOW (ui->dialog), ui->run_data);
+  gboolean applied = ui->run_func (p, GTK_WINDOW (ui->dialog), ui->run_data);
   ui->running = FALSE; update_run_sensitivity (ui);
+  if (applied) gtk_dialog_response (GTK_DIALOG (ui->dialog), GTK_RESPONSE_CLOSE);
 }
 static void on_run_activated (GtkTreeView *v, GtkTreePath *path, GtkTreeViewColumn *c, gpointer data) { (void) v; (void) path; (void) c; on_run (NULL, data); }
 static void on_run_sel (GtkTreeSelection *s, gpointer data) { (void) s; update_run_sensitivity (data); }
