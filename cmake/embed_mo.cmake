@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 # Usage: cmake -DMO=<file.mo> -DOUT=<file.c> -P embed_mo.cmake   (embeds a .mo catalog as a C array)
 file(READ "${MO}" hex HEX)
 string(LENGTH "${hex}" hexlen)

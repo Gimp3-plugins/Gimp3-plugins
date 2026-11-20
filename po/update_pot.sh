@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 # Regenerates po/pshost.pot from the sources and merges it into every po/*.po (MSYS2 UCRT64 gettext-tools).
 #   MSYSTEM=UCRT64 C:\msys64\usr\bin\bash.exe -l po/update_pot.sh
 set -e

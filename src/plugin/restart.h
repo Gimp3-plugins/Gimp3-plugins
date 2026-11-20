@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - restart GIMP (helper process + clean quit request). */
 #ifndef PS_RESTART_H
 #define PS_RESTART_H

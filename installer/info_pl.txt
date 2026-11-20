@@ -14,3 +14,5 @@ WAŻNE
 - Wtyczka, która ulegnie awarii lub zawiesi się, działa w osobnym procesie i nie zamyka GIMP-a.
 - Instalator nie jest podpisany certyfikatem, więc Windows SmartScreen może pokazać ostrzeżenie („System Windows ochronił ten komputer”).
   Wybierz „Więcej informacji” > „Uruchom mimo to” tylko wtedy, gdy instalator pochodzi ze źródła, któremu ufasz.
+
+PSHost jest wolnym oprogramowaniem (GNU GPL v3 lub nowsza). Tekst licencji jest instalowany jako LICENSE.txt obok programu.

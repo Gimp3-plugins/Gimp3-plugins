@@ -14,3 +14,5 @@ IMPORTANT
 - A plug-in that crashes or hangs runs in a separate process and does not close GIMP.
 - This installer is not code-signed, so Windows SmartScreen may show a warning ("Windows protected your PC").
   Choose "More info" > "Run anyway" only if you obtained the installer from a source you trust.
+
+PSHost is free software (GNU GPL v3 or later). The licence text is installed as LICENSE.txt next to the program.

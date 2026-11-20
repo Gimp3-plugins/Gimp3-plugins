@@ -92,6 +92,14 @@ Nagłówki Photoshop SDK **nie są** używane ani dołączane; `src/common/ps_ty
 (układy sprawdzone z otwartoźródłowym hostem PSFilterPdn, MIT, i zweryfikowane na prawdziwych wtyczkach — zob.
 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)).
 
+## Licencja
+
+PSHost jest wolnym oprogramowaniem na licencji **GNU General Public License w wersji 3 lub (według Twojego wyboru)
+dowolnej późniejszej** (**GPL-3.0-or-later**) — zob. [LICENSE](LICENSE). Na tych warunkach możesz go używać, badać,
+zmieniać i rozpowszechniać; jeśli otrzymujesz binaria PSHost, masz prawo do odpowiadającego im kodu źródłowego (to
+repozytorium). Licencja dotyczy wyłącznie PSHost: **nie obejmuje** dodawanych przez Ciebie wtyczek Photoshop (każda ma
+własną licencję), a program jest udostępniany bez gwarancji. Uwagi o materiałach zewnętrznych: [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
+
 ## Dokumenty
 
 [docs/ustalenia.md](docs/ustalenia.md) — co zweryfikowano, a co założono, etap po etapie · [docs/kompatybilnosc.md](docs/kompatybilnosc.md) —

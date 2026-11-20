@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - dynamic probe: runs pshost_runner --mode probe per plug-in entry in a separate process. */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

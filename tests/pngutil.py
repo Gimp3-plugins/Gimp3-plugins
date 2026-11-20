@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 """Minimal PNG decoder (8-bit RGB/RGBA, all filter types) for the tests."""
 import struct, zlib
 

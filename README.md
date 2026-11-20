@@ -87,6 +87,14 @@ The Photoshop SDK headers are **not** used or shipped; `src/common/ps_types.h` h
 (layouts cross-checked against the open-source PSFilterPdn host, MIT, and verified with real plug-ins — see
 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)).
 
+## License
+
+PSHost is free software, licensed under the **GNU General Public License, version 3 or (at your option) any later
+version** (**GPL-3.0-or-later**) — see [LICENSE](LICENSE). You may use, study, change and redistribute it under those
+terms; if you receive PSHost binaries you are entitled to the corresponding source code (this repository). The licence
+covers PSHost only: it does **not** cover the Photoshop plug-ins you add (each has its own licence) and it comes with no
+warranty. Third-party notes: [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
+
 ## Documents
 
 [docs/ustalenia.md](docs/ustalenia.md) — what was verified vs assumed, per stage · [docs/kompatybilnosc.md](docs/kompatybilnosc.md) —

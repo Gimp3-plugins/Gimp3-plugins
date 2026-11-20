@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - static analysis of Photoshop plug-in (.8bf) files (PE parsing, PiPL, JSON PiPL).
  * Pure C, no code of the plug-in is executed. */
 #ifndef PE8BF_H

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 """Dev helper: run one filter through pshost_runner with its UI for a few seconds and report how it ended.
 Usage: python -I try_plugin.py <build_dir> <plugin.8bf> <entry> [seconds]"""
 import os, subprocess, sys, tempfile

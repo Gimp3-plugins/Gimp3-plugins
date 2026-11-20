@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 #include "registry.h"
 #include <json-glib/json-glib.h>
 #include <string.h>

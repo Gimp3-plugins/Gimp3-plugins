@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 cmake_minimum_required(VERSION 3.20)
 project(PSHost VERSION 0.8.0 LANGUAGES C)
 add_compile_definitions(PSHOST_VERSION="${PROJECT_VERSION}")

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - minimal, independently written definitions of the Photoshop filter plug-in ABI (Win64).
  *
  * These are NOT the Adobe SDK headers. Field order and sizes were derived from the public,

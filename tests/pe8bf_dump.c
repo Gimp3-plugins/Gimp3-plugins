@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* Dev tool: pe8bf_dump <file.8bf>... — prints static analysis results. */
 #include "../src/common/pe8bf.h"
 #include <stdio.h>

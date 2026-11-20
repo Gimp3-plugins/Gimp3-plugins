@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* pshost_check [--lang pl|en] [--runner FILE] [--timeout-ms N] [--no-probe] PATH...
  * PATH = .8bf file or directory (searched recursively). One line per plug-in entry:
  *   VERDICT<TAB>reason-key<TAB>path<TAB>sentence */

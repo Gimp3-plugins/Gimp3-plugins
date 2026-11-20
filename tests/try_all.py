@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 """Dev helper: run every statically-OK real filter through try_plugin for a few seconds; prints one line each."""
 import glob, os, re, subprocess, sys
 B = os.path.abspath(sys.argv[1]); secs = sys.argv[2]; roots = sys.argv[3:]

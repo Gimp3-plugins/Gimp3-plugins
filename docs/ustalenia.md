@@ -33,10 +33,12 @@ okna cofa efekt; po restarcie filtry są w menu wg kategorii; Nik Color Efex Pro
 - Zgodność z GIMP-em 3.0/3.1 (zbudowano i przetestowano tylko 3.2.x).
 - Zachowanie na obrazach 16/32-bit, bardzo dużych (> ~10 Mpx) i wtyczek z DRM.
 
+### Licencja
+**GPL-3.0-or-later** (wybór właściciela): plik `LICENSE` (oficjalny tekst GPLv3), nagłówki SPDX w 43 plikach źródłowych, `LICENSE.txt` w instalatorze, sekcje w README i `THIRD_PARTY.md`. Zależności: biblioteki GIMP-a (LGPL) linkowane dynamicznie, PSFilterPdn (MIT) tylko jako referencja układów, bez kopiowania kodu.
+
 ### Znane niedziałające / ograniczone przypadki
 Tylko 64-bit, tylko filtry, tylko 8-bit RGB(A); brak channel ports, Action Manager, usług kolorów, Smart Filters, własnych
-okien GPU; brak przycisku przerwania zawieszonego okna filtra (limit 30 min); „powtórz bez okna” pokazuje okno; licencja
-projektu niewybrana (zob. `THIRD_PARTY.md`); instalator niepodpisany (SmartScreen).
+okien GPU; brak przycisku przerwania zawieszonego okna filtra (limit 30 min); „powtórz bez okna” pokazuje okno; instalator niepodpisany (SmartScreen).
 
 
 ## Zweryfikowane na tej maszynie (fakty)
