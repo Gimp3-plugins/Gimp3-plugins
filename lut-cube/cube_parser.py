@@ -55,6 +55,8 @@ class CubeLUT:
 # Typowe rozmiary to 17, 25, 33, 64, 65; dopuszczamy rozsądny zakres.
 MAX_3D_SIZE = 256
 MAX_1D_SIZE = 65536
+# Ochrona przed zapchaniem pamięci przez ogromny plik (65³ to ok. 9 MB).
+MAX_FILE_BYTES = 256 * 1024 * 1024
 
 
 def _floats(parts, lineno, what):
@@ -189,6 +191,10 @@ def parse_cube_text(text, source=""):
 
 def read_text(path):
     """Czyta plik tekstowy: UTF-8 (z BOM lub bez), awaryjnie cp1250/latin-1."""
+    size = os.path.getsize(path)
+    if size > MAX_FILE_BYTES:
+        raise CubeError("Plik %s jest za duży (%d MB) – to raczej nie jest LUT."
+                        % (os.path.basename(path), size // (1024 * 1024)))
     with open(path, "rb") as f:
         raw = f.read()
     for enc in ("utf-8-sig", "cp1250", "latin-1"):

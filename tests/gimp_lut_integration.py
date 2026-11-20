@@ -186,6 +186,20 @@ check("zaznaczenie: miękka krawędź = częściowy efekt", partial,
                         [round(v, 3) for v in edge_full]))
 img.delete()
 
+# 5b. Nowa warstwa z miękkim zaznaczeniem = ten sam wynik co „na warstwie”
+img, bg = new_image(100, 60)
+fill_gradient(bg)
+img.select_rectangle(Gimp.ChannelOps.REPLACE, 30, 10, 40, 40)
+Gimp.Selection.feather(img, 10)
+status, _ = run(img, [bg], output="new-layer")
+copy_px = pixels(img.get_layers()[0])
+status2, _ = run(img, [bg], output="in-place")
+d = max_diff(copy_px, pixels(bg))
+check("nowa warstwa z zaznaczeniem = wynik GIMP-a (merge_shadow)",
+      status == OK and status2 == OK and d <= 1 / 255 + 1e-6,
+      "max różnica %.5f" % d)
+img.delete()
+
 # 6. Obraz 16-bitowy (precyzja zachowana, nie obcięta do 8 bitów)
 img, bg = new_image(200, 2, precision=Gimp.Precision.U16_NON_LINEAR)
 fill_gradient(bg)

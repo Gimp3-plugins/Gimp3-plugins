@@ -158,42 +158,66 @@ def apply_to_layer(image, layer, lut, params, output="new-layer",
         pixel_params = lut_apply.Params(1.0, params.color, params.luminance,
                                         params.interpolation)
 
-    target = layer
-    if output == "new-layer":
-        target = layer.copy()
-        image.insert_layer(target, layer.get_parent(),
-                           image.get_item_position(layer))
+    if output != "new-layer":
+        try:
+            _process_in_place(layer, x, y, w, h, lut, pixel_params, progress)
+        except BaseException:
+            layer.free_shadow()
+            raise
+        return layer
+
+    # Nowa warstwa: liczymy na kopii, która trafia do obrazu dopiero na końcu –
+    # przerwanie nie zostawia śladu (ani w obrazie, ani w historii cofania).
+    target = layer.copy()
+    try:
         target.set_name(layer_name(label, params.strength * 100))
         target.set_mode(Gimp.LayerMode.NORMAL)
         target.set_opacity(params.strength * 100 if strength_as_opacity
                            else 100.0)
-
-    try:
-        _process(layer, target, x, y, w, h, lut, pixel_params, progress)
+        _process_copy(image, layer, target, x, y, w, h, lut, pixel_params,
+                      progress)
     except BaseException:
-        target.free_shadow()
-        if target is not layer:
-            image.remove_layer(target)
+        target.delete()
         raise
+    image.insert_layer(target, layer.get_parent(), image.get_item_position(layer))
     return target
 
 
-def _process(source, target, x, y, w, h, lut, params, progress):
+def _strips(source, x, y, w, h, progress):
+    """Paski obszaru (prostokąt, piksele) z obsługą paska postępu i przerwania."""
     src = source.get_buffer()
-    shadow = target.get_shadow_buffer()
     rows = max(1, STRIP_PIXELS // w)
-    cache = None
     for y0 in range(y, y + h, rows):
         if progress is not None and progress((y0 - y) / float(h)) is False:
             raise Cancelled()
-        sh = min(rows, y + h - y0)
-        rect = Gegl.Rectangle.new(x, y0, w, sh)
-        data = src.get(rect, 1.0, FORMAT, Gegl.AbyssPolicy.NONE)
+        rect = Gegl.Rectangle.new(x, y0, w, min(rows, y + h - y0))
+        yield rect, src.get(rect, 1.0, FORMAT, Gegl.AbyssPolicy.NONE)
+    if progress is not None and progress(1.0) is False:
+        raise Cancelled()
+
+
+def _process_in_place(layer, x, y, w, h, lut, params, progress):
+    """Zapis przez bufor cienia: GIMP nakłada zaznaczenie i zapisuje cofanie."""
+    shadow = layer.get_shadow_buffer()
+    cache = None
+    for rect, data in _strips(layer, x, y, w, h, progress):
         out, cache = lut_apply.apply_rgba(lut, data, params, cache=cache)
         shadow.set(rect, FORMAT, out)
     shadow.flush()
-    if progress is not None and progress(1.0) is False:
-        raise Cancelled()
-    # Scalenie z cieniem: zaznaczenie (miękkie) + krok cofania.
-    target.merge_shadow(True)
-    target.update(x, y, w, h)
+    layer.merge_shadow(True)
+    layer.update(x, y, w, h)
+
+
+def _process_copy(image, source, target, x, y, w, h, lut, params, progress):
+    """
+    Zapis wprost do kopii (jeszcze poza obrazem). Miękkie zaznaczenie
+    nakładamy sami – w świetle liniowym, tak jak GIMP przy scalaniu.
+    """
+    buf = target.get_buffer()
+    cache = None
+    for rect, data in _strips(source, x, y, w, h, progress):
+        mask = selection_mask(image, source, rect.x, rect.y, rect.width,
+                              rect.height)
+        out, cache = lut_apply.apply_rgba(lut, data, params, mask, cache=cache)
+        buf.set(rect, FORMAT, out)
+    buf.flush()

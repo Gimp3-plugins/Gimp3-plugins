@@ -1,0 +1,91 @@
+# -*- coding: utf-8 -*-
+"""Pomocnicze okna dialogowe i widżety GTK dla wtyczki LUT."""
+
+import os
+
+import gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk, GdkPixbuf, GLib  # noqa: E402
+
+
+# --- pomocnicze ----------------------------------------------------------------
+
+def _pixbuf(rgba8, w, h):
+    return GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(rgba8),
+                                           GdkPixbuf.Colorspace.RGB, True, 8,
+                                           w, h, w * 4)
+
+
+def _message(parent, text, secondary="", kind=Gtk.MessageType.INFO):
+    dlg = Gtk.MessageDialog(transient_for=parent, modal=True,
+                            message_type=kind, buttons=Gtk.ButtonsType.OK,
+                            text=text)
+    if secondary:
+        dlg.format_secondary_text(secondary)
+    dlg.run()
+    dlg.destroy()
+
+
+def _ask(parent, text, secondary, buttons, kind=Gtk.MessageType.QUESTION):
+    """buttons: [(etykieta, odpowiedź), …]. Zwraca odpowiedź."""
+    dlg = Gtk.MessageDialog(transient_for=parent, modal=True,
+                            message_type=kind, buttons=Gtk.ButtonsType.NONE,
+                            text=text)
+    if secondary:
+        dlg.format_secondary_text(secondary)
+    for label, resp in buttons:
+        dlg.add_button(label, resp)
+    resp = dlg.run()
+    dlg.destroy()
+    return resp
+
+
+def _ask_text(parent, title, label, value=""):
+    dlg = Gtk.Dialog(title=title, transient_for=parent, modal=True)
+    dlg.add_buttons("_Anuluj", Gtk.ResponseType.CANCEL, "_OK", Gtk.ResponseType.OK)
+    dlg.set_default_response(Gtk.ResponseType.OK)
+    box = dlg.get_content_area()
+    box.set_spacing(6)
+    box.set_border_width(12)
+    box.add(Gtk.Label(label=label, xalign=0))
+    entry = Gtk.Entry(text=value, activates_default=True, width_chars=40)
+    box.add(entry)
+    dlg.show_all()
+    resp = dlg.run()
+    text = entry.get_text().strip()
+    dlg.destroy()
+    return text if resp == Gtk.ResponseType.OK else None
+
+
+def _choose(parent, title, action, settings, multiple=False, cube_filter=True):
+    """Natywne okno wyboru plików/folderu. Zwraca listę ścieżek."""
+    accept = "_Wybierz" if action == Gtk.FileChooserAction.SELECT_FOLDER else "_Otwórz"
+    chooser = Gtk.FileChooserNative.new(title, parent, action, accept, "_Anuluj")
+    chooser.set_select_multiple(multiple)
+    if cube_filter and action == Gtk.FileChooserAction.OPEN:
+        flt = Gtk.FileFilter()
+        flt.set_name("LUT .cube")
+        flt.add_pattern("*.cube")
+        flt.add_pattern("*.CUBE")
+        chooser.add_filter(flt)
+    last = settings.get("last_dir")
+    if last and os.path.isdir(last):
+        chooser.set_current_folder(last)
+    paths = []
+    if chooser.run() == Gtk.ResponseType.ACCEPT:
+        paths = [p for p in chooser.get_filenames() if p]
+    chooser.destroy()
+    if paths:
+        first = paths[0]
+        settings["last_dir"] = (first if action == Gtk.FileChooserAction.SELECT_FOLDER
+                                else os.path.dirname(first))
+    return paths
+
+
+def _combo(items, active):
+    combo = Gtk.ComboBoxText()
+    for nick, label in items:
+        combo.append(nick, label)
+    if not combo.set_active_id(active):
+        combo.set_active(0)
+    return combo

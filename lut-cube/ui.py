@@ -8,6 +8,7 @@ na zmniejszonej kopii warstwy (GEGL skaluje przy odczycie), a w trybie
 100 % – na wycinku w pełnej rozdzielczości.
 """
 
+import collections
 import os
 import time
 import urllib.parse
@@ -24,7 +25,6 @@ import cube_parser  # noqa: E402
 import gimp_ops  # noqa: E402
 import library  # noqa: E402
 import lut_apply  # noqa: E402
-import sample_image  # noqa: E402
 from cube_parser import CubeError  # noqa: E402
 
 THUMB_SIDE = 64
@@ -39,127 +39,9 @@ INTERPOLATIONS = [("tetrahedral", "Tetraedralna (dokładniejsza)"),
                   ("trilinear", "Trójliniowa")]
 
 
-# --- pomocnicze ----------------------------------------------------------------
-
-def _pixbuf(rgba8, w, h):
-    return GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(rgba8),
-                                           GdkPixbuf.Colorspace.RGB, True, 8,
-                                           w, h, w * 4)
-
-
-def _message(parent, text, secondary="", kind=Gtk.MessageType.INFO):
-    dlg = Gtk.MessageDialog(transient_for=parent, modal=True,
-                            message_type=kind, buttons=Gtk.ButtonsType.OK,
-                            text=text)
-    if secondary:
-        dlg.format_secondary_text(secondary)
-    dlg.run()
-    dlg.destroy()
-
-
-def _ask(parent, text, secondary, buttons, kind=Gtk.MessageType.QUESTION):
-    """buttons: [(etykieta, odpowiedź), …]. Zwraca odpowiedź."""
-    dlg = Gtk.MessageDialog(transient_for=parent, modal=True,
-                            message_type=kind, buttons=Gtk.ButtonsType.NONE,
-                            text=text)
-    if secondary:
-        dlg.format_secondary_text(secondary)
-    for label, resp in buttons:
-        dlg.add_button(label, resp)
-    resp = dlg.run()
-    dlg.destroy()
-    return resp
-
-
-def _ask_text(parent, title, label, value=""):
-    dlg = Gtk.Dialog(title=title, transient_for=parent, modal=True)
-    dlg.add_buttons("_Anuluj", Gtk.ResponseType.CANCEL, "_OK", Gtk.ResponseType.OK)
-    dlg.set_default_response(Gtk.ResponseType.OK)
-    box = dlg.get_content_area()
-    box.set_spacing(6)
-    box.set_border_width(12)
-    box.add(Gtk.Label(label=label, xalign=0))
-    entry = Gtk.Entry(text=value, activates_default=True, width_chars=40)
-    box.add(entry)
-    dlg.show_all()
-    resp = dlg.run()
-    text = entry.get_text().strip()
-    dlg.destroy()
-    return text if resp == Gtk.ResponseType.OK else None
-
-
-def _choose(parent, title, action, settings, multiple=False, cube_filter=True):
-    """Natywne okno wyboru plików/folderu. Zwraca listę ścieżek."""
-    accept = "_Wybierz" if action == Gtk.FileChooserAction.SELECT_FOLDER else "_Otwórz"
-    chooser = Gtk.FileChooserNative.new(title, parent, action, accept, "_Anuluj")
-    chooser.set_select_multiple(multiple)
-    if cube_filter and action == Gtk.FileChooserAction.OPEN:
-        flt = Gtk.FileFilter()
-        flt.set_name("LUT .cube")
-        flt.add_pattern("*.cube")
-        flt.add_pattern("*.CUBE")
-        chooser.add_filter(flt)
-    last = settings.get("last_dir")
-    if last and os.path.isdir(last):
-        chooser.set_current_folder(last)
-    paths = []
-    if chooser.run() == Gtk.ResponseType.ACCEPT:
-        paths = [p for p in chooser.get_filenames() if p]
-    chooser.destroy()
-    if paths:
-        first = paths[0]
-        settings["last_dir"] = (first if action == Gtk.FileChooserAction.SELECT_FOLDER
-                                else os.path.dirname(first))
-    return paths
-
-
-def _combo(items, active):
-    combo = Gtk.ComboBoxText()
-    for nick, label in items:
-        combo.append(nick, label)
-    if not combo.set_active_id(active):
-        combo.set_active(0)
-    return combo
-
-
-# --- źródła obrazu do podglądu ----------------------------------------------------
-
-class ImageSource:
-    """Podgląd z warstwy obrazu GIMP-a."""
-
-    def __init__(self, image, layer):
-        self.image, self.layer = image, layer
-        self.width, self.height = layer.get_width(), layer.get_height()
-
-    def fit(self, max_side):
-        data, mask, w, h, _scale = gimp_ops.read_scaled(self.image, self.layer,
-                                                        max_side)
-        return data, mask, w, h
-
-    def crop(self, cx, cy, w, h):
-        data, mask, x, y, w, h = gimp_ops.read_crop(
-            self.image, self.layer, int(cx - w / 2), int(cy - h / 2), w, h)
-        return data, mask, x, y, w, h
-
-
-class SampleSource:
-    """Wbudowany obrazek testowy (gdy nie ma otwartego obrazu)."""
-
-    W, H = 720, 480
-
-    def __init__(self):
-        self.width, self.height = self.W, self.H
-        self._data = sample_image.make(self.W, self.H)
-
-    def fit(self, max_side):
-        if max_side >= max(self.W, self.H):
-            return self._data, None, self.W, self.H
-        w = max(1, self.W * max_side // max(self.W, self.H))
-        h = max(1, self.H * max_side // max(self.W, self.H))
-        return sample_image.make(w, h), None, w, h
-
-    def crop(self, cx, cy, w, h):
-        return self._data, None, 0, 0, self.W, self.H
+from ui_common import (_pixbuf, _message, _ask, _ask_text,  # noqa: E402,F401
+                       _choose, _combo)
+from preview_sources import ImageSource, SampleSource  # noqa: E402,F401
 
 
 # --- okno --------------------------------------------------------------------------
@@ -184,6 +66,7 @@ class LutWindow:
         self.temp_path = None          # plik wczytany spoza biblioteki
         self.thumbs = {}               # klucz -> Pixbuf
         self._thumb_job = None
+        self._thumb_queue = collections.deque()
         self._update_job = None
         self._cancel = False
         self._busy = False
@@ -365,6 +248,7 @@ class LutWindow:
             item("Kategorie…", self._on_manage_categories)
             item("Ustawienia…", self._on_settings)
             item("Import startowy…", lambda: self._startup_import(force=True))
+            item("Posprzątaj folder biblioteki…", self._on_clean_orphans)
         menu.show_all()
         return menu
 
@@ -677,7 +561,11 @@ class LutWindow:
     # --- miniatury (leniwie, po jednej w czasie bezczynności) ---------------------
 
     def _start_thumbs(self):
-        if self._thumb_job is None:
+        # Kolejka wierszy bez miniatury (referencje przeżywają zmiany listy).
+        self._thumb_queue = collections.deque(
+            Gtk.TreeRowReference.new(self.store, row.path)
+            for row in self.store if row[1] is None)
+        if self._thumb_job is None and self._thumb_queue:
             self._thumb_job = GLib.idle_add(self._thumb_step,
                                             priority=GLib.PRIORITY_LOW)
 
@@ -686,7 +574,11 @@ class LutWindow:
             self._thumb_job = None
             return False
         data, w, h = self.thumb_src
-        for row in self.store:
+        while self._thumb_queue:
+            ref = self._thumb_queue.popleft()
+            if not ref.valid():
+                continue
+            row = self.store[ref.get_path()]
             key = row[0]
             if row[1] is not None:
                 continue
@@ -870,6 +762,24 @@ class LutWindow:
             self.current_key = None
             self.current_lut = None
             self._refill()
+
+    def _on_clean_orphans(self):
+        """Usuwa z folderu biblioteki pliki, których nie ma na liście."""
+        orphans = self.lib.orphan_files()
+        if not orphans:
+            _message(self.dialog, "Folder biblioteki jest czysty",
+                     "Wszystkie pliki z folderu są na liście LUT-ów.")
+            return
+        names = "\n".join(os.path.basename(p) for p in orphans[:15])
+        if len(orphans) > 15:
+            names += "\n… i %d więcej" % (len(orphans) - 15)
+        if _ask(self.dialog, "Usunąć %d plików spoza listy?" % len(orphans),
+                "Te pliki leżą w folderze biblioteki, ale nie ma ich na liście "
+                "(np. po „Usuń tylko z listy”). Usunięcia nie da się cofnąć.\n\n"
+                + names, [("_Anuluj", 0), ("_Usuń", 1)]) == 1:
+            removed = self._guard(self.lib.remove_orphans)
+            if removed is not None:
+                _message(self.dialog, "Gotowe", "Usunięto plików: %d" % len(removed))
 
     def _on_manage_categories(self):
         dlg = Gtk.Dialog(title="Kategorie", transient_for=self.dialog, modal=True)
@@ -1247,7 +1157,12 @@ class LutWindow:
     def _on_key_press(self, widget, ev):
         focus = self.dialog.get_focus()
         in_text = isinstance(focus, Gtk.Entry)
-        if ev.keyval in (Gdk.KEY_space, Gdk.KEY_backslash) and not in_text:
+        # Spacja tylko na podglądzie i liście – na przyciskach i polach wyboru
+        # ma działać normalnie (dostępność z klawiatury). „\” działa zawsze.
+        hold_key = (ev.keyval == Gdk.KEY_backslash and not in_text) or (
+            ev.keyval == Gdk.KEY_space
+            and (focus is None or isinstance(focus, (Gtk.DrawingArea, Gtk.TreeView))))
+        if hold_key:
             if not self.hold_before:
                 self.hold_before = True
                 self.area.queue_draw()

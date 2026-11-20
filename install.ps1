@@ -38,7 +38,17 @@ New-Item -ItemType Directory -Force $dest | Out-Null
 foreach ($name in $Plugin) {
     $src = Join-Path $PSScriptRoot $name
     if (-not (Test-Path $src)) { throw "Brak folderu wtyczki: $src" }
+    # Czysta instalacja: stara wersja jest usuwana, żeby nie zostały pliki,
+    # których nowa wersja już nie ma. Zachowujemy tylko startup-dir.txt.
+    $target = Join-Path $dest $name
+    $keep = $null
+    $hintFile = Join-Path $target "startup-dir.txt"
+    if (Test-Path $hintFile) { $keep = Get-Content $hintFile -Raw -Encoding utf8 }
+    if (Test-Path $target) { Remove-Item $target -Recurse -Force }
     Copy-Item $src $dest -Recurse -Force
+    Get-ChildItem $target -Recurse -Directory -Filter "__pycache__" |
+        Remove-Item -Recurse -Force
+    if ($keep) { Set-Content $hintFile $keep.Trim() -Encoding utf8 }
     Write-Host "Zainstalowano do: $(Join-Path $dest $name)"
 
     if ($name -eq "meme-maker") {

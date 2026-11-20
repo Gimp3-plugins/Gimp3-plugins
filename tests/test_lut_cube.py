@@ -502,8 +502,42 @@ def test_library_categories_and_remove(tmp_path):
     file_b = lib.path(ids[1])
     lib.remove(ids[1], delete_file=True)
     assert not os.path.exists(file_b)
-    # Ten sam plik, który usunięto tylko z listy, da się dodać ponownie.
-    assert len(lib.add_files([paths[0]]).added) == 1
+    # Ten sam plik, który usunięto tylko z listy, da się dodać ponownie –
+    # bez kopii „(2)”: wraca ten sam plik z folderu biblioteki.
+    again = lib.add_files([paths[0]]).added
+    assert len(again) == 1 and lib.entries[again[0]]["file"] == "a.cube"
+    assert lib.orphan_files() == []
+
+
+def test_library_orphans(tmp_path):
+    paths = _make_cubes(tmp_path / "src", ["a.cube", "b.cube"])
+    lib = library.Library(str(tmp_path / "bib"))
+    ids = lib.add_files(paths).added
+    lib.remove(ids[0], delete_file=False)
+    orphans = lib.orphan_files()
+    assert [os.path.basename(p) for p in orphans] == ["a.cube"]
+    assert lib.remove_orphans() == orphans
+    assert lib.orphan_files() == [] and os.path.isfile(lib.path(ids[1]))
+
+
+def test_library_rejects_path_outside_folder(tmp_path):
+    paths = _make_cubes(tmp_path / "src", ["a.cube"])
+    lib = library.Library(str(tmp_path / "bib"))
+    lut_id = lib.add_files(paths).added[0]
+    victim = tmp_path / "nie-ruszac.txt"
+    victim.write_text("ważne")
+    lib.entries[lut_id]["file"] = os.path.join("..", "..", "nie-ruszac.txt")
+    with pytest.raises(library.LibraryError):
+        lib.remove(lut_id, delete_file=True)
+    assert victim.exists() and lut_id in lib.entries
+
+
+def test_too_big_cube_file(tmp_path, monkeypatch):
+    path = tmp_path / "duzy.cube"
+    path.write_text(cube_text(3, identity))
+    monkeypatch.setattr(cube_parser, "MAX_FILE_BYTES", 100)
+    with pytest.raises(CubeError, match="za duży"):
+        cube_parser.parse_cube_file(str(path))
 
 
 def test_library_sort_by_date(tmp_path):

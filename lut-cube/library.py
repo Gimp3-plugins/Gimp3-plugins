@@ -190,8 +190,16 @@ class Library:
 
     # --- wpisy ---------------------------------------------------------------
 
+    def _file_path(self, filename):
+        """Ścieżka pliku w luts/ – tylko sama nazwa, bez wychodzenia poza folder."""
+        name = os.path.basename(filename or "")
+        if not name or name != filename or name in (".", ".."):
+            raise LibraryError("Niepoprawna nazwa pliku w indeksie biblioteki: %r"
+                               % filename)
+        return os.path.join(self.luts_dir, name)
+
     def path(self, lut_id):
-        return os.path.join(self.luts_dir, self.entries[lut_id]["file"])
+        return self._file_path(self.entries[lut_id]["file"])
 
     def display_name(self, lut_id):
         e = self.entries[lut_id]
@@ -237,14 +245,20 @@ class Library:
             result.errors.append((src, str(e)))
             return result
         self.ensure_dirs()
-        filename = self._unique_filename(os.path.basename(src))
+        filename = os.path.basename(src)
         dest = os.path.join(self.luts_dir, filename)
-        try:
-            shutil.copyfile(src, dest)
-        except OSError as e:
-            result.errors.append((src, "nie można skopiować: %s"
-                                  % (e.strerror or e)))
-            return result
+        # Plik o tej samej nazwie i treści już leży w folderze (np. po usunięciu
+        # „tylko z listy”) – używamy go zamiast robić kopię „(2)”.
+        reuse = os.path.isfile(dest) and file_sha256(dest) == sha
+        if not reuse:
+            filename = self._unique_filename(filename)
+            dest = os.path.join(self.luts_dir, filename)
+            try:
+                shutil.copyfile(src, dest)
+            except OSError as e:
+                result.errors.append((src, "nie można skopiować: %s"
+                                      % (e.strerror or e)))
+                return result
         lut_id = sha[:16]
         self.entries[lut_id] = {
             "id": lut_id,
@@ -297,12 +311,13 @@ class Library:
 
     def remove(self, lut_id, delete_file=False):
         """Usuwa wpis z listy; opcjonalnie także plik z folderu biblioteki."""
-        e = self.entries.pop(lut_id)
+        file_path = self.path(lut_id)          # walidacja przed zmianami
+        self.entries.pop(lut_id)
         self._luts.pop(lut_id, None)
         if lut_id in self.recent:
             self.recent.remove(lut_id)
         for path in (self._cache_path(lut_id),
-                     os.path.join(self.luts_dir, e["file"]) if delete_file else None):
+                     file_path if delete_file else None):
             if path and os.path.exists(path):
                 try:
                     os.remove(path)
@@ -311,6 +326,29 @@ class Library:
                     raise LibraryError("Nie można usunąć pliku %s: %s"
                                        % (path, err.strerror or err))
         self.save()
+
+    def orphan_files(self):
+        """Pliki w luts/, których nie ma w indeksie (np. usunięte z listy)."""
+        used = {os.path.basename(e["file"]).lower() for e in self.entries.values()}
+        try:
+            names = sorted(os.listdir(self.luts_dir))
+        except OSError:
+            return []
+        return [os.path.join(self.luts_dir, n) for n in names
+                if n.lower() not in used
+                and os.path.isfile(os.path.join(self.luts_dir, n))]
+
+    def remove_orphans(self):
+        """Usuwa pliki-sieroty z luts/. Zwraca listę usuniętych ścieżek."""
+        removed = []
+        for path in self.orphan_files():
+            try:
+                os.remove(path)
+                removed.append(path)
+            except OSError as e:
+                raise LibraryError("Nie można usunąć pliku %s: %s"
+                                   % (path, e.strerror or e))
+        return removed
 
     def mark_used(self, lut_id):
         if lut_id not in self.entries:

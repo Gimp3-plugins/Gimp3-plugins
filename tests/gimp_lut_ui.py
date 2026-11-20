@@ -79,11 +79,17 @@ def settle(win, timeout=30):
     return False
 
 
+# Zrzuty do docs/ tylko na życzenie (LUT_CUBE_SCREENSHOTS=1), żeby zwykłe
+# uruchomienie testu nie zmieniało plików w repozytorium.
+SCREENSHOTS = bool(os.environ.get("LUT_CUBE_SCREENSHOTS"))
+SHOTS = DOCS if SCREENSHOTS else os.path.join(helpers.TMP, "zrzuty")
+
+
 def snapshot(win, name):
     pump(0.2)
     pb = win.offscreen_window.get_pixbuf()
-    os.makedirs(DOCS, exist_ok=True)
-    path = os.path.join(DOCS, name)
+    os.makedirs(SHOTS, exist_ok=True)
+    path = os.path.join(SHOTS, name)
     pb.savev(path, "png", [], [])
     return path
 
@@ -403,7 +409,7 @@ check("zestawienie: wszystkie LUT-y wczytane", len(items) == N + 1 and not bad,
 flat = [lut_apply.to_rgba8(d) for _n, d in items]
 check("zestawienie: każdy LUT zmienia obraz",
       all(f != flat[0] for f in flat[1:]))
-sheet(keys[:7], os.path.join(DOCS, "przyklady-lutow.png"), 4)
+sheet(keys[:7], os.path.join(SHOTS, "przyklady-lutow.png"), 4)
 
 shutil.rmtree(lib_root, ignore_errors=True)
 print("WYNIK: %d/%d PASS" % (sum(results), len(results)), flush=True)
