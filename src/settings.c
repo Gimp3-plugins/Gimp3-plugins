@@ -152,6 +152,9 @@ raw_settings_defaults (RawSettings *s)
   s->half_size         = FALSE;
   s->auto_rotate       = TRUE;
   s->camera_crop       = TRUE;
+  s->lens_vignetting   = FALSE;
+  s->lens_distortion   = FALSE;
+  s->lens_tca          = FALSE;
 }
 
 void
@@ -274,6 +277,18 @@ raw_settings_add_arguments (GimpProcedure *procedure)
                                        _("Apply camera default crop"),
                                        _("Use the default crop stored in the file (DNG, CR3, ...)"),
                                        d.camera_crop, RW);
+  gimp_procedure_add_boolean_argument (procedure, "lens-vignetting",
+                                       _("Correct _vignetting"),
+                                       _("Brighten dark corners using the lensfun lens database"),
+                                       d.lens_vignetting, RW);
+  gimp_procedure_add_boolean_argument (procedure, "lens-distortion",
+                                       _("Correct _distortion"),
+                                       _("Straighten barrel / pincushion distortion (lensfun)"),
+                                       d.lens_distortion, RW);
+  gimp_procedure_add_boolean_argument (procedure, "lens-tca",
+                                       _("Correct lateral chromatic _aberration"),
+                                       _("Remove colour fringes towards the corners (lensfun)"),
+                                       d.lens_tca, RW);
 #undef RW
 }
 
@@ -313,6 +328,9 @@ raw_settings_from_config (RawSettings         *s,
                 "half-size",         &s->half_size,
                 "auto-rotate",       &s->auto_rotate,
                 "camera-crop",       &s->camera_crop,
+                "lens-vignetting",   &s->lens_vignetting,
+                "lens-distortion",   &s->lens_distortion,
+                "lens-tca",          &s->lens_tca,
                 NULL);
 
   s->wb_mode     = id_for_nick (wb_items,       wb, WB_CAMERA);
@@ -357,6 +375,9 @@ raw_settings_to_config (const RawSettings   *s,
                 "half-size",         s->half_size,
                 "auto-rotate",       s->auto_rotate,
                 "camera-crop",       s->camera_crop,
+                "lens-vignetting",   s->lens_vignetting,
+                "lens-distortion",   s->lens_distortion,
+                "lens-tca",          s->lens_tca,
                 NULL);
 }
 
@@ -395,6 +416,9 @@ raw_settings_serialize (const RawSettings *s,
   g_key_file_set_boolean (kf, GROUP, "half-size", s->half_size);
   g_key_file_set_boolean (kf, GROUP, "auto-rotate", s->auto_rotate);
   g_key_file_set_boolean (kf, GROUP, "camera-crop", s->camera_crop);
+  g_key_file_set_boolean (kf, GROUP, "lens-vignetting", s->lens_vignetting);
+  g_key_file_set_boolean (kf, GROUP, "lens-distortion", s->lens_distortion);
+  g_key_file_set_boolean (kf, GROUP, "lens-tca", s->lens_tca);
 
   data = g_key_file_to_data (kf, NULL, NULL);
   g_key_file_free (kf);
@@ -463,6 +487,9 @@ raw_settings_deserialize (RawSettings  *s,
   GET_B ("half-size", s->half_size);
   GET_B ("auto-rotate", s->auto_rotate);
   GET_B ("camera-crop", s->camera_crop);
+  GET_B ("lens-vignetting", s->lens_vignetting);
+  GET_B ("lens-distortion", s->lens_distortion);
+  GET_B ("lens-tca", s->lens_tca);
 
   /* clamp everything: the parasite may come from an edited XCF */
   s->wb_temperature    = CLAMP (s->wb_temperature, 2000.0, 25000.0);

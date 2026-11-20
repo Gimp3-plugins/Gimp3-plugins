@@ -28,7 +28,7 @@ jobs:
           install: gettext
           pacboy: >-
             clang:p meson:p ninja:p pkgconf:p gimp:p libraw:p libheif:p
-            lcms2:p gexiv2:p
+            lcms2:p gexiv2:p lensfun:p
 
       - name: Configure and build
         run: |

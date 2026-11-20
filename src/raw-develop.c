@@ -579,6 +579,28 @@ raw_session_camera (RawSession *ses)
 /* Can be called repeatedly with different settings (LibRaw re-copies the
  * unpacked raw data for each dcraw_process()).  Not thread-safe per session.
  */
+static void
+lens_info_from_libraw (libraw_data_t *lr,
+                       LensInfo      *info)
+{
+  memset (info, 0, sizeof *info);
+  g_strlcpy (info->camera_make,  lr->idata.make,  sizeof info->camera_make);
+  g_strlcpy (info->camera_model, lr->idata.model, sizeof info->camera_model);
+  g_strlcpy (info->lens_make,    lr->lens.LensMake, sizeof info->lens_make);
+  g_strlcpy (info->lens,         lr->lens.Lens,     sizeof info->lens);
+  info->focal    = lr->other.focal_len;
+  info->aperture = lr->other.aperture;
+  info->focal35  = lr->lens.FocalLengthIn35mmFormat;
+}
+
+static gint
+lens_flags (const RawSettings *s)
+{
+  return (s->lens_vignetting ? RAWHEIC_LENS_VIGNETTING : 0) |
+         (s->lens_distortion ? RAWHEIC_LENS_DISTORTION : 0) |
+         (s->lens_tca        ? RAWHEIC_LENS_TCA        : 0);
+}
+
 /* @region (x, y, w, h as fractions of the oriented, cropped image) limits
  * processing to that part at full resolution (preview loupe).
  */
@@ -693,7 +715,8 @@ session_develop (RawSession         *ses,
   /* full size, integer output: hand LibRaw's buffer over (compensation is
    * rolled off softly); float output keeps compensated values above 1.0
    */
-  if (max_size <= 0 && mem->colors == 3 && ! (gain > 1.0 && s->depth == DEPTH_FLOAT))
+  if (max_size <= 0 && mem->colors == 3 && ! lens_flags (s) &&
+      ! (gain > 1.0 && s->depth == DEPTH_FLOAT))
     {
       if (gain > 1.0)
         compensate_u16 ((guint16 *) mem->data, (gsize) mem->width * mem->height * 3, gain);
@@ -711,6 +734,34 @@ session_develop (RawSession         *ses,
 
   if (img->pixels && gain > 1.0)
     compensate_float (img->pixels, (gsize) img->width * img->height * 3, gain);
+
+  if (img->pixels)
+    {
+      LensInfo info;
+      gint     full_w = img->width, full_h = img->height, off_x = 0, off_y = 0;
+
+      lens_info_from_libraw (lr, &info);
+      img->lens = info.lens[0] ? g_strdup (info.lens) : NULL;
+
+      if (region)
+        {
+          raw_session_size (ses, s, &full_w, &full_h);
+          off_x = (gint) (region[0] * full_w);
+          off_y = (gint) (region[1] * full_h);
+        }
+
+      if (lens_flags (s))
+        img->lens_done = rawheic_lens_correct (img->pixels, img->width, img->height,
+                                               full_w, full_h, off_x, off_y,
+                                               &info, lens_flags (s));
+      if (img->lens)
+        {
+          gchar *desc = rawheic_lens_describe (&info);
+
+          img->lens_known = desc != NULL;
+          g_free (desc);
+        }
+    }
 
   if (img->pixels)
     return img;
@@ -810,6 +861,7 @@ raw_image_free (RawImage *img)
       if (img->mem)
         libraw_dcraw_clear_mem (img->mem);
       g_free (img->camera);
+      g_free (img->lens);
       g_free (img);
     }
 }

@@ -20,7 +20,7 @@ $env:PATH = "$Msys\clang64\bin;$Msys\usr\bin;" + $env:PATH
 
 if ($Setup) {
   $pkgs = "clang","meson","ninja","pkgconf","gimp","libraw","libheif","lcms2",
-          "gexiv2","gettext-tools" | ForEach-Object { "mingw-w64-clang-x86_64-$_" }
+          "gexiv2","lensfun","gettext-tools" | ForEach-Object { "mingw-w64-clang-x86_64-$_" }
   & "$Msys\usr\bin\pacman.exe" -S --needed --noconfirm @pkgs
   if ($LASTEXITCODE) { throw "pacman failed" }
 }
@@ -53,6 +53,13 @@ $stage = Join-Path $build "stage\gimp-raw-heic"
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item (Join-Path $build "gimp-raw-heic.exe") $stage
+# lensfun and its two dependencies are not part of GIMP: ship them next to
+# the plug-in (the exe folder is searched first), plus the lens database
+foreach ($dll in "liblensfun.dll","libsystre-0.dll","libtre-5.dll") {
+  Copy-Item "$Msys\clang64\bin\$dll" $stage
+}
+$lensdb = New-Item -ItemType Directory -Force (Join-Path $stage "lensfun")
+Copy-Item "$Msys\clang64\share\lensfun\version_1\*.xml" $lensdb
 New-Item -ItemType Directory -Force (Join-Path $stage "locale") | Out-Null
 foreach ($mo in Get-ChildItem (Join-Path $build "po") -Filter *.mo -ErrorAction SilentlyContinue) {
   $dir = Join-Path $stage ("locale\" + $mo.BaseName + "\LC_MESSAGES")
@@ -86,6 +93,10 @@ if ($Package) {
   $lic = New-Item -ItemType Directory -Force (Join-Path $stage "licenses")
   Copy-Item "$Msys\clang64\share\licenses\libraw\LICENSE.LGPL" (Join-Path $lic "LibRaw-LGPL-2.1.txt")
   Copy-Item "$Msys\clang64\share\licenses\libraw\LICENSE.CDDL" (Join-Path $lic "LibRaw-CDDL-1.0.txt")
+  Copy-Item "$Msys\clang64\share\licenses\lensfun\LICENSE-libs" (Join-Path $lic "lensfun-LGPL-3.0.txt")
+  Copy-Item "$Msys\clang64\share\licenses\lensfun\LICENSE-data" (Join-Path $lic "lensfun-database-CC-BY-SA-3.0.txt")
+  Copy-Item "$Msys\clang64\share\licenses\libtre\LICENSE" (Join-Path $lic "TRE-BSD-2-Clause.txt")
+  Copy-Item "$Msys\clang64\share\licenses\libsystre\LICENSE" (Join-Path $lic "libsystre.txt")
   Copy-Item "$Msys\clang64\share\licenses\gimp\COPYING" (Join-Path $root "COPYING") -ErrorAction SilentlyContinue
 
   $zip = Join-Path $dist "gimp-raw-heic-$ver-win64.zip"

@@ -349,6 +349,71 @@ test_region_rotated_auto_wb (void)
   region_vs_full ("Apple-iPhone_12_Pro.dng", WB_AUTO, 0.05, 0.10);
 }
 
+
+/* --- lens corrections (lensfun) ----------------------------------------- */
+
+static void
+test_lens (void)
+{
+  gchar      *path = g_build_filename (samples_dir, "Canon-EOS_6D.cr2", NULL);
+  RawSession *ses;
+  LensInfo    info;
+  GError     *error = NULL;
+  gchar      *desc;
+  gfloat     *flat;
+  gint        w = 600, h = 400, i, done;
+  RawSettings s;
+  RawImage   *img;
+
+  if (! g_file_test (path, G_FILE_TEST_EXISTS))
+    {
+      g_test_skip ("sample missing");
+      g_free (path);
+      return;
+    }
+
+  g_assert_true (rawheic_lens_db_available ());
+
+  ses = raw_session_open (path, &error);
+  g_assert_no_error (error);
+  lens_info_from_libraw (ses->lr, &info);
+  g_test_message ("camera '%s %s' lens '%s' f=%.0f f35=%.0f N=%.1f",
+                  info.camera_make, info.camera_model, info.lens,
+                  info.focal, info.focal35, info.aperture);
+
+  desc = rawheic_lens_describe (&info);
+  g_assert_nonnull (desc);
+  g_test_message ("lensfun match: %s", desc);
+  g_free (desc);
+
+  /* vignetting on a flat field: corners gain more than the centre */
+  flat = g_new (gfloat, (gsize) w * h * 3);
+  for (i = 0; i < w * h * 3; i++)
+    flat[i] = 0.25f;
+  info.aperture = 1.8f;                        /* wide open: strong vignetting */
+  done = rawheic_lens_correct (flat, w, h, w, h, 0, 0, &info, RAWHEIC_LENS_VIGNETTING);
+  g_assert_cmpint (done & RAWHEIC_LENS_VIGNETTING, !=, 0);
+  g_assert_cmpfloat (flat[1], >, flat[((h / 2) * w + w / 2) * 3 + 1] * 1.05f);
+  g_assert_cmpfloat (flat[((h / 2) * w + w / 2) * 3 + 1], <, 0.27f);
+  g_free (flat);
+
+  /* full develop with all corrections reports what was applied */
+  raw_settings_defaults (&s);
+  s.half_size       = TRUE;
+  s.lens_vignetting = TRUE;
+  s.lens_distortion = TRUE;
+  s.lens_tca        = TRUE;
+  img = raw_session_develop (ses, &s, 0, NULL, NULL, &error);
+  g_assert_no_error (error);
+  g_assert_true (img->lens_known);
+  g_assert_cmpint (img->lens_done & RAWHEIC_LENS_VIGNETTING, !=, 0);
+  g_test_message ("applied corrections: 0x%x", img->lens_done);
+  raw_image_free (img);
+
+  raw_session_free (ses);
+  g_free (path);
+}
+
 /* --- batch session -------------------------------------------------------- */
 
 static void
@@ -480,6 +545,7 @@ main (int argc, char **argv)
   g_test_add_func ("/develop/sample",           test_develop_sample);
   g_test_add_func ("/loupe/region-nef",         test_region_nef);
   g_test_add_func ("/loupe/region-rotated-auto", test_region_rotated_auto_wb);
+  g_test_add_func ("/lens/lensfun",             test_lens);
 
   return g_test_run ();
 }

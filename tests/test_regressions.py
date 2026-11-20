@@ -166,5 +166,32 @@ for preset, expect_ok in (("Fast preview", True), ("no such preset", False)):
         check("unknown preset refused", r.index(0) == Gimp.PDBStatusType.CALLING_ERROR,
               pdb.get_last_error()[:60])
 
+# Step 6: lens corrections from the database shipped in the plug-in folder
+def region_mean(img, x, y, size=64):
+    buf = img.get_layers()[0].get_buffer()
+    data = buf.get(Gegl.Rectangle.new(x, y, size, size), 1.0, "RGB float", Gegl.AbyssPolicy.CLAMP)
+    n = len(data) // 12
+    v = struct.unpack("<%df" % (n * 3), data[: n * 12])
+    return sum(v[1::3]) / n
+
+cr2 = os.path.abspath(os.path.join("samples", "Canon-EOS_6D.cr2"))
+lp = pdb.lookup_procedure("file-raw-heic-raw-load")
+means = {}
+for vig in (False, True):
+    cfg = lp.create_config()
+    cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+    cfg.set_property("file", Gio.File.new_for_path(cr2))
+    cfg.set_property("half-size", True)
+    cfg.set_property("lens-vignetting", vig)
+    r = lp.run(cfg)
+    im = r.index(1)
+    w, h = im.get_width(), im.get_height()
+    means[vig] = (region_mean(im, 8, 8), region_mean(im, w // 2 - 32, h // 2 - 32))
+    im.delete()
+corner_gain = means[True][0] / means[False][0]
+centre_gain = means[True][1] / means[False][1]
+check("lensfun vignetting brightens corners", corner_gain > centre_gain * 1.03,
+      "corner x%.3f centre x%.3f" % (corner_gain, centre_gain))
+
 with open(os.path.join("build", "test-out", "regressions.txt"), "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")

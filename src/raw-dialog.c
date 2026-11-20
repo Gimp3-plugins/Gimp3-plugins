@@ -249,11 +249,16 @@ draw_preview (PreviewUI *ui)
 }
 
 static void
-update_status (PreviewUI   *ui,
-               const gchar *camera,
-               gint         ms)
+update_status (PreviewUI      *ui,
+               const RawImage *img,
+               gint            ms)
 {
-  GString *msg = g_string_new (camera);
+  GString *msg = g_string_new (img->camera);
+
+  if (img->lens)
+    g_string_append_printf (msg, img->lens_known ? _(", %s (lensfun ✓)")
+                                                  : _(", %s (not in lensfun)"),
+                            img->lens);
 
   g_string_append_printf (msg, _(" — %d ms"), ms);
   if (ui->loupe_active)
@@ -297,7 +302,7 @@ render_done (GObject      *source,
           ui->before_key = g_strdup (job->before_key);
         }
 
-      update_status (ui, job->image->camera, (gint) (job->usecs / 1000));
+      update_status (ui, job->image, (gint) (job->usecs / 1000));
     }
   else if (job->error)
     {
@@ -665,6 +670,14 @@ raw_dialog_run (GimpProcedure       *procedure,
   gimp_procedure_dialog_get_label (dialog, "exp-label", _("Exposure"),      FALSE, FALSE);
   gimp_procedure_dialog_get_label (dialog, "det-label", _("Detail"),        FALSE, FALSE);
   gimp_procedure_dialog_get_label (dialog, "out-label", _("Output"),        FALSE, FALSE);
+  gimp_procedure_dialog_get_label (dialog, "lens-label", _("Lens"),         FALSE, FALSE);
+  gimp_procedure_dialog_get_label (dialog, "lens-hint",
+                                   rawheic_lens_db_available () ?
+                                   _("Corrections come from the lensfun database; the "
+                                     "detected lens is shown under the preview.") :
+                                   _("The lensfun database was not found: lens "
+                                     "corrections are unavailable."),
+                                   FALSE, FALSE);
 
   gimp_procedure_dialog_get_label (dialog, "wb-hint",
                                    _("Tip: click the preview to pick a neutral (grey) area."),
@@ -683,11 +696,16 @@ raw_dialog_run (GimpProcedure       *procedure,
                                   "color-space", "linear", "depth", "half-size",
                                   "auto-rotate", "camera-crop", NULL);
 
+  gimp_procedure_dialog_fill_box (dialog, "lens-box",
+                                  "lens-vignetting", "lens-distortion", "lens-tca",
+                                  "lens-hint", NULL);
+
   gimp_procedure_dialog_fill_notebook (dialog, "settings",
-                                       "wb-label",  "wb-box",
-                                       "exp-label", "exp-box",
-                                       "det-label", "det-box",
-                                       "out-label", "out-box",
+                                       "wb-label",   "wb-box",
+                                       "exp-label",  "exp-box",
+                                       "det-label",  "det-box",
+                                       "lens-label", "lens-box",
+                                       "out-label",  "out-box",
                                        NULL);
 
   set_sensitive_if (dialog, "wb-temperature", "wb-mode", "manual", NULL);

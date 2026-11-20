@@ -84,7 +84,26 @@ typedef struct
   gboolean      half_size;
   gboolean      auto_rotate;
   gboolean      camera_crop;
+  gboolean      lens_vignetting;
+  gboolean      lens_distortion;
+  gboolean      lens_tca;
 } RawSettings;
+
+#define RAWHEIC_LENS_VIGNETTING (1 << 0)
+#define RAWHEIC_LENS_DISTORTION (1 << 1)
+#define RAWHEIC_LENS_TCA        (1 << 2)
+
+/* What lensfun needs to find the lens, taken from the RAW metadata. */
+typedef struct
+{
+  gchar   camera_make[64];
+  gchar   camera_model[64];
+  gchar   lens_make[128];
+  gchar   lens[128];
+  gfloat  focal;
+  gfloat  focal35;
+  gfloat  aperture;
+} LensInfo;
 
 /* Developed image, linear RGB in the requested primaries: either float
  * (previews, scaled output) or, for full-size loads, LibRaw's own 16-bit
@@ -98,6 +117,9 @@ typedef struct
   guint16  *pixels16;   /* width * height * 3, or NULL      */
   gpointer  mem;        /* libraw_processed_image_t owning pixels16 */
   gchar    *camera;     /* "Make Model" */
+  gchar    *lens;       /* lens name from the file, or NULL */
+  gboolean  lens_known; /* found in the lensfun database */
+  gint      lens_done;  /* RAWHEIC_LENS_* corrections applied */
 } RawImage;
 
 typedef gboolean (* RawProgressFunc) (gdouble fraction, gpointer data);
@@ -184,6 +206,19 @@ gboolean          rawheic_wavelet_denoise_banded (guint16            *rgb,
                                                 gint                  height,
                                                 gdouble               threshold,
                                                 gint                  band);
+
+/* lens.c */
+gboolean          rawheic_lens_db_available    (void);
+gchar           * rawheic_lens_describe        (const LensInfo       *info);
+gint              rawheic_lens_correct         (gfloat               *rgb,
+                                                gint                  w,
+                                                gint                  h,
+                                                gint                  full_w,
+                                                gint                  full_h,
+                                                gint                  off_x,
+                                                gint                  off_y,
+                                                const LensInfo       *info,
+                                                gint                  flags);
 
 /* profiles.c */
 GimpColorProfile* rawheic_profile_new          (ColorSpace            cs,
