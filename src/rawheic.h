@@ -68,6 +68,7 @@ typedef struct
   gdouble       exposure_preserve;/* 0 .. 1 */
   HighlightMode highlight;
   gint          rebuild_level;    /* 3 .. 9 */
+  gboolean      highlight_compensate; /* undo LibRaw's darkening in recovery modes */
   gdouble       brightness;       /* 0.25 .. 4 */
   gboolean      auto_bright;
   gint          demosaic;         /* LibRaw user_qual */
@@ -158,6 +159,12 @@ gboolean          rawheic_wavelet_denoise      (guint16              *rgb,
                                                 gint                  width,
                                                 gint                  height,
                                                 gdouble               threshold);
+
+gboolean          rawheic_wavelet_denoise_banded (guint16            *rgb,
+                                                gint                  width,
+                                                gint                  height,
+                                                gdouble               threshold,
+                                                gint                  band);
 
 /* profiles.c */
 GimpColorProfile* rawheic_profile_new          (ColorSpace            cs,

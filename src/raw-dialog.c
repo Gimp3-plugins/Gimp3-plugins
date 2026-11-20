@@ -268,19 +268,30 @@ area_clicked (GtkWidget      *widget,
   return TRUE;
 }
 
+/* @property is sensitive only while @choice_property is one of the
+ * NULL-terminated nicks.
+ */
 static void
 set_sensitive_if (GimpProcedureDialog *dialog,
                   const gchar         *property,
                   const gchar         *choice_property,
-                  const gchar         *value)
+                  ...)
 {
   GimpValueArray *values = gimp_value_array_new (1);
-  GValue          v      = G_VALUE_INIT;
+  const gchar    *nick;
+  va_list         args;
 
-  g_value_init (&v, G_TYPE_STRING);
-  g_value_set_string (&v, value);
-  gimp_value_array_append (values, &v);
-  g_value_unset (&v);
+  va_start (args, choice_property);
+  while ((nick = va_arg (args, const gchar *)))
+    {
+      GValue v = G_VALUE_INIT;
+
+      g_value_init (&v, G_TYPE_STRING);
+      g_value_set_string (&v, nick);
+      gimp_value_array_append (values, &v);
+      g_value_unset (&v);
+    }
+  va_end (args);
 
   gimp_procedure_dialog_set_sensitive_if_in (dialog, property, NULL,
                                              choice_property, values, TRUE);
@@ -320,7 +331,8 @@ raw_dialog_run (GimpProcedure       *procedure,
                                   "wb-mode", "wb-temperature", "wb-tint", "wb-hint", NULL);
   gimp_procedure_dialog_fill_box (dialog, "exp-box",
                                   "exposure", "exposure-preserve", "highlight",
-                                  "rebuild-level", "brightness", "auto-bright", NULL);
+                                  "rebuild-level", "highlight-compensate",
+                                  "brightness", "auto-bright", NULL);
   gimp_procedure_dialog_fill_box (dialog, "det-box",
                                   "demosaic", "denoise", "fbdd", "ca-red", "ca-blue",
                                   "hot-pixels", "median-passes", NULL);
@@ -335,9 +347,11 @@ raw_dialog_run (GimpProcedure       *procedure,
                                        "out-label", "out-box",
                                        NULL);
 
-  set_sensitive_if (dialog, "wb-temperature", "wb-mode", "manual");
-  set_sensitive_if (dialog, "wb-tint",        "wb-mode", "manual");
-  set_sensitive_if (dialog, "rebuild-level",  "highlight", "rebuild");
+  set_sensitive_if (dialog, "wb-temperature", "wb-mode", "manual", NULL);
+  set_sensitive_if (dialog, "wb-tint",        "wb-mode", "manual", NULL);
+  set_sensitive_if (dialog, "rebuild-level",  "highlight", "rebuild", NULL);
+  set_sensitive_if (dialog, "highlight-compensate", "highlight",
+                    "unclip", "blend", "rebuild", NULL);
 
   if (g_object_class_find_property (G_OBJECT_GET_CLASS (config), "ask-dialog"))
     right = gimp_procedure_dialog_fill_box (dialog, "right", "settings", "ask-dialog", NULL);

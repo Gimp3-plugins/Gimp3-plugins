@@ -158,6 +158,59 @@ test_denoise (void)
   g_free (img);
 }
 
+
+static void
+test_denoise_banded_equals_full (void)
+{
+  const gint w = 120, h = 700;
+  gsize      n = (gsize) w * h * 3;
+  guint16   *a = g_new (guint16, n);
+  guint16   *b = g_new (guint16, n);
+  GRand     *r = g_rand_new_with_seed (11);
+  gsize      i;
+
+  for (i = 0; i < n; i++)
+    a[i] = (guint16) CLAMP (8000 + (i / (w * 3)) * 20 + g_rand_double_range (r, -900, 900), 0, 65535);
+  memcpy (b, a, n * sizeof (guint16));
+
+  g_assert_true (rawheic_wavelet_denoise_banded (a, w, h, 400.0, 1 << 20)); /* one band */
+  g_assert_true (rawheic_wavelet_denoise_banded (b, w, h, 400.0, 100));     /* many */
+  g_assert_cmpmem (a, n * sizeof (guint16), b, n * sizeof (guint16));
+
+  g_rand_free (r);
+  g_free (a);
+  g_free (b);
+}
+
+static void
+test_recovery_compensation (void)
+{
+  libraw_data_t *lr = libraw_init (0);
+  RawSettings    s;
+  guint16        px[4] = { 0, 16384, 40000, 65535 };
+
+  raw_settings_defaults (&s);
+  lr->color.pre_mul[0] = 2.0f; lr->color.pre_mul[1] = 1.0f;
+  lr->color.pre_mul[2] = 1.5f; lr->color.pre_mul[3] = 1.0f;
+
+  s.highlight = HL_CLIP;
+  g_assert_cmpfloat (recovery_compensation (lr, &s), ==, 1.0);
+  s.highlight = HL_BLEND;
+  g_assert_cmpfloat_with_epsilon (recovery_compensation (lr, &s), 2.0, 1e-6);
+  s.highlight_compensate = FALSE;
+  g_assert_cmpfloat (recovery_compensation (lr, &s), ==, 1.0);
+
+  /* soft knee: monotonic, never wraps, mid-tones scaled exactly */
+  compensate_u16 (px, 4, 2.0);
+  g_assert_cmpuint (px[0], ==, 0);
+  g_assert_cmpuint (px[1], ==, 32768);
+  g_assert_cmpuint (px[2], <, px[3]);
+  g_assert_cmpuint (px[3], <=, 65535);
+  g_assert_cmpuint (px[2], >, 55000);
+
+  libraw_close (lr);
+}
+
 /* --- batch session -------------------------------------------------------- */
 
 static void
@@ -280,6 +333,8 @@ main (int argc, char **argv)
   g_test_add_func ("/wb/temperature-xy",        test_temperature_xy);
   g_test_add_func ("/wb/spot-mapping",          test_spot_mapping);
   g_test_add_func ("/denoise/wavelet",          test_denoise);
+  g_test_add_func ("/denoise/banded",           test_denoise_banded_equals_full);
+  g_test_add_func ("/develop/recovery-comp",    test_recovery_compensation);
   g_test_add_func ("/batch/session",            test_batch_session);
   g_test_add_func ("/util/remote-paths",        test_remote_paths);
   g_test_add_func ("/develop/errors",           test_develop_errors);

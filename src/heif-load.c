@@ -20,6 +20,7 @@
 #include <gexiv2/gexiv2.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <libheif/heif.h>
+#include <libgimp/gimpui.h>
 
 #include "rawheic.h"
 
@@ -102,6 +103,10 @@ heif_load_procedure_new (GimpPlugIn  *plug_in,
                                         _("Use GIMP's built-in loader for all files"), NULL,
                                         NULL),
                                       "linear", G_PARAM_READWRITE);
+  gimp_procedure_add_double_argument (procedure, "hdr-exposure",
+                                      _("HDR _exposure (EV)"),
+                                      _("Exposure applied to HDR images before tone mapping"),
+                                      -6.0, 6.0, 0.0, G_PARAM_READWRITE);
 
   return procedure;
 }
@@ -300,6 +305,7 @@ load_hdr (HeifFile  *hf,
           GFile     *file,
           gint       tc,
           gint       mode,
+          gdouble    exposure,
           GError   **error)
 {
   struct heif_decoding_options *opts;
@@ -381,6 +387,17 @@ load_hdr (HeifFile  *hf,
 
   heif_image_release (img);
 
+  if (fabs (exposure) > 1e-4)
+    {
+      gfloat gain = (gfloat) pow (2.0, exposure);
+      gsize  n    = (gsize) w * h, i;
+      gint   c;
+
+      for (i = 0; i < n; i++)
+        for (c = 0; c < 3; c++)
+          buf[i * channels + c] *= gain;
+    }
+
   if (mode == HDR_SDR)
     tone_map_sdr (buf, (gsize) w * h, channels);
 
@@ -434,33 +451,67 @@ heif_load_run (GimpProcedure         *procedure,
   HeifFile           hf;
   gint               mode;
   gint               tc = 0;
+  gdouble            exposure = 0.0;
+
+  /* Always look at the file: a remembered "built-in" choice must not hide
+   * the HDR dialog for good.
+   */
+  if (! heif_file_open (&hf, file, &error))
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR, error);
+
+  tc = hdr_transfer (hf.handle);
+
+  if (tc && run_mode == GIMP_RUN_INTERACTIVE)
+    {
+      GtkWidget *dialog;
+      gchar     *name  = g_file_get_basename (file);
+      gchar     *title = g_strdup_printf (_("Open HDR image – %s"), name);
+      gboolean   ok;
+
+      gimp_ui_init (PLUGIN_NAME);
+      dialog = gimp_procedure_dialog_new (procedure, config, title);
+      gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog), "hdr-info",
+                                       tc == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ ?
+                                       _("This image is HDR (PQ, BT.2100).") :
+                                       _("This image is HDR (HLG, BT.2100)."),
+                                       FALSE, FALSE);
+      gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                                  "hdr-info", "hdr-mode", "hdr-exposure", NULL);
+      ok = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
+      gtk_widget_destroy (dialog);
+      g_free (title);
+      g_free (name);
+
+      if (! ok)
+        {
+          heif_file_close (&hf);
+          return gimp_procedure_new_return_values (procedure, GIMP_PDB_CANCEL, NULL);
+        }
+    }
 
   mode = gimp_procedure_config_get_choice_id (config, "hdr-mode");
+  g_object_get (config, "hdr-exposure", &exposure, NULL);
 
-  if (mode != HDR_BUILTIN)
+  if (tc && mode != HDR_BUILTIN)
     {
-      if (! heif_file_open (&hf, file, &error))
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_EXECUTION_ERROR, error);
+      gchar *name = g_file_get_basename (file);
 
-      tc = hdr_transfer (hf.handle);
+      gimp_progress_init_printf (_("Loading HDR image '%s'"), name);
+      g_free (name);
 
-      if (tc)
-        {
-          gchar *name = g_file_get_basename (file);
+      image = load_hdr (&hf, file, tc, mode, exposure, &error);
+      if (! image)
+        status = GIMP_PDB_EXECUTION_ERROR;
 
-          gimp_progress_init_printf (_("Loading HDR image '%s'"), name);
-          g_free (name);
-
-          image = load_hdr (&hf, file, tc, mode, &error);
-          if (! image)
-            status = GIMP_PDB_EXECUTION_ERROR;
-
-          gimp_progress_update (1.0);
-        }
-
-      heif_file_close (&hf);
+      gimp_progress_update (1.0);
     }
+  else
+    {
+      tc = 0;   /* handled by the built-in loader below */
+    }
+
+  heif_file_close (&hf);
 
   if (! tc)
     {

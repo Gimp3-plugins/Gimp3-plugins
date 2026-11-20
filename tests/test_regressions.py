@@ -88,5 +88,66 @@ r = proc.run(cfg)
 check("B7 thumbnail full size = cropped size", (r.index(2), r.index(3)) == (5472, 3648),
       "%dx%d" % (r.index(2), r.index(3)))
 
+# Step 3: highlight recovery compensation brings brightness back
+import struct
+from gi.repository import Gegl
+
+
+def mean_g(img, fmt="RGB float"):
+    lay = img.get_layers()[0]
+    buf = lay.get_buffer()
+    e = buf.get_extent()
+    w, h = min(800, e.width), min(800, e.height)
+    data = buf.get(Gegl.Rectangle.new((e.width - w) // 2, (e.height - h) // 2, w, h), 1.0,
+                   fmt, Gegl.AbyssPolicy.CLAMP)
+    n = len(data) // 12
+    v = struct.unpack("<%df" % (n * 3), data[: n * 12])
+    return sum(v[1::3]) / n, max(v)
+
+
+def load_raw(**props):
+    proc = pdb.lookup_procedure("file-raw-heic-raw-load")
+    cfg = proc.create_config()
+    cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+    cfg.set_property("file", Gio.File.new_for_path(SRC))
+    cfg.set_property("half-size", True)
+    for k, v in props.items():
+        cfg.set_property(k.replace("_", "-"), v)
+    r = proc.run(cfg)
+    return r.index(1) if r.index(0) == Gimp.PDBStatusType.SUCCESS else None
+
+
+ref = load_raw(); m_clip, _ = mean_g(ref); ref.delete()
+for mode in ("unclip", "blend"):
+    im = load_raw(highlight=mode); m_on, _ = mean_g(im); im.delete()
+    im = load_raw(highlight=mode, highlight_compensate=False); m_off, _ = mean_g(im); im.delete()
+    check("comp %s: brightness ~ clip (u16)" % mode, abs(m_on / m_clip - 1) < 0.08,
+          "clip %.4f on %.4f off %.4f" % (m_clip, m_on, m_off))
+    check("comp %s: off stays darker" % mode, m_off < m_clip * 0.75)
+im = load_raw(highlight="unclip", depth="float")
+m_f, mx = mean_g(im); im.delete()
+check("comp float keeps highlights above 1.0", mx > 1.0 and abs(m_f / m_clip - 1) < 0.08,
+      "mean %.4f max %.3f" % (m_f, mx))
+
+# Step 3: HDR exposure for HEIC (PQ chart, patch 1.0 -> 2.0 at +1 EV)
+hp = pdb.lookup_procedure("file-raw-heic-heif-load")
+for ev, expect in ((0.0, 1.0), (1.0, 2.0)):
+    cfg = hp.create_config()
+    cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+    cfg.set_property("file", Gio.File.new_for_path(os.path.abspath("samples/heic/pq.heic")))
+    cfg.set_property("hdr-exposure", ev)
+    r = hp.run(cfg)
+    im = r.index(1)
+    g = im.get_layers()[0].get_pixel(int(1.5 * im.get_width() / 3), im.get_height() // 4).get_rgba()[1]
+    check("HDR exposure %+.0f EV: reference patch = %.1f" % (ev, expect), abs(g - expect) < 0.02, "%.3f" % g)
+    im.delete()
+cfg = hp.create_config()
+cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+cfg.set_property("file", Gio.File.new_for_path(os.path.abspath("samples/heic/pq.heic")))
+cfg.set_property("hdr-mode", "builtin")
+r = hp.run(cfg)
+check("HDR builtin mode delegates", r.index(0) == Gimp.PDBStatusType.SUCCESS and
+      "sRGB-TRC" in r.index(1).get_color_profile().get_label(), r.index(1).get_color_profile().get_label())
+
 with open(os.path.join("build", "test-out", "regressions.txt"), "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")

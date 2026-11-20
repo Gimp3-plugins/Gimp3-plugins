@@ -446,6 +446,73 @@ to_float_scaled (const libraw_processed_image_t *mem,
   return dst;
 }
 
+/* Highlight recovery modes make LibRaw scale by the largest white balance
+ * multiplier instead of the smallest (scale_colors: "if (!highlight) dmax =
+ * dmin"), which darkens the image by max/min.  After dcraw_process the
+ * used multipliers are in color.pre_mul.
+ */
+static gdouble
+recovery_compensation (libraw_data_t     *lr,
+                       const RawSettings *s)
+{
+  gdouble lo = G_MAXDOUBLE, hi = 0.0;
+  gint    c;
+
+  if (s->highlight == HL_CLIP || ! s->highlight_compensate)
+    return 1.0;
+
+  for (c = 0; c < 4; c++)
+    {
+      gdouble m = lr->color.pre_mul[c];
+
+      if (m > 1e-6)
+        {
+          lo = MIN (lo, m);
+          hi = MAX (hi, m);
+        }
+    }
+
+  if (hi <= 0.0 || lo >= G_MAXDOUBLE)
+    return 1.0;
+
+  return CLAMP (hi / lo, 1.0, 16.0);
+}
+
+/* Scale 16-bit data, rolling values above the knee off smoothly instead
+ * of clipping them (keeps recovered highlight detail in integer output).
+ */
+static void
+compensate_u16 (guint16 *data,
+                gsize    n,
+                gdouble  gain)
+{
+  const gdouble knee = 0.85;
+  gsize         i;
+
+#pragma omp parallel for
+  for (i = 0; i < n; i++)
+    {
+      gdouble x = data[i] / 65535.0 * gain;
+
+      if (x > knee)
+        x = knee + (1.0 - knee) * (1.0 - exp (-(x - knee) / (1.0 - knee)));
+
+      data[i] = (guint16) (x * 65535.0 + 0.5);
+    }
+}
+
+static void
+compensate_float (gfloat *data,
+                  gsize   n,
+                  gdouble gain)
+{
+  gsize i;
+
+#pragma omp parallel for
+  for (i = 0; i < n; i++)
+    data[i] *= (gfloat) gain;
+}
+
 struct _RawSession
 {
   libraw_data_t *lr;
@@ -521,6 +588,7 @@ raw_session_develop (RawSession         *ses,
   libraw_data_t            *lr = ses->lr;
   libraw_processed_image_t *mem;
   RawImage                 *img;
+  gdouble                   gain;
   gint                      ret;
 
   ses->ctx.func      = progress;
@@ -574,11 +642,19 @@ raw_session_develop (RawSession         *ses,
       goto fail;
     }
 
+  gain = recovery_compensation (lr, s);
+
   img = g_new0 (RawImage, 1);
   img->camera = g_strdup (raw_session_camera (ses));
 
-  if (max_size <= 0 && mem->colors == 3)
+  /* full size, integer output: hand LibRaw's buffer over (compensation is
+   * rolled off softly); float output keeps compensated values above 1.0
+   */
+  if (max_size <= 0 && mem->colors == 3 && ! (gain > 1.0 && s->depth == DEPTH_FLOAT))
     {
+      if (gain > 1.0)
+        compensate_u16 ((guint16 *) mem->data, (gsize) mem->width * mem->height * 3, gain);
+
       /* full size: hand LibRaw's buffer over, no float copy */
       img->mem      = mem;
       img->pixels16 = (guint16 *) mem->data;
@@ -589,6 +665,9 @@ raw_session_develop (RawSession         *ses,
 
   img->pixels = to_float_scaled (mem, max_size, &img->width, &img->height);
   libraw_dcraw_clear_mem (mem);
+
+  if (img->pixels && gain > 1.0)
+    compensate_float (img->pixels, (gsize) img->width * img->height * 3, gain);
 
   if (img->pixels)
     return img;

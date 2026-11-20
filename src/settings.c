@@ -136,6 +136,7 @@ raw_settings_defaults (RawSettings *s)
   s->exposure_preserve = 0.0;
   s->highlight         = HL_CLIP;
   s->rebuild_level     = 5;
+  s->highlight_compensate = TRUE;
   s->brightness        = 1.0;
   s->auto_bright       = FALSE;
   s->demosaic          = 3;
@@ -196,13 +197,19 @@ raw_settings_add_arguments (GimpProcedure *procedure)
                                       0.0, 1.0, d.exposure_preserve, RW);
   gimp_procedure_add_choice_argument (procedure, "highlight",
                                       _("Highlight recovery"),
-                                      _("How clipped highlights are handled; modes other than Clip darken the image by about 1 EV to make room for the recovered highlights (compensate with Exposure)"),
+                                      _("How clipped highlights are handled"),
                                       make_choice (hl_items),
                                       nick_for_id (hl_items, d.highlight), RW);
   gimp_procedure_add_int_argument    (procedure, "rebuild-level",
                                       _("Rebuild level"),
                                       _("Strength of the 'rebuild' highlight mode"),
                                       3, 9, d.rebuild_level, RW);
+  gimp_procedure_add_boolean_argument (procedure, "highlight-compensate",
+                                       _("Compensate recovery darkening"),
+                                       _("Highlight recovery modes darken the image by about 1 EV; "
+                                         "bring the brightness back (32-bit float keeps the recovered "
+                                         "highlights above 1.0, 8/16-bit roll them off softly)"),
+                                       d.highlight_compensate, RW);
   gimp_procedure_add_double_argument (procedure, "brightness",
                                       _("Brightness"),
                                       _("Output brightness multiplier"),
@@ -290,6 +297,7 @@ raw_settings_from_config (RawSettings         *s,
                 "exposure-preserve", &s->exposure_preserve,
                 "highlight",         &hl,
                 "rebuild-level",     &s->rebuild_level,
+                "highlight-compensate", &s->highlight_compensate,
                 "brightness",        &s->brightness,
                 "auto-bright",       &s->auto_bright,
                 "demosaic",          &dm,
@@ -333,6 +341,7 @@ raw_settings_to_config (const RawSettings   *s,
                 "exposure-preserve", s->exposure_preserve,
                 "highlight",         nick_for_id (hl_items, s->highlight),
                 "rebuild-level",     s->rebuild_level,
+                "highlight-compensate", s->highlight_compensate,
                 "brightness",        s->brightness,
                 "auto-bright",       s->auto_bright,
                 "demosaic",          nick_for_id (demosaic_items, s->demosaic),
@@ -370,6 +379,7 @@ raw_settings_serialize (const RawSettings *s,
   g_key_file_set_double  (kf, GROUP, "exposure-preserve", s->exposure_preserve);
   g_key_file_set_string  (kf, GROUP, "highlight", nick_for_id (hl_items, s->highlight));
   g_key_file_set_integer (kf, GROUP, "rebuild-level", s->rebuild_level);
+  g_key_file_set_boolean (kf, GROUP, "highlight-compensate", s->highlight_compensate);
   g_key_file_set_double  (kf, GROUP, "brightness", s->brightness);
   g_key_file_set_boolean (kf, GROUP, "auto-bright", s->auto_bright);
   g_key_file_set_string  (kf, GROUP, "demosaic", nick_for_id (demosaic_items, s->demosaic));
@@ -437,6 +447,7 @@ raw_settings_deserialize (RawSettings  *s,
   GET_D ("exposure-preserve", s->exposure_preserve);
   GET_C ("highlight", s->highlight, hl_items);
   GET_I ("rebuild-level", s->rebuild_level);
+  GET_B ("highlight-compensate", s->highlight_compensate);
   GET_D ("brightness", s->brightness);
   GET_B ("auto-bright", s->auto_bright);
   GET_C ("demosaic", s->demosaic, demosaic_items);
