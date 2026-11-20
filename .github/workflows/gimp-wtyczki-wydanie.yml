@@ -2,7 +2,9 @@
 # np. lut-cube-v1.1.0, meme-maker-v1.1.0, podpis-zdjecia-v1.1.0.
 # Dla lut-cube dołączany jest numpy z MSYS2 (tools/fetch-numpy.ps1).
 # Paczka trafia do wydania GitHuba o tej samej nazwie co tag (tworzonego,
-# jeśli jeszcze nie istnieje).
+# jeśli jeszcze nie istnieje). Ręcznie (Actions → Run workflow) można
+# przebudować paczkę istniejącego wydania – podaj nazwę tagu; budowa idzie
+# z bieżącej gałęzi main.
 name: gimp-wtyczki – wydanie
 
 on:
@@ -11,6 +13,11 @@ on:
       - "podpis-zdjecia-v*"
       - "meme-maker-v*"
       - "lut-cube-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag wydania, np. lut-cube-v1.1.0"
+        required: true
 
 permissions:
   contents: write
@@ -31,12 +38,13 @@ jobs:
         id: tag
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "${{ inputs.tag || github.ref_name }}"
           if ($tag -notmatch '^(podpis-zdjecia|meme-maker|lut-cube)-v(\d+\.\d+\.\d+)$') {
             throw "Tag $tag nie ma postaci <wtyczka>-v<X.Y.Z>"
           }
           "plugin=$($Matches[1])" >> $env:GITHUB_OUTPUT
           "version=$($Matches[2])" >> $env:GITHUB_OUTPUT
+          "name=$tag" >> $env:GITHUB_OUTPUT
       - name: zstd (zapas, gdyby tar nie obsługiwał .zst)
         if: steps.tag.outputs.plugin == 'lut-cube'
         shell: pwsh
@@ -56,7 +64,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "${{ steps.tag.outputs.name }}"
           $zip = "dist/${{ steps.tag.outputs.plugin }}-v${{ steps.tag.outputs.version }}.zip"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {

@@ -14,7 +14,15 @@
 
 $ErrorActionPreference = "Stop"
 
-$mirror = "https://mirror.msys2.org/mingw/clang64"
+# Kilka serwerów MSYS2 – niektóre pokazują automatom stronę weryfikacji zamiast
+# pliku. Każdy plik i tak jest sprawdzany sumą SHA-256, więc serwer nie ma
+# wpływu na bezpieczeństwo.
+$mirrors = @(
+    "https://repo.msys2.org/mingw/clang64",
+    "https://mirrors.dotsrc.org/msys2/mingw/clang64",
+    "https://mirror.selfnet.de/msys2/mingw/clang64",
+    "https://mirror.msys2.org/mingw/clang64"
+)
 $packages = @(
     @{ File = "mingw-w64-clang-x86_64-python-numpy-2.5.3-1-any.pkg.tar.zst"
        Sha256 = "b6c20f497c5f22fd907fe26c0f1a792be8ff17c663d27327a210bd08d96be0f1" },
@@ -34,11 +42,21 @@ New-Item -ItemType Directory -Force $work | Out-Null
 try {
     foreach ($p in $packages) {
         $dest = Join-Path $work $p.File
-        Write-Host "Pobieram $($p.File)…"
-        Invoke-WebRequest -Uri "$mirror/$($p.File)" -OutFile $dest -UseBasicParsing
-        $hash = (Get-FileHash $dest -Algorithm SHA256).Hash.ToLower()
-        if ($hash -ne $p.Sha256) {
-            throw "Zła suma SHA-256 pliku $($p.File): $hash"
+        $ok = $false
+        foreach ($mirror in $mirrors) {
+            Write-Host "Pobieram $($p.File) z $mirror"
+            try {
+                Invoke-WebRequest -Uri "$mirror/$($p.File)" -OutFile $dest -UseBasicParsing
+            } catch {
+                Write-Host "  nie udało się: $($_.Exception.Message.Split([Environment]::NewLine)[0])"
+                continue
+            }
+            $hash = (Get-FileHash $dest -Algorithm SHA256).Hash.ToLower()
+            if ($hash -eq $p.Sha256) { $ok = $true; break }
+            Write-Host "  zła suma SHA-256 (serwer zwrócił inny plik) – próbuję następny"
+        }
+        if (-not $ok) {
+            throw "Nie udało się pobrać $($p.File) z poprawną sumą SHA-256 z żadnego serwera."
         }
         & $tar -xf $dest -C $work
         if ($LASTEXITCODE -ne 0) {
@@ -81,7 +99,7 @@ try {
         ext_suffix = $extSuffix
         numpy      = "2.5.3"
         openblas   = "0.3.34"
-        source     = $mirror
+        source     = $mirrors[0]
         packages   = @($packages | ForEach-Object { $_.File })
     }
     $info | ConvertTo-Json | Set-Content (Join-Path $vendor "VENDOR.json") -Encoding utf8
