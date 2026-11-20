@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
-project(PSHost C)
+project(PSHost VERSION 0.8.0 LANGUAGES C)
+add_compile_definitions(PSHOST_VERSION="${PROJECT_VERSION}")
 set(CMAKE_C_STANDARD 11)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GIMP REQUIRED gimp-3.0 gimpui-3.0 gtk+-3.0 json-glib-1.0)
@@ -73,3 +74,12 @@ target_link_directories(pscore_sa PUBLIC ${GIMP_LIBRARY_DIRS})
 target_link_libraries(pscore_sa PUBLIC pe8bf ${GIMP_LIBRARIES})
 add_executable(ui_snapshot tests/ui_snapshot.c)
 target_link_libraries(ui_snapshot PRIVATE pscore_sa)
+
+# --- installer (Inno Setup 6): `cmake --build build --target installer` -> installer/output/PSHost-Setup-<version>.exe ---
+find_program(ISCC ISCC PATHS "$ENV{LOCALAPPDATA}/Programs/Inno Setup 6" "C:/Program Files (x86)/Inno Setup 6" "C:/Program Files/Inno Setup 6")
+if(ISCC)
+  add_custom_target(installer
+    COMMAND ${ISCC} /DAppVersion=${PROJECT_VERSION} /DBuildDir=${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/installer/PSHost.iss
+    DEPENDS pshost pshost_runner locale
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/installer)
+endif()

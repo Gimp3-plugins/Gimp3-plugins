@@ -1,4 +1,4 @@
-# Ustalenia (PSHost) — stan: Etap 7
+# Ustalenia (PSHost) — stan: Etap 8
 
 ## Zweryfikowane na tej maszynie (fakty)
 - GIMP **3.2.6**, instalacja per-user: `%LOCALAPPDATA%\Programs\GIMP 3`. Katalog użytkownika: `%APPDATA%\GIMP\3.2` (instrukcja zakładała 3.0 — używamy 3.2).
@@ -70,6 +70,18 @@
 - **`set_i18n` wyłączone:** GIMP nie tłumaczy sam naszych msgid-ów, bo ręczny wybór „English” byłby nadpisany językiem GIMP-a; znika też ostrzeżenie „catalog directory does not exist”. Nazwy menu filtrów zależą od kategorii z PiPL (nietłumaczone) i etykiet z wtyczek; nazwa kategorii zastępczej: „Inne/Other”; po zmianie języka etykiety menu zmieniają się po restarcie GIMP-a (okno to komunikuje).
 - **Polskie znaki w ścieżkach (UTF-8 ↔ UTF-16):** ścieżki w GLib/GTK i `config.json` są UTF-8; Windows API wywoływane przez wersje `W` (`_wfopen`, `CreateProcessW`, `LoadLibraryExW`, `SearchPathW`). Testy: katalog „Wtyczki zażółć gęślą jaźń” i plik „filtr ŁÓDŹ.8bf” — skan, probe, zapis w `config.json` jako UTF-8 oraz uruchomienie filtra z menu w prawdziwym GIMP-ie (warstwa odwrócona).
 - **Testy:** `tests/test_i18n.py` (poprawność i kompletność katalogów, aktualność `.pot` względem kodu, wybór języka, polskie ścieżki).
+
+## Etap 8 — instalator (Inno Setup 6.7.3; zweryfikowane testami cichymi)
+- **Wybór narzędzia:** Inno Setup (już zainstalowany na tej maszynie, natywne wsparcie PL, instalacja per-user bez UAC, prosty skrypt Pascala do wykrywania GIMP-a); WiX odrzucony jako cięższy bez zysku dla jednego pakietu.
+- **Jeden plik:** `installer/output/PSHost-Setup-0.8.0.exe` (≈2,1 MB), metadane wersji w nagłówku (VersionInfo), `PrivilegesRequired=lowest` (HKCU, bez administratora), x64. Budowa: `cmake --build build --target installer` albo `ISCC /DAppVersion=0.8.0 /DBuildDir=..\build installer\PSHost.iss`.
+- **Zawartość:** `pshost.exe`, `pshost_runner.exe` (także tryb restartu — osobnego `pshost_restart.exe` nie ma, bo to ten sam runner), `locale\{pl,en}\LC_MESSAGES\pshost.mo`. **Żadnych wtyczek Photoshop ani nagłówków Adobe.** Katalog docelowy: `%APPDATA%\GIMP\<wersja>\plug-ins\pshost\` — wersja (`3.2`) wyliczona z `bin\gimp-3.x.exe` wykrytego GIMP-a. Deinstalator leży poza folderem wtyczek GIMP-a (`%LOCALAPPDATA%\PSHost`).
+- **Wykrywanie GIMP-a:** wpisy Uninstall (HKCU, HKLM 64/32: nazwa „GIMP 3…”, `InstallLocation`, weryfikacja `bin\gimp-3.*.exe`) + typowe ścieżki; przetestowane na prawdziwym rejestrze (3.2, `...\Programs\GIMP 3`). **GIMP 2** jest wykrywany osobno: gdy nie ma GIMP-a 3, strona instalatora wyjaśnia, że wtyczka działa tylko z GIMP-em 3. Brak GIMP-a 3 → strona z wyborem folderu ręcznie (z walidacją) i komunikat PL/EN; w trybie cichym — przerwanie z komunikatem. GIMP < 3.2 → ostrzeżenie (zbudowano i przetestowano z 3.2).
+- **GIMP uruchomiony:** instalator i deinstalator proszą o jego zamknięcie (Ponów/Anuluj) — działa też w trybie cichym (odmowa zamiast cichego nadpisywania).
+- **Odinstalowanie:** usuwa pliki; pyta, czy usunąć ustawienia (`config.json`, logi, parametry); w trybie cichym zostawia je, chyba że `/PURGE`.
+- **Przełączniki testowe:** `/GIMPDATA=` (inny katalog danych, pomija wykrywanie), `/NOGIMPDETECT`, zmienna `PSHOST_GIMP_PROCESS` (nazwa procesu GIMP-a do sprawdzenia „czy działa”) — dzięki nim testy nie dotykają prawdziwego GIMP-a ani jego katalogu użytkownika.
+- **Testy (`tests/test_installer.py`, 16 kontroli):** kompilacja; instalacja/aktualizacja/odinstalowanie; wpisy tylko w HKCU; deinstalator poza folderem wtyczek; odmowa przy działającym GIMP-ie (instalacja i deinstalacja); zachowanie/usunięcie ustawień; polska wersja językowa; wykrycie GIMP-a w rejestrze; zachowanie przy braku GIMP-a 3.
+- **SmartScreen:** instalator nie jest podpisany certyfikatem, więc Windows może ostrzegać; informacja jest w tekście po instalacji (PL/EN) i trafi do README (Etap 9). Nie omijamy tego.
+- **Niezweryfikowane:** wygląd i działanie okien kreatora (strona wyboru folderu GIMP-a, strona „Gotowe do instalacji”, teksty PL/EN w GUI) — testy były ciche; instalacja na prawdziwym katalogu użytkownika z działającym GIMP-em (celowo nie zamykałem Twojego GIMP-a).
 
 ## Założenia / niezweryfikowane
 - Brak Photoshop SDK na dysku; planowane własne minimalne definicje struktur (`src/common/ps_types.h`). Licencja Adobe SDK do sprawdzenia przed jakąkolwiek redystrybucją nagłówków.

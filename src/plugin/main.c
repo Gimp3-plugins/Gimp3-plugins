@@ -40,7 +40,7 @@ about_run (GimpProcedure *procedure, GimpRunMode run_mode, GimpImage *image, Gim
 {
   gimp_ui_init ("pshost"); ensure_config ();
   GtkWidget *dlg = gtk_message_dialog_new (NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK, "%s",
-                     "PSHost 0.6\n\nHost for 64-bit Photoshop (.8bf) plug-ins.\nHost 64-bitowych wtyczek Photoshop (.8bf).");
+                     "PSHost " PSHOST_VERSION "\n\nHost for 64-bit Photoshop (.8bf) plug-ins.\nHost 64-bitowych wtyczek Photoshop (.8bf).");
   gtk_dialog_run (GTK_DIALOG (dlg)); gtk_widget_destroy (dlg);
   return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }

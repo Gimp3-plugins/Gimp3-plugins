@@ -1,0 +1,16 @@
+PSHost został zainstalowany.
+
+JAK UŻYWAĆ
+1. Uruchom GIMP-a 3.
+2. Otwórz Filtry > Photoshop > Zarządzaj wtyczkami...
+3. Kliknij „Dodaj katalog...” i wskaż folder z wtyczkami Photoshop (pliki .8bf).
+   PSHost sprawdza każdą wtyczkę i mówi, czy zostanie użyta, a jeśli nie, to dlaczego.
+4. Zgódź się na ponowne uruchomienie GIMP-a, gdy o to zapyta. Filtry pojawią się wtedy w Filtry > Photoshop > <Kategoria>.
+
+WAŻNE
+- Ten instalator NIE instaluje żadnych wtyczek Photoshop. Własne katalogi dodajesz później.
+- Obsługiwane są wyłącznie 64-bitowe FILTRY Photoshop (.8bf). Wtyczki 32-bitowe są odrzucane.
+- Dodanie wtyczki uruchamia obcy kod podczas testu i przy użyciu filtra. Dodawaj tylko wtyczki z zaufanych źródeł.
+- Wtyczka, która ulegnie awarii lub zawiesi się, działa w osobnym procesie i nie zamyka GIMP-a.
+- Instalator nie jest podpisany certyfikatem, więc Windows SmartScreen może pokazać ostrzeżenie („System Windows ochronił ten komputer”).
+  Wybierz „Więcej informacji” > „Uruchom mimo to” tylko wtedy, gdy instalator pochodzi ze źródła, któremu ufasz.
