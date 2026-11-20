@@ -69,5 +69,18 @@ check("OK/none" in dump and "json" in dump, "static check: mini_invert OK via JS
 rc, out = runner(["--mode", "probe", "--plugin", os.path.join(B, "mini", "mini_invert.8bf"), "--entry", "NoSuchEntry"])
 check(rc == 4, "missing entry point -> exit 4")
 
+
+# --- pshost_check: combined static + dynamic verdicts, PL/EN messages ---
+def run_check(lang, variant):
+    plug = os.path.join(B, "mini", f"mini_{variant}.8bf")
+    p = subprocess.run([os.path.join(B, "pshost_check.exe"), "--lang", lang, "--runner", RUN, "--timeout-ms", "3000", plug], capture_output=True, text=True, encoding="utf-8")
+    return p.stdout
+o = run_check("pl", "invert"); check("zostanie użyta w GIMP-ie" in o and o.startswith("OK	none"), "check PL: invert -> OK + zdanie po polsku")
+o = run_check("en", "invert"); check("will be used in GIMP" in o, "check EN: invert -> OK + English sentence")
+o = run_check("pl", "crash"); check(o.startswith("NO	probe-crash") and "uległa awarii" in o, "check PL: crash -> NO probe-crash")
+o = run_check("en", "hang"); check(o.startswith("NO	probe-timeout") and "did not respond" in o, "check EN: hang -> NO probe-timeout")
+o = run_check("pl", "missingdep"); check(o.startswith("NO	missing-dep") and "absent_dep.dll" in o, "check PL: missing dep named")
+o = run_check("en", "invert"); check("passed the basic test" in o, "caveat line present")
+
 print("failures:", fails)
 sys.exit(1 if fails else 0)

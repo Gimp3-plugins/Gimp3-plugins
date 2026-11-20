@@ -10,7 +10,7 @@ target_link_libraries(pshost PRIVATE ${GIMP_LIBRARIES})
 target_compile_options(pshost PRIVATE ${GIMP_CFLAGS_OTHER} -Wall)
 
 # --- common static analysis library + dev tool + tests ---
-add_library(pe8bf STATIC src/common/pe8bf.c)
+add_library(pe8bf STATIC src/common/pe8bf.c src/common/pe8_msg.c src/common/pe8_probe.c)
 target_compile_options(pe8bf PRIVATE -Wall -Wextra)
 add_executable(pe8bf_dump tests/pe8bf_dump.c)
 target_link_libraries(pe8bf_dump PRIVATE pe8bf)
@@ -44,3 +44,6 @@ target_link_directories(mini_missingdep PRIVATE ${CMAKE_BINARY_DIR}/stubs)
 target_link_libraries(mini_missingdep PRIVATE absent_dep)
 add_dependencies(mini_missingdep absent_dep)
 add_test(NAME runner COMMAND python -I ${CMAKE_SOURCE_DIR}/tests/test_runner.py ${CMAKE_BINARY_DIR})
+
+add_executable(pshost_check tests/pshost_check.c)
+target_link_libraries(pshost_check PRIVATE pe8bf)

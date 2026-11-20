@@ -22,8 +22,16 @@ typedef enum {
   PE8_R_HIDDEN,              /* helper filter flagged **Hidden** */
   PE8_R_NO_ENTRY,            /* entry point not found in exports */
   PE8_R_NO_RGB,              /* RGB mode not supported */
-  PE8_R_MISSING_DEP          /* imported DLL cannot be found */
+  PE8_R_MISSING_DEP,         /* imported DLL cannot be found */
+  /* --- dynamic probe results --- */
+  PE8_R_LOAD_FAILED,         /* LoadLibrary failed (detail = Windows error code) */
+  PE8_R_PROBE_CRASH,         /* plug-in crashed in the probe */
+  PE8_R_PROBE_TIMEOUT,       /* plug-in hung / waited for a window in the probe */
+  PE8_R_PROBE_ERROR,         /* Prepare returned an error (detail = code) */
+  PE8_R_UNSUPPORTED_CB       /* WARN: plug-in asked for host features we do not provide (detail = list) */
 } Pe8Reason;
+
+typedef enum { PE8_LANG_EN = 0, PE8_LANG_PL = 1 } Pe8Lang;
 
 typedef struct {
   char   *path;              /* UTF-8 path of the .8bf */
@@ -56,6 +64,17 @@ void pe8_analyze_file (const char *path_utf8, Pe8File *out);
 /* Windows only: verify that imported DLLs can be located (plug-in dir, system dirs, extra_dirs
  * separated by ';' e.g. the GIMP bin dir is NOT included on purpose). Marks items NO/MISSING_DEP. */
 void pe8_check_dependencies (Pe8File *f, const char *path_utf8);
+
+/* Dynamic probe (Windows): run `pshost_runner --mode probe` in a separate process for every item that
+ * passed the static checks; updates verdict/reason. timeout_ms applies per plug-in. */
+void pe8_probe_all (Pe8File *f, const char *runner_path_utf8, int timeout_ms);
+
+/* Messages (UTF-8). */
+void pe8_reason_text (Pe8Reason r, const char *detail, Pe8Lang lang, char *buf, size_t n);
+/* One-sentence verdict for the user, e.g. "Wtyczka »X« nie zostanie użyta: jest 32-bitowa ..." */
+void pe8_summary (const Pe8Plugin *p, Pe8Lang lang, char *buf, size_t n);
+/* Notice that "OK" only means the basic test passed. */
+const char *pe8_caveat (Pe8Lang lang);
 
 void pe8_free (Pe8File *f);
 
