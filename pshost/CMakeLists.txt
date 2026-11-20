@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 PSHost contributors
 cmake_minimum_required(VERSION 3.20)
-project(PSHost VERSION 0.8.0 LANGUAGES C)
+project(PSHost VERSION 0.8.1 LANGUAGES C)
 add_compile_definitions(PSHOST_VERSION="${PROJECT_VERSION}")
 set(CMAKE_C_STANDARD 11)
 find_package(PkgConfig REQUIRED)
@@ -41,7 +41,7 @@ add_test(NAME pe8bf COMMAND test_pe8bf)
 # --- runner (standalone, static) ---
 add_executable(pshost_runner src/runner/runner.c)
 target_compile_options(pshost_runner PRIVATE -Wall -Wextra)
-target_link_options(pshost_runner PRIVATE -municode -static)
+target_link_options(pshost_runner PRIVATE -municode -mwindows -static)   # GUI subsystem: no console window when started from GIMP
 
 # --- synthetic test filters (.8bf) ---
 enable_language(RC)

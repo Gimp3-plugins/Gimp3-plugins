@@ -1,7 +1,7 @@
-# Lista kontrolna testów ręcznych (PSHost 0.8.0)
+# Lista kontrolna testów ręcznych (PSHost 0.8.1)
 
 Legenda: **A** = pokryte też testem automatycznym · ✔ użytkownik = potwierdzone przez użytkownika w prawdziwym GIMP-ie podczas
-prac · ☐ = do sprawdzenia ręcznie. Przed testami: zainstaluj `PSHost-Setup-0.8.0.exe` (albo skopiuj pliki z `build\` do
+prac · ☐ = do sprawdzenia ręcznie. Przed testami: zainstaluj `PSHost-Setup-0.8.1.exe` (albo skopiuj pliki z `build\` do
 `%APPDATA%\GIMP\3.2\plug-ins\pshost\`) i uruchom GIMP-a. Wtyczki testowe: `C:\Program Files\Adobe\Photoshop Elements 2026\Plug-Ins\Zetmar`,
 `C:\Program Files\Google\Nik Collection`, `C:\Program Files (x86)\Topaz Labs`.
 

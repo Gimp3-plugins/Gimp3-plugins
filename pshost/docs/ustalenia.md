@@ -1,4 +1,4 @@
-# Ustalenia (PSHost) — stan: Etap 9 (wersja 0.8.0)
+# Ustalenia (PSHost) — stan: Etap 9 (wersja 0.8.1)
 
 ## PODSUMOWANIE KOŃCOWE
 
@@ -114,7 +114,7 @@ okien GPU; brak przycisku przerwania zawieszonego okna filtra (limit 30 min); �
 
 ## Etap 8 — instalator (Inno Setup 6.7.3; zweryfikowane testami cichymi)
 - **Wybór narzędzia:** Inno Setup (już zainstalowany na tej maszynie, natywne wsparcie PL, instalacja per-user bez UAC, prosty skrypt Pascala do wykrywania GIMP-a); WiX odrzucony jako cięższy bez zysku dla jednego pakietu.
-- **Jeden plik:** `installer/output/PSHost-Setup-0.8.0.exe` (≈2,1 MB), metadane wersji w nagłówku (VersionInfo), `PrivilegesRequired=lowest` (HKCU, bez administratora), x64. Budowa: `cmake --build build --target installer` albo `ISCC /DAppVersion=0.8.0 /DBuildDir=..\build installer\PSHost.iss`.
+- **Jeden plik:** `installer/output/PSHost-Setup-0.8.1.exe` (≈2,1 MB), metadane wersji w nagłówku (VersionInfo), `PrivilegesRequired=lowest` (HKCU, bez administratora), x64. Budowa: `cmake --build build --target installer` albo `ISCC /DAppVersion=0.8.1 /DBuildDir=..\build installer\PSHost.iss`.
 - **Zawartość:** `pshost.exe`, `pshost_runner.exe` (także tryb restartu — osobnego `pshost_restart.exe` nie ma, bo to ten sam runner), `locale\{pl,en}\LC_MESSAGES\pshost.mo`. **Żadnych wtyczek Photoshop ani nagłówków Adobe.** Katalog docelowy: `%APPDATA%\GIMP\<wersja>\plug-ins\pshost\` — wersja (`3.2`) wyliczona z `bin\gimp-3.x.exe` wykrytego GIMP-a. Deinstalator leży poza folderem wtyczek GIMP-a (`%LOCALAPPDATA%\PSHost`).
 - **Wykrywanie GIMP-a:** wpisy Uninstall (HKCU, HKLM 64/32: nazwa „GIMP 3…”, `InstallLocation`, weryfikacja `bin\gimp-3.*.exe`) + typowe ścieżki; przetestowane na prawdziwym rejestrze (3.2, `...\Programs\GIMP 3`). **GIMP 2** jest wykrywany osobno: gdy nie ma GIMP-a 3, strona instalatora wyjaśnia, że wtyczka działa tylko z GIMP-em 3. Brak GIMP-a 3 → strona z wyborem folderu ręcznie (z walidacją) i komunikat PL/EN; w trybie cichym — przerwanie z komunikatem. GIMP < 3.2 → ostrzeżenie (zbudowano i przetestowano z 3.2).
 - **GIMP uruchomiony:** instalator i deinstalator proszą o jego zamknięcie (Ponów/Anuluj) — działa też w trybie cichym (odmowa zamiast cichego nadpisywania).

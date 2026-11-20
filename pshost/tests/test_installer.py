@@ -10,7 +10,7 @@ import os, shutil, subprocess, sys, tempfile, time, winreg
 B = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ISCC = os.path.join(localappdata(), "Programs", "Inno Setup 6", "ISCC.exe")
-VER = "0.8.0"
+VER = "0.8.1"
 if not os.path.exists(ISCC):
     print("skip installer tests (Inno Setup 6 not found)"); sys.exit(0)
 

@@ -72,6 +72,12 @@ rc, out = runner(["--mode", "probe", "--plugin", os.path.join(B, "mini", "mini_i
 check(rc == 4, "missing entry point -> exit 4")
 
 
+# --- the host must be a GUI-subsystem program: a console subsystem would pop up a black window for every filter ---
+def pe_subsystem(path):
+    d = open(path, "rb").read(4096); pe = struct.unpack_from("<I", d, 0x3C)[0]
+    return struct.unpack_from("<H", d, pe + 24 + 68)[0]            # IMAGE_OPTIONAL_HEADER64.Subsystem
+check(pe_subsystem(RUN) == 2, "pshost_runner.exe is a GUI-subsystem program (no console window; 2 = WINDOWS_GUI)")
+
 # --- pshost_check: combined static + dynamic verdicts, PL/EN messages ---
 def run_check(lang, variant):
     plug = os.path.join(B, "mini", f"mini_{variant}.8bf")
