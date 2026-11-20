@@ -193,5 +193,40 @@ centre_gain = means[True][1] / means[False][1]
 check("lensfun vignetting brightens corners", corner_gain > centre_gain * 1.03,
       "corner x%.3f centre x%.3f" % (corner_gain, centre_gain))
 
+# Step 7: Apple HDR gain map (iPhone 13 Pro sample, MIT, johncf/apple-hdr-heic)
+apple = os.path.abspath(os.path.join("samples", "heic-apple", "apple-hdr-sample.heic"))
+if os.path.exists(apple):
+    hp = pdb.lookup_procedure("file-raw-heic-heif-load")
+    imgs = {}
+    for mode in ("linear", "builtin"):
+        cfg = hp.create_config()
+        cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+        cfg.set_property("file", Gio.File.new_for_path(apple))
+        cfg.set_property("hdr-mode", mode)
+        r = hp.run(cfg)
+        imgs[mode] = r.index(1) if r.index(0) == Gimp.PDBStatusType.SUCCESS else None
+    hdr, sdr = imgs["linear"], imgs["builtin"]
+    check("Apple HDR loads as float linear",
+          hdr is not None and hdr.get_precision() == Gimp.Precision.FLOAT_LINEAR,
+          str(hdr.get_precision()) if hdr else pdb.get_last_error())
+    if hdr and sdr:
+        def px(img):
+            buf = img.get_layers()[0].get_buffer()
+            e = buf.get_extent()
+            data = buf.get(Gegl.Rectangle.new(0, 0, e.width, e.height), 1.0,
+                           "RGB float", Gegl.AbyssPolicy.CLAMP)
+            n = len(data) // 12
+            return struct.unpack("<%df" % (n * 3), data[: n * 12])
+        a, b = px(hdr), px(sdr)
+        ratios = [a[i] / b[i] for i in range(1, len(a), 3 * 7) if b[i] > 0.02]
+        mx = max(a)
+        check("Apple HDR exceeds SDR white", mx > 1.2, "max %.2f" % mx)
+        check("Apple HDR gain within [1, headroom]",
+              min(ratios) > 0.97 and max(ratios) < 8.1 and max(ratios) > 1.3,
+              "gain %.2f .. %.2f" % (min(ratios), max(ratios)))
+    for im in imgs.values():
+        if im:
+            im.delete()
+
 with open(os.path.join("build", "test-out", "regressions.txt"), "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")

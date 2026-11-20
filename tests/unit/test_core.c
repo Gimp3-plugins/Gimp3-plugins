@@ -436,6 +436,98 @@ test_lens (void)
   g_free (path);
 }
 
+
+/* --- Apple HDR maker note ---------------------------------------------- */
+
+static GByteArray *
+make_note (gboolean be, gint32 n33, gint32 d33, gint32 n48, gint32 d48)
+{
+  GByteArray *a = g_byte_array_new ();
+  guint8      hdr[14] = { 'A','p','p','l','e',' ','i','O','S',0, 0,1, 0,0 };
+  guint8      b[12];
+  gint        i;
+
+#define PUT16(p, v) do { if (be) { (p)[0] = (v) >> 8; (p)[1] = (v) & 255; } \
+                         else    { (p)[1] = (v) >> 8; (p)[0] = (v) & 255; } } while (0)
+#define PUT32(p, v) do { guint32 _v = (guint32) (v); \
+                         if (be) { (p)[0] = _v >> 24; (p)[1] = _v >> 16; (p)[2] = _v >> 8; (p)[3] = _v; } \
+                         else    { (p)[3] = _v >> 24; (p)[2] = _v >> 16; (p)[1] = _v >> 8; (p)[0] = _v; } } while (0)
+
+  hdr[12] = hdr[13] = be ? 'M' : 'I';
+  g_byte_array_append (a, hdr, 14);
+  PUT16 (b, 2);
+  g_byte_array_append (a, b, 2);
+
+  /* entries: 0x0021 SRATIONAL at 40, 0x0030 SRATIONAL at 48 */
+  for (i = 0; i < 2; i++)
+    {
+      PUT16 (b, i == 0 ? 0x0021 : 0x0030);
+      PUT16 (b + 2, 10);
+      PUT32 (b + 4, 1);
+      PUT32 (b + 8, 40 + i * 8);
+      g_byte_array_append (a, b, 12);
+    }
+  PUT32 (b, n33); PUT32 (b + 4, d33);
+  g_byte_array_append (a, b, 8);
+  PUT32 (b, n48); PUT32 (b + 4, d48);
+  g_byte_array_append (a, b, 8);
+#undef PUT16
+#undef PUT32
+  return a;
+}
+
+static void
+test_apple_hdr (void)
+{
+  GByteArray *note;
+  gdouble     m33 = 0, m48 = 0;
+  GRand      *r = g_rand_new_with_seed (5);
+  gint        i;
+
+  /* Apple's formula */
+  g_assert_cmpfloat_with_epsilon (rawheic_apple_headroom (0.9, 0.005), pow (2.0, 1.7), 1e-9);
+  g_assert_cmpfloat_with_epsilon (rawheic_apple_headroom (0.9, 1.0),   pow (2.0, 1.5), 1e-9);
+  g_assert_cmpfloat_with_epsilon (rawheic_apple_headroom (1.2, 0.0),   8.0, 1e-9);
+  g_assert_cmpfloat (rawheic_apple_headroom (2.0, 50.0), ==, 1.0);   /* negative stops */
+
+  for (i = 0; i < 2; i++)
+    {
+      note = make_note (i == 0, 9, 10, 5, 1000);
+      g_assert_true (rawheic_apple_hdr_tags (note->data, note->len, &m33, &m48));
+      g_assert_cmpfloat_with_epsilon (m33, 0.9, 1e-9);
+      g_assert_cmpfloat_with_epsilon (m48, 0.005, 1e-9);
+
+      /* truncated: the value offsets point outside */
+      g_assert_false (rawheic_apple_hdr_tags (note->data, 40, &m33, &m48));
+      g_byte_array_free (note, TRUE);
+    }
+
+  /* zero denominator / wrong signature */
+  note = make_note (TRUE, 9, 0, 5, 1000);
+  g_assert_false (rawheic_apple_hdr_tags (note->data, note->len, &m33, &m48));
+  note->data[0] = 'X';
+  g_assert_false (rawheic_apple_hdr_tags (note->data, note->len, &m33, &m48));
+  g_byte_array_free (note, TRUE);
+  g_assert_false (rawheic_apple_hdr_tags (NULL, 0, &m33, &m48));
+
+  /* random garbage after a valid signature must never crash */
+  for (i = 0; i < 2000; i++)
+    {
+      gsize   len = g_rand_int_range (r, 0, 200);
+      guint8 *buf = g_malloc (len + 1);
+      gsize   k;
+
+      for (k = 0; k < len; k++)
+        buf[k] = (guint8) g_rand_int (r);
+      if (len >= 14)
+        memcpy (buf, "Apple iOS\0\0\1MM", 14);
+      rawheic_apple_hdr_tags (buf, len, &m33, &m48);
+      g_free (buf);
+    }
+
+  g_rand_free (r);
+}
+
 /* --- batch session -------------------------------------------------------- */
 
 static void
@@ -568,6 +660,7 @@ main (int argc, char **argv)
   g_test_add_func ("/loupe/region-nef",         test_region_nef);
   g_test_add_func ("/loupe/region-rotated-auto", test_region_rotated_auto_wb);
   g_test_add_func ("/lens/lensfun",             test_lens);
+  g_test_add_func ("/heif/apple-hdr-makernote", test_apple_hdr);
 
   return g_test_run ();
 }

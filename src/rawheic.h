@@ -268,6 +268,14 @@ gboolean          rawheic_write_layer          (GimpDrawable         *drawable,
                                                 gboolean              undoable,
                                                 GError              **error);
 
+/* heif-load.c (Apple HDR gain maps) */
+gboolean          rawheic_apple_hdr_tags       (const guint8         *note,
+                                                gsize                 len,
+                                                gdouble              *maker33,
+                                                gdouble              *maker48);
+gdouble           rawheic_apple_headroom       (gdouble               maker33,
+                                                gdouble               maker48);
+
 /* util.c */
 gchar           * rawheic_file_path            (GFile                *file);
 gboolean          rawheic_shift_pressed        (void);
