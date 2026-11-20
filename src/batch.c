@@ -23,7 +23,7 @@ static const gchar *raw_patterns[] =
 {
   "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "dng", "raf", "orf",
   "rw2", "rwl", "raw", "pef", "srw", "3fr", "fff", "iiq", "erf", "mrw", "kdc",
-  "dcr", "mef", "mos", "x3f", "gpr", NULL
+  "dcr", "mef", "mos", NULL
 };
 
 GimpProcedure *

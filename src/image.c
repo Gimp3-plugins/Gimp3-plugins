@@ -39,6 +39,7 @@ static gboolean
 write_pixels (GimpDrawable      *drawable,
               const RawImage    *img,
               ColorSpace         cs,
+              gboolean           undoable,
               GError           **error)
 {
   GimpColorProfile *src_profile = rawheic_profile_new (cs, TRUE);
@@ -56,7 +57,9 @@ write_pixels (GimpDrawable      *drawable,
   if (! src_format)
     return FALSE;
 
-  buffer = gimp_drawable_get_buffer (drawable);
+  /* the shadow buffer + merge is the undoable way to replace pixels */
+  buffer = undoable ? gimp_drawable_get_shadow_buffer (drawable)
+                    : gimp_drawable_get_buffer (drawable);
 
   /* in strips so that progress can move on very large images */
   rows = MAX (1, (gint) (16 * 1024 * 1024 / ((gsize) img->width * 12)));
@@ -72,6 +75,12 @@ write_pixels (GimpDrawable      *drawable,
     }
 
   g_object_unref (buffer);
+
+  if (undoable)
+    {
+      gimp_drawable_merge_shadow (drawable, TRUE);
+      gimp_drawable_update (drawable, 0, 0, img->width, img->height);
+    }
 
   return TRUE;
 }
@@ -109,7 +118,7 @@ rawheic_image_from_raw (RawImage           *img,
   gimp_image_insert_layer (image, layer, NULL, 0);
   rawheic_mark_layer (layer);
 
-  if (! write_pixels (GIMP_DRAWABLE (layer), img, s->color_space, error))
+  if (! write_pixels (GIMP_DRAWABLE (layer), img, s->color_space, FALSE, error))
     {
       gimp_image_delete (image);
       return NULL;
@@ -148,7 +157,8 @@ gboolean
 rawheic_write_layer (GimpDrawable   *drawable,
                      const RawImage *img,
                      ColorSpace      cs,
+                     gboolean        undoable,
                      GError        **error)
 {
-  return write_pixels (drawable, img, cs, error);
+  return write_pixels (drawable, img, cs, undoable, error);
 }

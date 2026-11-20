@@ -25,6 +25,7 @@ typedef struct
 
   RawSession          *session;
   gboolean             session_failed;
+  gchar               *open_error;   /* why the session could not open */
   gboolean             busy;
   gboolean             pending;
   gboolean             closing;
@@ -74,7 +75,15 @@ render_thread (GTask        *task,
     {
       ui->session = raw_session_open (ui->path, &error);
       if (! ui->session)
-        ui->session_failed = TRUE;
+        {
+          ui->session_failed = TRUE;
+          ui->open_error = g_strdup (error ? error->message : "");
+        }
+    }
+  else if (ui->session_failed && ! error)
+    {
+      /* keep showing why the preview is unavailable */
+      job->error = g_strdup (ui->open_error);
     }
 
   if (ui->session)
@@ -383,6 +392,7 @@ raw_dialog_run (GimpProcedure       *procedure,
   raw_session_free (ui.session);
   g_free (ui.rgb);
   g_free (ui.path);
+  g_free (ui.open_error);
 
   return run;
 }

@@ -204,10 +204,13 @@ GimpProcedure   * heif_load_procedure_new      (GimpPlugIn           *plug_in,
 gboolean          rawheic_write_layer          (GimpDrawable         *drawable,
                                                 const RawImage       *img,
                                                 ColorSpace            cs,
+                                                gboolean              undoable,
                                                 GError              **error);
 
 /* util.c */
 gchar           * rawheic_file_path            (GFile                *file);
 gboolean          rawheic_shift_pressed        (void);
+gboolean          rawheic_path_is_remote       (const gchar          *path);
+gboolean          rawheic_confirm_remote       (const gchar          *path);
 
 #endif

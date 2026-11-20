@@ -138,10 +138,12 @@ redevelop_run (GimpProcedure        *procedure,
   RawImage     *img;
   GimpLayer    *target, *layer;
   GError       *error = NULL;
-  gchar        *text, *path = NULL, *name;
+  gchar        *text, *path = NULL;
+  GimpChannel  *saved_selection = NULL;
+  gboolean      replace = FALSE, ok;
   gconstpointer data;
   guint32       size = 0;
-  gint          mode, position = 0;
+  gint          mode;
   Prog          prog = { 0.0 };
 
   parasite = gimp_image_get_parasite (image, SOURCE_PARASITE);
@@ -168,6 +170,25 @@ redevelop_run (GimpProcedure        *procedure,
                                                GIMP_PDB_EXECUTION_ERROR, error);
     }
   g_free (text);
+
+  /* The path comes from the image file.  Touching a network path makes
+   * Windows authenticate to that server, so never do it unasked.
+   */
+  if (rawheic_path_is_remote (path) &&
+      (run_mode != GIMP_RUN_INTERACTIVE || ! rawheic_confirm_remote (path)))
+    {
+      if (run_mode == GIMP_RUN_INTERACTIVE)
+        {
+          g_free (path);
+          return gimp_procedure_new_return_values (procedure, GIMP_PDB_CANCEL, NULL);
+        }
+      g_set_error (&error, G_FILE_ERROR, G_FILE_ERROR_PERM,
+                   _("The original RAW file is on a network location (%s); "
+                     "it is only opened after confirmation in interactive mode."), path);
+      g_free (path);
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_EXECUTION_ERROR, error);
+    }
 
   if (! g_file_test (path, G_FILE_TEST_IS_REGULAR))
     {
@@ -219,39 +240,54 @@ redevelop_run (GimpProcedure        *procedure,
 
   if (mode == REDEV_REPLACE && target)
     {
-      GimpItem *parent = gimp_item_get_parent (GIMP_ITEM (target));
+      /* Replace the pixels of the existing layer, so that its effects
+       * (non-destructive filters), mask, mode, opacity, position and name
+       * stay as the user left them.
+       */
+      gboolean was_canvas =
+        gimp_drawable_get_width (GIMP_DRAWABLE (target))  == gimp_image_get_width (image) &&
+        gimp_drawable_get_height (GIMP_DRAWABLE (target)) == gimp_image_get_height (image);
 
-      name     = gimp_item_get_name (GIMP_ITEM (target));
-      position = gimp_image_get_item_position (image, GIMP_ITEM (target));
+      if (gimp_drawable_get_width (GIMP_DRAWABLE (target))  != img->width ||
+          gimp_drawable_get_height (GIMP_DRAWABLE (target)) != img->height)
+        {
+          gimp_layer_resize (target, img->width, img->height, 0, 0);
+          if (was_canvas)
+            gimp_image_resize (image, img->width, img->height, 0, 0);
+        }
 
-      layer = gimp_layer_new (image, name, img->width, img->height,
-                              GIMP_RGB_IMAGE, 100.0,
-                              gimp_image_get_default_new_layer_mode (image));
-      gimp_image_insert_layer (image, layer, GIMP_LAYER (parent), position);
-
-      /* the RAW layer defined the canvas: follow a size change */
-      if (gimp_drawable_get_width (GIMP_DRAWABLE (target))  == gimp_image_get_width (image) &&
-          gimp_drawable_get_height (GIMP_DRAWABLE (target)) == gimp_image_get_height (image) &&
-          (img->width  != gimp_image_get_width (image) ||
-           img->height != gimp_image_get_height (image)))
-        gimp_image_resize (image, img->width, img->height, 0, 0);
-
-      gimp_image_remove_layer (image, target);
+      layer   = target;
+      replace = TRUE;
     }
   else
     {
       gchar *base = g_path_get_basename (path);
+      gchar *name = g_strdup_printf (_("%s (developed again)"), base);
 
-      name  = g_strdup_printf (_("%s (developed again)"), base);
       layer = gimp_layer_new (image, name, img->width, img->height,
                               GIMP_RGB_IMAGE, 100.0,
                               gimp_image_get_default_new_layer_mode (image));
       gimp_image_insert_layer (image, layer, NULL, 0);
+      g_free (name);
       g_free (base);
     }
-  g_free (name);
 
-  if (! rawheic_write_layer (GIMP_DRAWABLE (layer), img, s.color_space, &error))
+  /* merging the shadow buffer honours the selection: lift it meanwhile */
+  if (replace && ! gimp_selection_is_empty (image))
+    {
+      saved_selection = gimp_selection_save (image);
+      gimp_selection_none (image);
+    }
+
+  ok = rawheic_write_layer (GIMP_DRAWABLE (layer), img, s.color_space, replace, &error);
+
+  if (saved_selection)
+    {
+      gimp_image_select_item (image, GIMP_CHANNEL_OP_REPLACE, GIMP_ITEM (saved_selection));
+      gimp_image_remove_channel (image, saved_selection);
+    }
+
+  if (! ok)
     {
       gimp_image_undo_group_end (image);
       raw_image_free (img);

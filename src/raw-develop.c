@@ -287,6 +287,33 @@ remove_hot_pixels (libraw_data_t *lr)
 
 /* --- public -------------------------------------------------------------- */
 
+/* The camera's default crop (DNG DefaultCrop, CR3, ...) in visible-area
+ * coordinates, as LibRaw's cropbox expects.  Inset crops are relative to
+ * the full raw frame.
+ */
+static gboolean
+camera_crop_box (libraw_data_t *lr,
+                 guint          box[4])
+{
+  libraw_raw_inset_crop_t *c  = &lr->sizes.raw_inset_crops[0];
+  libraw_image_sizes_t    *sz = &lr->sizes;
+
+  if (c->cwidth > 16 && c->cheight > 16 &&
+      c->cleft >= sz->left_margin && c->ctop >= sz->top_margin &&
+      c->cleft - sz->left_margin + c->cwidth  <= sz->width &&
+      c->ctop  - sz->top_margin  + c->cheight <= sz->height &&
+      (c->cwidth < sz->width || c->cheight < sz->height))
+    {
+      box[0] = c->cleft - sz->left_margin;
+      box[1] = c->ctop  - sz->top_margin;
+      box[2] = c->cwidth;
+      box[3] = c->cheight;
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
 static void
 apply_settings (libraw_data_t     *lr,
                 const RawSettings *s,
@@ -332,6 +359,9 @@ apply_settings (libraw_data_t     *lr,
       p->exp_preser = (float) s->exposure_preserve;
     }
 
+  if (s->camera_crop)
+    camera_crop_box (lr, p->cropbox);
+
   p->use_camera_wb = 0;
   p->use_auto_wb   = 0;
   memset (p->user_mul, 0, sizeof (p->user_mul));
@@ -353,29 +383,17 @@ apply_settings (libraw_data_t     *lr,
       break;
 
     case WB_SPOT:
+      /* LibRaw applies the cropbox first (it shrinks sizes.width/height),
+       * so the grey box is relative to the cropped image, full resolution.
+       */
       p->use_auto_wb = 1;
       spot_to_raw (s->spot, s->auto_rotate ? lr->sizes.flip : 0,
-                   lr->sizes.width, lr->sizes.height, p->greybox);
+                   p->cropbox[2] != 0xffffffff ? (gint) p->cropbox[2] : lr->sizes.width,
+                   p->cropbox[3] != 0xffffffff ? (gint) p->cropbox[3] : lr->sizes.height,
+                   p->greybox);
       break;
     }
 
-  if (s->camera_crop)
-    {
-      libraw_raw_inset_crop_t *c = &lr->sizes.raw_inset_crops[0];
-
-      /* inset crops are relative to the full raw frame */
-      if (c->cwidth > 16 && c->cheight > 16 &&
-          c->cleft >= lr->sizes.left_margin && c->ctop >= lr->sizes.top_margin &&
-          c->cleft - lr->sizes.left_margin + c->cwidth  <= lr->sizes.width &&
-          c->ctop  - lr->sizes.top_margin  + c->cheight <= lr->sizes.height &&
-          (c->cwidth < lr->sizes.width || c->cheight < lr->sizes.height))
-        {
-          p->cropbox[0] = c->cleft - lr->sizes.left_margin;
-          p->cropbox[1] = c->ctop  - lr->sizes.top_margin;
-          p->cropbox[2] = c->cwidth;
-          p->cropbox[3] = c->cheight;
-        }
-    }
 }
 
 static gfloat *
@@ -434,6 +452,8 @@ struct _RawSession
   gchar         *path;
   ProgressCtx    ctx;
   gboolean       hot_done;
+  gpointer       raw_backup;     /* raw data before hot-pixel removal */
+  gsize          raw_backup_len;
 };
 
 RawSession *
@@ -507,10 +527,21 @@ raw_session_develop (RawSession         *ses,
   ses->ctx.data      = progress_data;
   ses->ctx.cancelled = FALSE;
 
-  if (s->hot_pixels && ! ses->hot_done)
+  /* hot-pixel removal edits the raw data in place: keep a copy so that
+   * switching the option off in the preview restores the original
+   */
+  if (s->hot_pixels && ! ses->hot_done && lr->rawdata.raw_image)
     {
+      ses->raw_backup_len = (gsize) lr->sizes.raw_pitch * lr->sizes.raw_height;
+      if (! ses->raw_backup)
+        ses->raw_backup = g_memdup2 (lr->rawdata.raw_image, ses->raw_backup_len);
       remove_hot_pixels (lr);
       ses->hot_done = TRUE;
+    }
+  else if (! s->hot_pixels && ses->hot_done && ses->raw_backup)
+    {
+      memcpy (lr->rawdata.raw_image, ses->raw_backup, ses->raw_backup_len);
+      ses->hot_done = FALSE;
     }
 
   apply_settings (lr, s, max_size > 0 && max_size <= 2048);
@@ -580,6 +611,7 @@ raw_session_free (RawSession *ses)
     {
       if (ses->lr)
         libraw_close (ses->lr);
+      g_free (ses->raw_backup);
       g_free (ses->path);
       g_free (ses);
     }
@@ -638,13 +670,16 @@ raw_probe (const gchar  *path,
   else if (check_sizes (lr, path, error))
     {
       gboolean swap = lr->sizes.flip == 5 || lr->sizes.flip == 6;
+      guint    box[4] = { 0, 0, lr->sizes.width, lr->sizes.height };
+
+      camera_crop_box (lr, box);
 
       if (camera)
         *camera = g_strdup_printf ("%s %s", lr->idata.make, lr->idata.model);
       if (width)
-        *width = swap ? lr->sizes.height : lr->sizes.width;
+        *width = swap ? box[3] : box[2];
       if (height)
-        *height = swap ? lr->sizes.width : lr->sizes.height;
+        *height = swap ? box[2] : box[3];
       ok = TRUE;
     }
 
@@ -675,9 +710,11 @@ raw_extract_thumbnail (const gchar  *path,
   if (ret == LIBRAW_SUCCESS && check_sizes (lr, path, error))
     {
       gboolean swap = lr->sizes.flip == 5 || lr->sizes.flip == 6;
+      guint    box[4] = { 0, 0, lr->sizes.width, lr->sizes.height };
 
-      *out_width  = swap ? lr->sizes.height : lr->sizes.width;
-      *out_height = swap ? lr->sizes.width  : lr->sizes.height;
+      camera_crop_box (lr, box);
+      *out_width  = swap ? box[3] : box[2];
+      *out_height = swap ? box[2] : box[3];
       *flip       = lr->sizes.flip;
 
       ret = libraw_unpack_thumb (lr);

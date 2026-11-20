@@ -27,7 +27,9 @@ GIMP używa naraz tylko jednego importera RAW. Wtyczka przejmuje tę rolę autom
 
 ## Obsługiwane formaty
 
-**RAW (przez LibRaw, ok. 1250 modeli aparatów):** CR2, CR3, CRW (Canon), NEF, NRW (Nikon), ARW, SRF, SR2 (Sony), DNG (także z telefonów, Apple ProRAW, linear DNG), RAF (Fujifilm, także X-Trans), ORF (Olympus / OM System), RW2 (Panasonic), RWL (Leica), PEF (Pentax), SRW (Samsung), 3FR, FFF (Hasselblad), IIQ, CAP (Phase One), ERF (Epson), MRW, MDC (Minolta), KDC, DCR (Kodak), MEF (Mamiya), MOS (Leaf), X3F (Sigma), GPR (GoPro), RAW, RWZ i inne, które otwiera LibRaw.
+**RAW (przez LibRaw, ok. 1250 modeli aparatów):** CR2, CR3, CRW (Canon), NEF, NRW (Nikon), ARW, SRF, SR2 (Sony), DNG (także z telefonów, Apple ProRAW, linear DNG), RAF (Fujifilm, także X-Trans), ORF (Olympus / OM System), RW2 (Panasonic), RWL (Leica), PEF (Pentax), SRW (Samsung), 3FR, FFF (Hasselblad), IIQ, CAP (Phase One), ERF (Epson), MRW, MDC (Minolta), KDC, DCR (Kodak), MEF (Mamiya), MOS (Leaf), RAW, RWZ i inne, które otwiera LibRaw.
+
+Nieobsługiwane: **X3F** (Sigma) i **GPR** (GoPro), bo ta kompilacja LibRaw nie zawiera potrzebnych modułów. Aparaty Sigma fp i dp Quattro zapisujące DNG działają normalnie.
 
 **HEIC / HEIF / AVIF:** pliki z **HDR** (krzywe PQ i HLG) wtyczka dekoduje sama. Wszystkie pozostałe (zwykłe zdjęcia z iPhone'a, 8/10/12-bit, z kanałem alfa) przekazuje do **wbudowanego w GIMP modułu HEIF**, który robi to dobrze. Wtyczka nie dubluje jego kodu, tylko dodaje to, czego mu brakuje: HDR i szybkie miniatury w oknie Otwórz.
 

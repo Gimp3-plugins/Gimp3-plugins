@@ -12,7 +12,7 @@
 
 #define RAW_EXTENSIONS \
   "cr2,cr3,crw,nef,nrw,arw,srf,sr2,dng,raf,orf,rw2,rwl,raw,rwz,pef,srw," \
-  "3fr,fff,iiq,cap,erf,mrw,mdc,kdc,dcr,dc2,k25,kc2,mef,mos,x3f,gpr,"      \
+  "3fr,fff,iiq,cap,erf,mrw,mdc,kdc,dcr,dc2,k25,kc2,mef,mos,"      \
   "bay,mfw,ari,cs1,sti,ia,rdc,qtk,pxn"
 
 #define RAW_MIME_TYPES \
@@ -24,7 +24,7 @@
   "image/x-samsung-srw,image/x-hasselblad-3fr,image/x-hasselblad-fff," \
   "image/x-phaseone-iiq,image/x-epson-erf,image/x-minolta-mrw,"        \
   "image/x-kodak-kdc,image/x-kodak-dcr,image/x-mamiya-mef,"            \
-  "image/x-leaf-mos,image/x-sigma-x3f"
+  "image/x-leaf-mos"
 
 /* No magics on purpose: GIMP first matches *magic-less* procedures by
  * extension and only then tries magics.  Most RAW formats are TIFF
