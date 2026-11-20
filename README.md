@@ -126,3 +126,13 @@ proc.run(cfg)
 - **Font domyślny** pochodzi z kontekstu GIMP-a (`default_to_context`), bo w chwili rejestracji procedury nie można pobrać fontu po nazwie. Gdyby fontu nie było, wtyczka w czasie działania użyje „Sans-serif”.
 - **Po nieudanej operacji nic nie zostaje.** Gdy warstwa zdążyła powstać, a potem wystąpił błąd, wtyczka ją usuwa, a grupa cofania i kontekst zawsze się zamykają (`try/finally`).
 - **Obraz indeksowany (tryb B).** Jeśli wczytanie się nie powiedzie, komunikat podpowiada konwersję do RGB. Obraz w skali szarości działa bez konwersji (przetestowane).
+
+## Testy automatyczne i wydania (dla współtwórców)
+
+- **Testy przy każdym pushu** (GitHub Actions, `.github/workflows/testy.yml`): pyflakes i pytest dla wszystkich wtyczek, w dwóch wariantach LUT-ów (z numpy i w czystym Pythonie), z ffmpeg jako niezależną referencją. Testy w samym GIMP-ie (`tests/gimp_*.py`) uruchamia się ręcznie, bo wymagają zainstalowanego GIMP-a.
+- **Paczki wydań**: wypchnięcie tagu `<wtyczka>-v<wersja>` (np. `lut-cube-v1.1.0`) uruchamia `.github/workflows/wydanie.yml`, który buduje zip (dla `lut-cube` razem z numpy) i dołącza go do wydania na GitHubie.
+- **Ręcznie** ten sam zip zbudujesz poleceniem:
+  ```
+  python tools/build_dist.py lut-cube 1.1.0 --require-vendor
+  ```
+  Skrypt nigdy nie dołącza plików LUT (`.cube`, `.3dl`).

@@ -41,7 +41,15 @@ try {
             throw "Zła suma SHA-256 pliku $($p.File): $hash"
         }
         & $tar -xf $dest -C $work
-        if ($LASTEXITCODE -ne 0) { throw "Nie udało się rozpakować $($p.File)" }
+        if ($LASTEXITCODE -ne 0) {
+            # Starszy tar bez obsługi zstd: rozpakowanie przez zstd.exe, jeśli jest.
+            $zstd = Get-Command zstd -ErrorAction SilentlyContinue
+            if (-not $zstd) { throw "Nie udało się rozpakować $($p.File) (brak obsługi zstd)" }
+            $plain = $dest -replace '\.zst$', ''
+            & $zstd.Source -d -q -f $dest -o $plain
+            & $tar -xf $plain -C $work
+            if ($LASTEXITCODE -ne 0) { throw "Nie udało się rozpakować $($p.File)" }
+        }
     }
 
     if (Test-Path $vendor) { Remove-Item $vendor -Recurse -Force }

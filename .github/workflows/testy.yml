@@ -1,0 +1,35 @@
+# Testy bez GIMP-a przy każdym pushu i pull requeście:
+# pyflakes + pytest, raz z numpy (i ffmpeg jako referencją), raz w wariancie
+# „czysty Python” (LUT_CUBE_NO_NUMPY=1). Testy w samym GIMP-ie
+# (tests/gimp_*.py) uruchamia się ręcznie – opis w README wtyczek.
+name: Testy
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        wariant: [numpy, czysty-python]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: ffmpeg (referencja lut3d)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Zależności testów
+        run: python -m pip install --upgrade pip pytest pyflakes numpy scipy
+      - name: pyflakes
+        run: python -m pyflakes podpis-zdjecia/*.py meme-maker/*.py lut-cube/*.py tests/*.py tools/*.py
+      - name: pytest
+        env:
+          LUT_CUBE_NO_NUMPY: ${{ matrix.wariant == 'czysty-python' && '1' || '' }}
+        run: python -m pytest tests -q
