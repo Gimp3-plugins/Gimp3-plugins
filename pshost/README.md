@@ -45,7 +45,7 @@ the filter. Add only plug-ins from sources you trust. The separate process prote
 
 ## Install
 
-1. Download `PSHost-Setup-<version>.exe` and run it (no administrator rights needed). It finds GIMP 3 automatically
+1. Download `PSHost-Setup-<version>.exe` from the [latest release](https://github.com/zetmar-collab/Gimp3-plugins/releases/latest) (check the SHA-256 in the release notes) and run it (no administrator rights needed). It finds GIMP 3 automatically
    (or lets you pick its folder). If GIMP 2 is the only version found, the installer explains that PSHost needs GIMP 3.
 2. Close GIMP when asked. The installer does not add any Photoshop plug-ins.
 3. Start GIMP → **Filters → Photoshop → Manage plug-ins…** → **Add directory…**.
