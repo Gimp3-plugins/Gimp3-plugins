@@ -2,6 +2,8 @@
  *
  * Usage (all paths UTF-16 command line):
  *   pshost_runner --mode about|probe|run --plugin FILE --entry NAME [options]
+ *   pshost_runner --mode restart --pid N --exe FILE [--args STRING] [--wait-ms N] [--log FILE]
+ *       waits until process N (GIMP) has exited, then starts FILE (exit 124 if it did not exit in time)
  *   run options:  --width W --height H --in RGBA.raw --out RGBA.raw [--mask A8.raw]
  *                 [--params-in F] [--params-out F] [--ui 0|1] [--hwnd N]
  *                 [--fg r,g,b] [--bg r,g,b] [--timeout-ms N] [--log FILE]
@@ -25,6 +27,7 @@ typedef struct {
   char entry[256];
   int width, height, ui, timeout_ms;
   uintptr_t hwnd;
+  uintptr_t pid; const wchar_t *exe, *args; int wait_ms;
   uint8_t fg[3], bg[3];
 } Opts;
 static Opts O;
@@ -216,6 +219,27 @@ static void setup_record (void) {
   if (selmask) { f->haveMask = 1; f->autoMask = 1; f->maskRect = f->filterRect; }
 }
 
+/* Restart helper: wait for GIMP to exit (it was asked to close cleanly by the plug-in), then start it again. */
+static int do_restart (void) {
+  if (!O.exe || !O.pid) { logmsg ("ERROR usage: --pid N --exe FILE"); return 5; }
+  HANDLE h = OpenProcess (SYNCHRONIZE, FALSE, (DWORD) O.pid);
+  if (h) {
+    logmsg ("RESTART waiting for pid %lu", (unsigned long) O.pid);
+    DWORD w = WaitForSingleObject (h, O.wait_ms > 0 ? (DWORD) O.wait_ms : 120000);
+    CloseHandle (h);
+    if (w != WAIT_OBJECT_0) { logmsg ("RESTART_TIMEOUT the process did not exit (closing was cancelled?) - not restarting"); return 124; }
+  } else logmsg ("RESTART process %lu is already gone", (unsigned long) O.pid);
+  Sleep (1500);   /* let the old instance release its files and locks */
+  wchar_t cmd[4096];
+  swprintf (cmd, 4096, L"\"%ls\"%ls%ls", O.exe, O.args && *O.args ? L" " : L"", O.args ? O.args : L"");
+  STARTUPINFOW si; memset (&si, 0, sizeof si); si.cb = sizeof si;
+  PROCESS_INFORMATION pi; memset (&pi, 0, sizeof pi);
+  if (!CreateProcessW (NULL, cmd, NULL, NULL, FALSE, DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, NULL, NULL, &si, &pi)) { logmsg ("RESTART_FAILED win32=%lu", GetLastError ()); return 3; }
+  CloseHandle (pi.hThread); CloseHandle (pi.hProcess);
+  logmsg ("RESTART_LAUNCHED");
+  return 0;
+}
+
 static const char *selname[] = { "About", "Parameters", "Prepare", "Start", "Continue", "Finish" };
 static PSPluginMain entry_fn; static intptr_t plugin_data;
 
@@ -312,11 +336,14 @@ int wmain (int argc, wchar_t **argv) {
     else if (!wcscmp (a, L"--params-in")) O.params_in = v; else if (!wcscmp (a, L"--params-out")) O.params_out = v;
     else if (!wcscmp (a, L"--ui")) O.ui = _wtoi (v); else if (!wcscmp (a, L"--hwnd")) O.hwnd = (uintptr_t) _wtoi64 (v);
     else if (!wcscmp (a, L"--timeout-ms")) O.timeout_ms = _wtoi (v); else if (!wcscmp (a, L"--log")) O.log = v;
+    else if (!wcscmp (a, L"--pid")) O.pid = (uintptr_t) _wtoi64 (v); else if (!wcscmp (a, L"--exe")) O.exe = v; else if (!wcscmp (a, L"--args")) O.args = v;
+    else if (!wcscmp (a, L"--wait-ms")) O.wait_ms = _wtoi (v);
     else if (!wcscmp (a, L"--fg")) parse_rgb (v, O.fg); else if (!wcscmp (a, L"--bg")) parse_rgb (v, O.bg);
     else continue;
     i++;
   }
   if (O.log) logf_ = _wfopen (O.log, L"ab");
+  if (!wcscmp (O.mode, L"restart")) return do_restart ();
   if (!O.plugin || !O.entry[0]) { logmsg ("ERROR usage: --plugin FILE --entry NAME"); return 5; }
   SetUnhandledExceptionFilter (crash_filter);
   SetErrorMode (SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);

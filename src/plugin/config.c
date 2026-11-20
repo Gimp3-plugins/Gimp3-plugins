@@ -270,6 +270,16 @@ static const Tr table[] = {
   { "The filter reported an error (code %s).", "Filtr zgłosił błąd (kod %s)." },
   { "The filter process ended unexpectedly (code %u).", "Proces filtra zakończył się nieoczekiwanie (kod %u)." },
   { "Filter error", "Błąd filtra" },
+  { "Restart GIMP...", "Uruchom ponownie GIMP-a..." },
+  { "Restart GIMP", "Restart GIMP-a" },
+  { "To load the new plug-ins GIMP must be restarted. Restart now?", "Aby załadować nowe wtyczki, GIMP musi zostać uruchomiony ponownie. Uruchomić teraz?" },
+  { "Restart now", "Uruchom ponownie teraz" },
+  { "Later", "Później" },
+  { "Unsaved changes in: %s. GIMP will ask whether to save them before closing.", "Niezapisane zmiany w obrazach: %s. GIMP zapyta o ich zapisanie przed zamknięciem." },
+  { "The filter list changed. Restart GIMP to apply the changes.", "Lista filtrów się zmieniła. Uruchom ponownie GIMP-a, aby zastosować zmiany." },
+  { "Cannot restart GIMP automatically: %s. Close GIMP manually and start it again.", "Nie można automatycznie uruchomić GIMP-a ponownie: %s. Zamknij GIMP-a ręcznie i uruchom go ponownie." },
+  { "cannot find the GIMP process", "nie znaleziono procesu GIMP-a" },
+  { "GIMP does not offer a clean quit", "GIMP nie udostępnia czystego zamknięcia" },
 };
 const char *ps_tr (const char *en) {
   if (cur_lang == PE8_LANG_EN) return en;
