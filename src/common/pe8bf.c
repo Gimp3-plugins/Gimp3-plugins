@@ -365,6 +365,8 @@ const char *pe8_reason_key (Pe8Reason r) {
     case PE8_R_32BIT: return "32bit"; case PE8_R_WRONG_ARCH: return "wrong-arch"; case PE8_R_NO_PIPL: return "no-pipl";
     case PE8_R_NOT_FILTER: return "not-filter"; case PE8_R_HIDDEN: return "hidden"; case PE8_R_NO_ENTRY: return "no-entry";
     case PE8_R_NO_RGB: return "no-rgb"; case PE8_R_MISSING_DEP: return "missing-dep";
+    case PE8_R_LOAD_FAILED: return "load-failed"; case PE8_R_PROBE_CRASH: return "probe-crash"; case PE8_R_PROBE_TIMEOUT: return "probe-timeout";
+    case PE8_R_PROBE_ERROR: return "probe-error"; case PE8_R_UNSUPPORTED_CB: return "unsupported-callbacks";
   }
   return "?";
 }
