@@ -14,6 +14,9 @@ gi.require_version("Gegl", "0.4")
 from gi.repository import Gimp, Gegl, Gio
 
 results = []
+import sys  # noqa: E402
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")   # konsola cp1250
 
 
 def check(name, cond, info=""):
@@ -192,5 +195,47 @@ for label, dr in (("wiele warstw", [bg, l2]), ("grupa", [grp]), ("nic", [])):
           st == OK and len(img.get_layers()) == n + 1 and top.get_parent() is None
           and top.is_text_layer(), err)
 img.delete()
+
+# --- 11. Bez koloru (wywołanie ze skryptu) → biały, nie przezroczysty --------
+img, bg = new_image(400, 300)
+st, _ = run("python-fu-podpis-tekst", img, [bg], text="Bez koloru")
+r, g, b, a = img.get_layers()[0].get_color().get_rgba()
+check("11 brak koloru → biały, widoczny", st == OK and a > 0.99 and r > 0.99,
+      (r, g, b, a))
+img.delete()
+
+# --- 12. Szablony: zapis i wczytanie ----------------------------------------
+tpl_file = os.path.join(Gimp.directory(), "podpis-zdjecia", "szablony.json")
+backup = None
+if os.path.exists(tpl_file):
+    with open(tpl_file, "rb") as f:
+        backup = f.read()
+try:
+    img, bg = new_image(1200, 800)
+    st, _ = run("python-fu-podpis-tekst", img, [bg], text="© Szablon ż",
+                color=red, position="top-left", opacity=40.0,
+                save_template="Test szablonu")
+    check("12 zapis szablonu", st == OK and os.path.exists(tpl_file))
+    st, err = run("python-fu-podpis-tekst", img, [bg], text="inny",
+                  position="bottom-right", template="test SZABLONU")
+    top = img.get_layers()[0]
+    _, ox, oy = top.get_offsets()
+    check("12 wczytanie szablonu: tekst, kolor, pozycja, krycie",
+          st == OK and top.get_text() == "© Szablon ż"
+          and top.get_color().get_rgba()[0] > 0.99
+          and top.get_color().get_rgba()[1] < 0.01
+          and ox < 100 and oy < 100 and abs(top.get_opacity() - 40) < 0.01,
+          (err, top.get_text(), ox, oy))
+    st, err = run("python-fu-podpis-tekst", img, [bg], text="x", template="nie ma")
+    check("12 brak szablonu → czytelny błąd",
+          st == Gimp.PDBStatusType.EXECUTION_ERROR and "szablonu" in str(err), err)
+    img.delete()
+finally:
+    if backup is None:
+        if os.path.exists(tpl_file):
+            os.remove(tpl_file)
+    else:
+        with open(tpl_file, "wb") as f:
+            f.write(backup)
 
 print("WYNIK: %d/%d PASS" % (sum(results), len(results)), flush=True)

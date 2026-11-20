@@ -15,6 +15,8 @@ Funkcje obliczeniowe (pozycja, margines, rozmiary) są czystym Pythonem
 i nie wymagają GIMP-a – testy: tests/test_position.py.
 """
 
+import json
+import os
 import sys
 
 # ---------------------------------------------------------------------------
@@ -120,6 +122,65 @@ def fit_size(image_w, image_h, w, h, position, margin):
     return max(1, int(w * factor)), max(1, int(h * factor)), True
 
 
+def default_text(real_name):
+    """Domyślny podpis: „© Imię Nazwisko” z konta systemowego albo samo „©”."""
+    name = (real_name or "").strip()
+    if not name or name.lower() in ("unknown", "nieznany"):
+        return "©"
+    return "© " + name
+
+
+# --- szablony podpisów ---------------------------------------------------------
+
+# Ustawienia zapisywane w szablonie (nazwy argumentów procedur).
+TEMPLATE_KEYS = {
+    "text": ["text", "font", "size-mode", "font-size-percent", "font-size-px",
+             "color", "justify"],
+    "image": ["file", "scale-mode", "scale-percent"],
+}
+COMMON_TEMPLATE_KEYS = ["opacity", "position", "margin-percent", "margin",
+                        "layer-name"]
+
+
+def load_templates(path):
+    """{nazwa: {"kind": "text"/"image", "values": {...}}}; brak pliku = {}."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: v for k, v in data.items()
+            if isinstance(v, dict) and v.get("kind") in TEMPLATE_KEYS
+            and isinstance(v.get("values"), dict)}
+
+
+def save_template(path, name, kind, values):
+    """Dopisuje (albo nadpisuje) szablon i zapisuje plik atomowo."""
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Nazwa szablonu nie może być pusta.")
+    allowed = TEMPLATE_KEYS[kind] + COMMON_TEMPLATE_KEYS
+    templates = load_templates(path)
+    templates[name] = {"kind": kind,
+                       "values": {k: v for k, v in values.items() if k in allowed}}
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(templates, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
+def find_template(templates, name, kind):
+    """Szablon danego rodzaju po nazwie (bez względu na wielkość liter)."""
+    wanted = (name or "").strip().lower()
+    for key, tpl in templates.items():
+        if key.lower() == wanted and tpl["kind"] == kind:
+            return tpl["values"]
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Część GIMP-owa
 # ---------------------------------------------------------------------------
@@ -174,6 +235,55 @@ if HAVE_GIMP:
             0, 1000, 0, rw)
         procedure.add_string_argument(
             "layer-name", "Nazwa warstwy", "Nazwa nowej warstwy", "Podpis", rw)
+        procedure.add_string_argument(
+            "template", "Wczytaj szablon",
+            "Nazwa zapisanego szablonu; jego ustawienia zastępują te z okna "
+            "(puste = bez szablonu)", "", rw)
+        procedure.add_string_argument(
+            "save-template", "Zapisz jako szablon",
+            "Po udanym podpisie zapisz bieżące ustawienia pod tą nazwą "
+            "(puste = nie zapisuj)", "", rw)
+
+    # --- szablony: ustawienia <-> JSON -----------------------------------------
+
+    def _templates_path():
+        return os.path.join(Gimp.directory(), "podpis-zdjecia", "szablony.json")
+
+    def _config_values(config, kind):
+        """Ustawienia z config jako wartości JSON (font/kolor/plik po nazwie)."""
+        values = {}
+        for key in TEMPLATE_KEYS[kind] + COMMON_TEMPLATE_KEYS:
+            v = config.get_property(key)
+            if key == "font":
+                v = v.get_name() if v is not None else None
+            elif key == "color":
+                v = list(v.get_rgba()) if v is not None else None
+            elif key == "file":
+                v = v.get_path() if v is not None else None
+            if v is not None:
+                values[key] = v
+        return values
+
+    def _apply_values(config, values):
+        """Wpisuje wartości szablonu do config."""
+        for key, v in values.items():
+            if key == "font":
+                v = Gimp.Font.get_by_name(v)
+                if v is None:
+                    continue          # fontu nie ma – zostaje bieżący
+            elif key == "color":
+                color = Gegl.Color.new("white")
+                color.set_rgba(*v)
+                v = color
+            elif key == "file":
+                v = Gio.File.new_for_path(v)
+            config.set_property(key, v)
+
+    def _templates_label():
+        names = sorted(load_templates(_templates_path()))
+        if not names:
+            return "Brak zapisanych szablonów."
+        return "Zapisane szablony: " + ", ".join(names)
 
     def _common_setup(procedure, menu_label, blurb):
         procedure.set_image_types("*")
@@ -222,9 +332,12 @@ if HAVE_GIMP:
             raise PodpisError("Nie udało się utworzyć warstwy tekstowej.")
         image.insert_layer(layer, None, 0)
 
+        # GIMP 3.2 nie przekazuje domyślnej wartości argumentu-koloru (przychodzi
+        # kolor w pełni przezroczysty) – taki kolor traktujemy jak „nieustawiony”.
         color = config.get_property("color")
-        if color is not None:
-            layer.set_color(color)
+        if color is None or color.get_rgba()[3] == 0:
+            color = Gegl.Color.new("white")
+        layer.set_color(color)
         layer.set_antialias(True)
 
         justify = config.get_property("justify")
@@ -303,16 +416,31 @@ if HAVE_GIMP:
                                        _str_values("percent-width"), True)
             order = ["file", "scale-mode", "scale-percent"]
         order += ["opacity", "position", "margin-percent", "margin", "layer-name"]
+        dialog.get_label("templates-info", _templates_label(), False, False)
+        order = ["template", "templates-info"] + order + ["save-template"]
         dialog.fill(order)
         ok = dialog.run()
         dialog.destroy()
         return ok
 
     def _execute(procedure, run_mode, image, config, text_mode, title):
+        if image is None:
+            return _error(procedure, "Brak otwartego obrazu – otwórz zdjęcie "
+                                     "i spróbuj ponownie.")
         if run_mode == Gimp.RunMode.INTERACTIVE:
             if not _run_dialog(procedure, config, title, text_mode):
                 return procedure.new_return_values(Gimp.PDBStatusType.CANCEL,
                                                    None)
+
+        kind = "text" if text_mode else "image"
+        tpl_name = (config.get_property("template") or "").strip()
+        if tpl_name:
+            values = find_template(load_templates(_templates_path()), tpl_name, kind)
+            if values is None:
+                return _error(procedure, "Nie ma szablonu „%s” dla podpisu %s. %s"
+                              % (tpl_name, "tekstowego" if text_mode
+                                 else "z obrazu", _templates_label()))
+            _apply_values(config, values)
 
         warnings = []
         layer = None
@@ -342,6 +470,17 @@ if HAVE_GIMP:
             Gimp.context_pop()
 
         Gimp.displays_flush()
+        save_name = (config.get_property("save-template") or "").strip()
+        if save_name:
+            try:
+                save_template(_templates_path(), save_name, kind,
+                              _config_values(config, kind))
+                warnings.append("Zapisano szablon „%s”." % save_name)
+            except (OSError, ValueError) as e:
+                warnings.append("Nie udało się zapisać szablonu: %s" % e)
+        # Szablon działa jednorazowo – przy następnym otwarciu okna pola są puste.
+        config.set_property("template", "")
+        config.set_property("save-template", "")
         if warnings:
             Gimp.message("\n".join(warnings))
         return procedure.new_return_values(Gimp.PDBStatusType.SUCCESS, None)
@@ -371,7 +510,8 @@ if HAVE_GIMP:
                               "Dodaje podpis tekstowy jako nową, edytowalną "
                               "warstwę tekstową.")
                 procedure.add_string_argument(
-                    "text", "Tekst", "Treść podpisu", "© Marek Zettel", rw)
+                    "text", "Tekst", "Treść podpisu",
+                    default_text(GLib.get_real_name()), rw)
                 procedure.add_font_argument(
                     "font", "Font", "Font podpisu", False, None, True, rw)
                 procedure.add_choice_argument(
