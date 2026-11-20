@@ -1,15 +1,25 @@
-# Testy bez GIMP-a przy każdym pushu i pull requeście:
+# Testy wtyczek z folderu gimp-wtyczki/ (bez GIMP-a) przy zmianach w nim:
 # pyflakes + pytest, raz z numpy (i ffmpeg jako referencją), raz w wariancie
 # „czysty Python” (LUT_CUBE_NO_NUMPY=1). Testy w samym GIMP-ie
 # (tests/gimp_*.py) uruchamia się ręcznie – opis w README wtyczek.
-name: Testy
+name: gimp-wtyczki – testy
 
 on:
   push:
+    paths:
+      - "gimp-wtyczki/**"
+      - ".github/workflows/gimp-wtyczki-*.yml"
   pull_request:
+    paths:
+      - "gimp-wtyczki/**"
+      - ".github/workflows/gimp-wtyczki-*.yml"
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: gimp-wtyczki
 
 jobs:
   pytest:

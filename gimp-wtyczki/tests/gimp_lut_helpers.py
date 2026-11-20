@@ -3,7 +3,7 @@
 Wspólne dane dla testów wtyczki LUT uruchamianych w GIMP-ie
 (gimp_lut_integration.py, gimp_lut_ui.py).
 
-Testy uruchamiaj z folderu repozytorium (albo ustaw LUT_CUBE_REPO).
+Testy uruchamiaj z folderu gimp-wtyczki (albo ustaw LUT_CUBE_REPO).
 LUT-y: folder Luts/ w repo, jeśli jest (nie ma go w publicznym repo),
 inaczej kilka syntetycznych LUT-ów generowanych w katalogu tymczasowym.
 """
@@ -18,7 +18,7 @@ from gi.repository import Gimp, Gegl, Gio  # noqa: E402
 
 REPO = os.environ.get("LUT_CUBE_REPO") or os.getcwd()
 if not os.path.isdir(os.path.join(REPO, "lut-cube")):
-    raise SystemExit("Uruchom test z folderu repozytorium albo ustaw LUT_CUBE_REPO.")
+    raise SystemExit("Uruchom test z folderu gimp-wtyczki albo ustaw LUT_CUBE_REPO.")
 sys.path.insert(0, os.path.join(REPO, "lut-cube"))
 
 import library  # noqa: E402

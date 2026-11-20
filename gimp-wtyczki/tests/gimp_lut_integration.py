@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Test integracyjny wtyczki LUT w prawdziwym GIMP-ie (bez okna).
-Uruchom z folderu repozytorium:
+Uruchom z folderu gimp-wtyczki:
   gimp-console-3.2.exe -i --batch-interpreter python-fu-eval ^
       -b "exec(open(r'tests\\gimp_lut_integration.py', encoding='utf-8').read())" --quit
 Wymaga zainstalowanej wtyczki (install.ps1 -Plugin lut-cube).

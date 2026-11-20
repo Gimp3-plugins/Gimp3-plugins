@@ -10,7 +10,7 @@ Przetestowano na GIMP 3.2.6 (Windows 11).
 
 ## Instalacja (Windows)
 
-Z folderu repozytorium (albo rozpakowanej paczki):
+Z folderu gimp-wtyczki (albo rozpakowanej paczki):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -Plugin meme-maker

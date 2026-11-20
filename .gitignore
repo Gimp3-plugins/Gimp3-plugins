@@ -1,0 +1,5 @@
+# Komercyjne pliki LUT nigdy nie trafiają do repozytorium
+*.cube
+*.3dl
+Luts/
+__pycache__/

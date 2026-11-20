@@ -2,7 +2,7 @@
 """
 Test okna wtyczki LUT w procesie GIMP-a – okno budowane poza ekranem
 (Gtk.OffscreenWindow), akcje wywoływane tak jak przez przyciski/klawisze.
-Uruchom z folderu repozytorium:
+Uruchom z folderu gimp-wtyczki:
   gimp-console-3.2.exe -i --batch-interpreter python-fu-eval ^
       -b "exec(open(r'tests\\gimp_lut_ui.py', encoding='utf-8').read())" --quit
 

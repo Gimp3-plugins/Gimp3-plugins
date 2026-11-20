@@ -1,9 +1,9 @@
-# Paczka wydania po wypchnięciu tagu w postaci <wtyczka>-v<wersja>,
+# Paczka wydania wtyczki z gimp-wtyczki/ po wypchnięciu tagu <wtyczka>-v<wersja>,
 # np. lut-cube-v1.1.0, meme-maker-v1.1.0, podpis-zdjecia-v1.1.0.
 # Dla lut-cube dołączany jest numpy z MSYS2 (tools/fetch-numpy.ps1).
 # Paczka trafia do wydania GitHuba o tej samej nazwie co tag (tworzonego,
 # jeśli jeszcze nie istnieje).
-name: Wydanie
+name: gimp-wtyczki – wydanie
 
 on:
   push:
@@ -14,6 +14,10 @@ on:
 
 permissions:
   contents: write
+
+defaults:
+  run:
+    working-directory: gimp-wtyczki
 
 jobs:
   paczka:

@@ -10,7 +10,7 @@ Przetestowano na GIMP 3.2.6 (Windows 11).
 
 ## Instalacja (Windows)
 
-Z rozpakowanej paczki `lut-cube-vX.Y.Z.zip` (albo z folderu repozytorium):
+Z rozpakowanej paczki `lut-cube-vX.Y.Z.zip` (albo z folderu gimp-wtyczki):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -Plugin lut-cube
@@ -220,7 +220,7 @@ proc.run(cfg)
   ```
   python -m pytest tests/test_lut_cube.py
   ```
-- W GIMP-ie, bez okna (procedura, zaznaczenie, alfa, 16/32 bit, błędy, czas 24 Mpx). Wymaga zainstalowanej wtyczki. Uruchom z folderu repozytorium:
+- W GIMP-ie, bez okna (procedura, zaznaczenie, alfa, 16/32 bit, błędy, czas 24 Mpx). Wymaga zainstalowanej wtyczki. Uruchom z folderu gimp-wtyczki:
   ```
   "%LOCALAPPDATA%\Programs\GIMP 3\bin\gimp-console-3.2.exe" -i --batch-interpreter python-fu-eval -b "exec(open(r'tests/gimp_lut_integration.py', encoding='utf-8').read())" --quit
   ```
