@@ -21,10 +21,10 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gimp, GimpUi, Gtk, Gdk, GdkPixbuf, GLib, Gio, Pango  # noqa: E402
 import cairo  # noqa: E402
 
-import cube_parser  # noqa: E402
 import gimp_ops  # noqa: E402
 import library  # noqa: E402
 import lut_apply  # noqa: E402
+import lut_formats  # noqa: E402
 from cube_parser import CubeError  # noqa: E402
 
 THUMB_SIDE = 64
@@ -34,7 +34,10 @@ FILE_PREFIX = "file:"
 SPLIT_GRAB = 10          # px od linii podziału, w których „łapiemy” suwak
 
 PREVIEW_MODES = [("split", "Suwak przed/po"), ("side", "Obok siebie"),
-                 ("toggle", "Przełącznik przed/po")]
+                 ("toggle", "Przełącznik przed/po"),
+                 ("grid4", "Siatka LUT-ów 2×2"), ("grid9", "Siatka LUT-ów 3×3")]
+GRID_SIDE = 520          # dłuższy bok obrazu w kafelkach siatki porównawczej
+TONAL = [("shadows", "Cienie"), ("midtones", "Półtony"), ("highlights", "Światła")]
 INTERPOLATIONS = [("tetrahedral", "Tetraedralna (dokładniejsza)"),
                   ("trilinear", "Trójliniowa")]
 
@@ -198,16 +201,17 @@ class LutWindow:
 
         grid = Gtk.Grid(column_spacing=4, row_spacing=4, column_homogeneous=True)
         b = Gtk.Button(label="Dodaj pliki…")
-        b.set_tooltip_text("Kopiuje wybrane pliki .cube do biblioteki "
-                           "(możesz też przeciągnąć pliki na listę)")
+        b.set_tooltip_text("Kopiuje wybrane pliki LUT (.cube, .3dl, Hald .png) do "
+                           "biblioteki (możesz też przeciągnąć pliki na listę)")
         b.connect("clicked", self._on_add_files)
         grid.attach(b, 0, 0, 1, 1)
         b = Gtk.Button(label="Dodaj folder…")
-        b.set_tooltip_text("Dodaje wszystkie pliki .cube z folderu i podfolderów")
+        b.set_tooltip_text("Dodaje wszystkie pliki LUT z folderu i podfolderów")
         b.connect("clicked", self._on_add_folder)
         grid.attach(b, 1, 0, 1, 1)
-        b = Gtk.Button(label="Wczytaj plik .cube…")
-        b.set_tooltip_text("Nakłada dowolny plik .cube bez dodawania do biblioteki")
+        b = Gtk.Button(label="Wczytaj plik LUT…")
+        b.set_tooltip_text("Nakłada dowolny plik .cube, .3dl albo Hald .png bez "
+                           "dodawania do biblioteki")
         b.connect("clicked", self._on_load_file)
         grid.attach(b, 0, 1, 1, 1)
         self.add_temp_button = Gtk.Button(label="Dodaj do biblioteki")
@@ -216,9 +220,16 @@ class LutWindow:
         grid.attach(self.add_temp_button, 1, 1, 1, 1)
         box.pack_start(grid, False, False, 0)
 
+        row = Gtk.Box(spacing=4, homogeneous=True)
+        presets = Gtk.Button(label="Presety ▾")
+        presets.set_tooltip_text("Zapisane zestawy: LUT + siła + mieszanie + "
+                                 "zakres tonalny")
+        presets.connect("clicked", self._on_presets_button)
+        row.pack_start(presets, True, True, 0)
         more = Gtk.MenuButton(label="Więcej ▾")
         more.set_popup(self._build_menu(for_item=False))
-        box.pack_start(more, False, False, 0)
+        row.pack_start(more, True, True, 0)
+        box.pack_start(row, False, False, 0)
 
         self.lib_status = Gtk.Label(xalign=0)
         self.lib_status.set_line_wrap(True)
@@ -249,6 +260,9 @@ class LutWindow:
             item("Ustawienia…", self._on_settings)
             item("Import startowy…", lambda: self._startup_import(force=True))
             item("Posprzątaj folder biblioteki…", self._on_clean_orphans)
+            menu.append(Gtk.SeparatorMenuItem())
+            item("Eksportuj bibliotekę (.zip)…", self._on_export_library)
+            item("Importuj bibliotekę (.zip)…", self._on_import_library)
         menu.show_all()
         return menu
 
@@ -325,15 +339,22 @@ class LutWindow:
         s = self.settings
         self.strength = self._slider(grid, 0, "Siła", s["strength"],
                                      "0 % = oryginał, 100 % = pełny LUT")
-        expander = Gtk.Expander(label="Mieszanie: kolor / jasność")
+        expander = Gtk.Expander(label="Mieszanie: kolor / jasność / zakres tonalny")
         sub = Gtk.Grid(column_spacing=8, row_spacing=4)
         self.color = self._slider(sub, 0, "Kolor", s["color"],
                                   "Ile zmiany barwy przenieść z LUT-a")
         self.luminance = self._slider(sub, 1, "Jasność", s["luminance"],
                                       "Ile zmiany jasności/kontrastu przenieść "
                                       "(0 % = look bez zmiany kontrastu)")
+        self.tonal = {}
+        for i, (key, label) in enumerate(TONAL):
+            self.tonal[key] = self._slider(
+                sub, 2 + i, label, s[key],
+                "Siła efektu w %s (np. look tylko w cieniach)" % label.lower())
         expander.add(sub)
-        expander.set_expanded(s["color"] != 100.0 or s["luminance"] != 100.0)
+        expander.set_expanded(any(s[k] != 100.0 for k in
+                                  ("color", "luminance", "shadows", "midtones",
+                                   "highlights")))
         grid.attach(expander, 0, 1, 4, 1)
 
         grid.attach(Gtk.Label(label="Interpolacja", xalign=0), 0, 2, 1, 1)
@@ -370,6 +391,8 @@ class LutWindow:
         self.after_pb = self.before_pb
         tdata, _tmask, tw, th = self.source.fit(THUMB_SIDE)
         self.thumb_src = (tdata, tw, th)
+        self.grid_src = None           # wczytywane przy pierwszym użyciu siatki
+        self._grid_cache = {}
         self.thumbs.clear()
         self.crop = None
         self._read_ms = (time.perf_counter() - t) * 1000
@@ -380,7 +403,9 @@ class LutWindow:
         return lut_apply.Params(self.strength.get_value() / 100.0,
                                 self.color.get_value() / 100.0,
                                 self.luminance.get_value() / 100.0,
-                                self.interp_combo.get_active_id())
+                                self.interp_combo.get_active_id(),
+                                *[self.tonal[k].get_value() / 100.0
+                                  for k, _ in TONAL])
 
     def _schedule_update(self, delay=DEBOUNCE_MS):
         if self._update_job is not None:
@@ -399,8 +424,10 @@ class LutWindow:
             out, _ = lut_apply.apply_rgba(self.current_lut, self.fit_data, params,
                                           self.fit_mask, self.use_numpy)
             self.after_pb = _pixbuf(lut_apply.to_rgba8(out), self.fit_w, self.fit_h)
-        if self.zoom_full:
+        if self.zoom_full and not self._grid_mode():
             self._update_crop(params)
+        if self._grid_mode():
+            self._update_grid(params)
         ms = (time.perf_counter() - t) * 1000
         self._set_status(ms)
         self.area.queue_draw()
@@ -427,6 +454,66 @@ class LutWindow:
                                           self.use_numpy)
             after = _pixbuf(lut_apply.to_rgba8(out), w, h)
         self.crop = (x, y, w, h, before, after)
+
+    # --- siatka porównawcza LUT-ów ---------------------------------------------------
+
+    def _grid_mode(self):
+        mode = self.mode_combo.get_active_id()
+        return {"grid4": 2, "grid9": 3}.get(mode, 0)
+
+    def _grid_keys(self):
+        """LUT-y na bieżącej „stronie” siatki (strona z wybranym LUT-em)."""
+        n = self._grid_mode() ** 2
+        keys = [row[0] for row in self.store]
+        if not keys:
+            return []
+        idx = keys.index(self.current_key) if self.current_key in keys else 0
+        page = idx // n
+        return keys[page * n:(page + 1) * n]
+
+    def _update_grid(self, params):
+        if self.grid_src is None:
+            self.grid_src = self.source.fit(GRID_SIDE)
+        data, mask, w, h = self.grid_src
+        if len(self._grid_cache) > 60:
+            self._grid_cache.clear()
+        cells = []
+        for key in self._grid_keys():
+            ck = (key, params.key())
+            pb = self._grid_cache.get(ck)
+            if pb is None:
+                try:
+                    lut = self._load_lut(key)
+                    out, _ = lut_apply.apply_rgba(lut, data, params, mask,
+                                                  self.use_numpy)
+                    pb = _pixbuf(lut_apply.to_rgba8(out), w, h)
+                except CubeError:
+                    pb = self._broken_thumb(w, h)
+                self._grid_cache[ck] = pb
+            cells.append((key, pb))
+        self.grid_cells = cells
+
+    def _draw_grid(self, cr, aw, ah, checker):
+        n = self._grid_mode()
+        gap, label_h = 6, 22
+        cw = (aw - gap * (n + 1)) / float(n)
+        ch = (ah - gap * (n + 1)) / float(n)
+        self._grid_hits = []
+        for i, (key, pb) in enumerate(getattr(self, "grid_cells", [])):
+            cx = gap + (i % n) * (cw + gap)
+            cy = gap + (i // n) * (ch + gap)
+            src = self.before_pb if self.hold_before else pb
+            w, h = pb.get_width(), pb.get_height()
+            x0, y0, dw, dh, s = self._fit_rect(cx, cy, cw, ch - label_h, w, h, None)
+            self._paint(cr, src, (x0, y0, dw, dh), s * w / float(src.get_width()),
+                        checker)
+            if key == self.current_key:
+                cr.set_source_rgb(1.0, 0.75, 0.1)
+                cr.set_line_width(3)
+                cr.rectangle(x0 - 2, y0 - 2, dw + 4, dh + 4)
+                cr.stroke()
+            self._label_text(cr, cx, cy + ch - label_h + 1, self._label(key)[:40])
+            self._grid_hits.append(((cx, cy, cw, ch), key))
 
     def _set_status(self, ms=None):
         parts = []
@@ -550,7 +637,7 @@ class LutWindow:
 
     def _load_lut(self, key):
         if key.startswith(FILE_PREFIX):
-            return cube_parser.parse_cube_file(key[len(FILE_PREFIX):])
+            return lut_formats.load_lut_file(key[len(FILE_PREFIX):])
         return self.lib.load_lut(key)
 
     def _label(self, key):
@@ -636,12 +723,12 @@ class LutWindow:
                 self._after_import(res, "Import folderu")
 
     def _on_load_file(self, *_):
-        paths = _choose(self.dialog, "Wczytaj plik .cube (bez dodawania do "
+        paths = _choose(self.dialog, "Wczytaj plik LUT (bez dodawania do "
                         "biblioteki)", Gtk.FileChooserAction.OPEN, self.settings)
         if not paths:
             return
         try:
-            cube_parser.parse_cube_file(paths[0])
+            lut_formats.load_lut_file(paths[0])
         except CubeError as e:
             _message(self.dialog, "Nie można wczytać pliku .cube", str(e),
                      Gtk.MessageType.ERROR)
@@ -762,6 +849,112 @@ class LutWindow:
             self.current_key = None
             self.current_lut = None
             self._refill()
+
+    # --- presety -----------------------------------------------------------------------
+
+    def _on_presets_button(self, button):
+        menu = Gtk.Menu()
+        names = sorted(self.lib.presets, key=str.lower)
+        for name in names:
+            mi = Gtk.MenuItem(label=name)
+            mi.set_sensitive(self.lib.preset_lut_available(name))
+            mi.connect("activate", lambda _m, n=name: self._apply_preset(n))
+            menu.append(mi)
+        if not names:
+            mi = Gtk.MenuItem(label="(brak presetów)")
+            mi.set_sensitive(False)
+            menu.append(mi)
+        menu.append(Gtk.SeparatorMenuItem())
+        save = Gtk.MenuItem(label="Zapisz bieżące ustawienia jako preset…")
+        save.set_sensitive(self.current_lut is not None)
+        save.connect("activate", lambda *_: self._save_preset())
+        menu.append(save)
+        if names:
+            delete = Gtk.MenuItem(label="Usuń preset")
+            sub = Gtk.Menu()
+            for name in names:
+                mi = Gtk.MenuItem(label=name)
+                mi.connect("activate", lambda _m, n=name: self._delete_preset(n))
+                sub.append(mi)
+            delete.set_submenu(sub)
+            menu.append(delete)
+        menu.show_all()
+        menu.popup_at_widget(button, Gdk.Gravity.SOUTH_WEST,
+                             Gdk.Gravity.NORTH_WEST, None)
+
+    def _preset_values(self):
+        values = {"strength": self.strength.get_value(),
+                  "color": self.color.get_value(),
+                  "luminance": self.luminance.get_value(),
+                  "interpolation": self.interp_combo.get_active_id()}
+        for key, _ in TONAL:
+            values[key] = self.tonal[key].get_value()
+        return values
+
+    def _save_preset(self):
+        if self.current_key is None:
+            return
+        name = _ask_text(self.dialog, "Zapisz preset",
+                         "Nazwa presetu (ten sam LUT i bieżące ustawienia):",
+                         self._label(self.current_key))
+        if name:
+            self._guard(self.lib.save_preset, name, self.current_key,
+                        self._preset_values())
+
+    def _delete_preset(self, name):
+        if _ask(self.dialog, "Usunąć preset „%s”?" % name, "LUT zostaje w bibliotece.",
+                [("_Anuluj", 0), ("_Usuń", 1)]) == 1:
+            self._guard(self.lib.delete_preset, name)
+
+    def _apply_preset(self, name):
+        preset = self.lib.presets.get(name)
+        if not preset:
+            return
+        key = preset.get("lut", "")
+        if key.startswith(FILE_PREFIX):
+            self.temp_path = key[len(FILE_PREFIX):]
+        for attr, adj in (("strength", self.strength), ("color", self.color),
+                          ("luminance", self.luminance)):
+            if attr in preset:
+                adj.set_value(float(preset[attr]))
+        for attr, _ in TONAL:
+            if attr in preset:
+                self.tonal[attr].set_value(float(preset[attr]))
+        if preset.get("interpolation"):
+            self.interp_combo.set_active_id(preset["interpolation"])
+        self.current_key = None
+        if not self._select_key(key):
+            # LUT może być ukryty filtrem – czyścimy filtry i próbujemy ponownie.
+            self.search.set_text("")
+            self.category_combo.set_active_id("")
+            self.fav_toggle.set_active(False)
+            self._refill(select=key)
+        self._schedule_update(10)
+
+    # --- eksport / import biblioteki ----------------------------------------------------
+
+    def _on_export_library(self):
+        paths = _choose(self.dialog, "Eksportuj bibliotekę LUT-ów",
+                        Gtk.FileChooserAction.SAVE, self.settings,
+                        patterns=("*.zip",), filter_name="Archiwum ZIP",
+                        save_name="biblioteka-lut.zip")
+        if not paths:
+            return
+        path = paths[0] if paths[0].lower().endswith(".zip") else paths[0] + ".zip"
+        count = self._guard(self.lib.export_zip, path)
+        if count is not None:
+            _message(self.dialog, "Biblioteka wyeksportowana",
+                     "Zapisano %d LUT-ów (z nazwami, kategoriami, ulubionymi i "
+                     "presetami) do:\n%s" % (count, path))
+
+    def _on_import_library(self):
+        paths = _choose(self.dialog, "Importuj bibliotekę LUT-ów",
+                        Gtk.FileChooserAction.OPEN, self.settings,
+                        patterns=("*.zip", "*.ZIP"), filter_name="Archiwum ZIP")
+        if paths:
+            res = self._guard(self.lib.import_zip, paths[0])
+            if res is not None:
+                self._after_import(res, "Import biblioteki")
 
     def _on_clean_orphans(self):
         """Usuwa z folderu biblioteki pliki, których nie ma na liście."""
@@ -915,6 +1108,7 @@ class LutWindow:
         mode = self.mode_combo.get_active_id()
         self.vertical_check.set_sensitive(mode in ("split", "side"))
         self.before_toggle.set_sensitive(mode == "toggle")
+        self.zoom_combo.set_sensitive(not self._grid_mode())
         if self.image is not None:
             self.opacity_check.set_sensitive(self.out_new.get_active())
 
@@ -923,7 +1117,7 @@ class LutWindow:
         self.settings["split_vertical"] = self.vertical_check.get_active()
         self._update_mode_widgets()
         self._crop_data = None
-        if self.zoom_full:
+        if self.zoom_full or self._grid_mode():
             self._schedule_update(0)
         self.area.queue_draw()
 
@@ -1027,6 +1221,9 @@ class LutWindow:
         cr.paint()
         checker = self._checker()
         before, after, w, h, scale = self._current_images()
+        if self._grid_mode():
+            self._draw_grid(cr, aw, ah, checker)
+            return False
         mode = self.mode_combo.get_active_id()
         vertical = self.vertical_check.get_active()
         show_before = self.hold_before or (mode == "toggle"
@@ -1100,6 +1297,12 @@ class LutWindow:
         area.grab_focus()
         if ev.button not in (1, 2):
             return False
+        if self._grid_mode():
+            for (x, y, w, h), key in getattr(self, "_grid_hits", []):
+                if x <= ev.x <= x + w and y <= ev.y <= y + h:
+                    self._select_key(key)
+                    return True
+            return True
         mode = self.mode_combo.get_active_id()
         if mode == "toggle" and ev.button == 1 and not self.zoom_full:
             self.before_toggle.set_active(not self.before_toggle.get_active())
@@ -1203,6 +1406,8 @@ class LutWindow:
         s["color"] = self.color.get_value()
         s["luminance"] = self.luminance.get_value()
         s["interpolation"] = self.interp_combo.get_active_id()
+        for key, _ in TONAL:
+            s[key] = self.tonal[key].get_value()
         if self.image is not None:
             s["output"] = "in-place" if self.out_inplace.get_active() else "new-layer"
             s["strength_as_opacity"] = self.opacity_check.get_active()
@@ -1287,6 +1492,9 @@ class LutWindow:
         c.set_property("color", params.color * 100)
         c.set_property("luminance", params.luminance * 100)
         c.set_property("interpolation", params.interpolation)
+        c.set_property("shadows", params.shadows * 100)
+        c.set_property("midtones", params.midtones * 100)
+        c.set_property("highlights", params.highlights * 100)
         c.set_property("output", output)
         c.set_property("strength-as-opacity", as_opacity)
 

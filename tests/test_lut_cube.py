@@ -7,6 +7,7 @@ repo – wtedy są pomijane), z numpy i scipy (jeśli są zainstalowane) oraz
 z ffmpeg (filtr lut3d) jako niezależnej referencji.
 """
 
+import json
 import os
 import pathlib
 import random
@@ -590,3 +591,247 @@ def test_sample_image_size():
     import sample_image
     data = sample_image.make(40, 30)
     assert len(data) == 40 * 30 * 16
+
+
+# --- formaty .3dl, Hald CLUT, zapis .cube -------------------------------------
+
+import zlib  # noqa: E402
+import zipfile  # noqa: E402
+
+import lut_formats  # noqa: E402
+
+
+def _3dl_text(n, fn, bits=12):
+    top = (1 << bits) - 1
+    shaper = " ".join(str(round(i * 1023 / (n - 1))) for i in range(n))
+    lines = ["# test 3dl", shaper]
+    for r in range(n):                     # B zmienia się najszybciej
+        for g in range(n):
+            for b in range(n):
+                out = fn(r / (n - 1), g / (n - 1), b / (n - 1))
+                lines.append(" ".join(str(int(round(v * top))) for v in out))
+    return "\n".join(lines) + "\n"
+
+
+def test_3dl_matches_equivalent_cube():
+    def swap(r, g, b):
+        return (g, b, r)
+    lut3 = lut_formats.parse_3dl_text(_3dl_text(9, swap), "x.3dl")
+    cube = parse(cube_text(9, swap))
+    assert lut3.size_3d == 9
+    for p in random_pixels(50, seed=11):
+        assert lut_apply.lookup(lut3, *p[:3]) == pytest.approx(
+            lut_apply.lookup(cube, *p[:3]), abs=1 / 4095 + 1e-6)
+
+
+def test_3dl_errors():
+    with pytest.raises(CubeError, match="liczba wierszy"):
+        lut_formats.parse_3dl_text("0 512 1023\n0 0 0\n")
+    with pytest.raises(CubeError, match="siatki wejścia"):
+        lut_formats.parse_3dl_text("# pusty\n")
+
+
+def _png_with_filters(path, w, h, rgb8):
+    """PNG RGB 8 bit, w którym wiersze używają po kolei filtrów 0–4."""
+    def paeth(a, b, c):
+        p = a + b - c
+        pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+        return a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+    raw, prev = bytearray(), bytearray(w * 3)
+    for y in range(h):
+        line = bytearray(rgb8[y * w * 3:(y + 1) * w * 3])
+        ft = y % 5
+        out = bytearray()
+        for i, v in enumerate(line):
+            left = line[i - 3] if i >= 3 else 0
+            up = prev[i]
+            ul = prev[i - 3] if i >= 3 else 0
+            pred = [0, left, up, (left + up) >> 1, paeth(left, up, ul)][ft]
+            out.append((v - pred) & 0xFF)
+        raw += bytes([ft]) + out
+        prev = line
+
+    def chunk(k, d):
+        return struct.pack(">I", len(d)) + k + d + struct.pack(
+            ">I", zlib.crc32(k + d) & 0xFFFFFFFF)
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n")
+        f.write(chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)))
+        f.write(chunk(b"IDAT", zlib.compress(bytes(raw))))
+        f.write(chunk(b"IEND", b""))
+
+
+def test_png_decoder_all_filters(tmp_path):
+    rnd = random.Random(7)
+    w, h = 13, 11
+    rgb8 = bytes(rnd.randrange(256) for _ in range(w * h * 3))
+    path = str(tmp_path / "filtry.png")
+    _png_with_filters(path, w, h, rgb8)
+    W, H, rgb = lut_formats.read_png_rgb(path)
+    assert (W, H) == (w, h)
+    assert [round(v * 255) for v in rgb] == list(rgb8)
+
+
+def test_hald_identity_roundtrip_and_look(tmp_path):
+    side, rgb = lut_formats.hald_identity(4)            # siatka 16, 64×64
+    assert side == 64 and lut_formats.hald_level(64, 64) == 4
+    # „Look”: zmiana jak po korekcie w GIMP-ie (mniej niebieskiego).
+    looked = [v if i % 3 != 2 else v * 0.8 for i, v in enumerate(rgb)]
+    path = str(tmp_path / "mój look.png")
+    lut_formats.write_png_rgb16(path, side, side, looked)
+    assert lut_formats.is_hald_png(path)
+    lut = lut_formats.load_lut_file(path)
+    assert lut.size_3d == 16
+    for p in random_pixels(30, seed=3):
+        r, g, b = lut_apply.lookup(lut, *p[:3])
+        assert (r, g, b) == pytest.approx((p[0], p[1], p[2] * 0.8), abs=2e-3)
+    cube = str(tmp_path / "look.cube")
+    lut_formats.write_cube(lut, cube, "Mój look")
+    back = cube_parser.parse_cube_file(cube)
+    assert back.title == "Mój look" and back.size_3d == 16
+    assert list(back.table_3d) == pytest.approx(list(lut.table_3d), abs=1e-6)
+
+
+def test_hald_wrong_size(tmp_path):
+    path = str(tmp_path / "zdjecie.png")
+    lut_formats.write_png_rgb16(path, 30, 20, [0.5] * 30 * 20 * 3)
+    assert not lut_formats.is_hald_png(path)
+    with pytest.raises(CubeError, match="Hald"):
+        lut_formats.load_lut_file(path)
+
+
+def test_find_lut_files_skips_ordinary_png(tmp_path):
+    folder = tmp_path / "mix"
+    folder.mkdir()
+    (folder / "a.cube").write_text(cube_text(2, identity))
+    (folder / "b.3dl").write_text(_3dl_text(3, identity))
+    side, rgb = lut_formats.hald_identity(2)
+    lut_formats.write_png_rgb16(str(folder / "c.png"), side, side, rgb)
+    lut_formats.write_png_rgb16(str(folder / "foto.png"), 10, 10, [0.1] * 300)
+    names = [os.path.basename(p) for p in library.find_lut_files(str(folder))]
+    assert names == ["a.cube", "b.3dl", "c.png"]
+    lib = library.Library(str(tmp_path / "bib"))
+    res = lib.add_folder(str(folder))
+    assert len(res.added) == 3 and not res.errors
+    sizes = sorted(lib.load_lut(i).size_3d for i in res.added)
+    assert sizes == [2, 3, 4]
+
+
+# --- maska tonalna -----------------------------------------------------------------
+
+@pytest.mark.parametrize("use_numpy", BACKENDS)
+def test_tonal_mask(use_numpy):
+    white = parse(cube_text(2, lambda r, g, b: (1.0, 1.0, 1.0)))
+    dark, light = (0.05, 0.05, 0.05, 1.0), (0.95, 0.95, 0.95, 1.0)
+    data = rgba_bytes([dark, light])
+    default, _ = lut_apply.apply_rgba(white, data, Params(), use_numpy=use_numpy)
+    explicit, _ = lut_apply.apply_rgba(
+        white, data, Params(shadows=1, midtones=1, highlights=1), use_numpy=use_numpy)
+    assert default == explicit
+    only_hi, _ = lut_apply.apply_rgba(
+        white, data, Params(shadows=0, midtones=0, highlights=1), use_numpy=use_numpy)
+    d, lt = from_bytes(only_hi)
+    # Ciemny piksel prawie bez zmian, jasny prawie pełny efekt.
+    assert d[0] == pytest.approx(0.05 + 0.95 * 0.05 ** 2, abs=1e-4)
+    assert lt[0] == pytest.approx(0.95 + 0.05 * 0.95 ** 2, abs=1e-4)
+
+
+def test_tonal_weights_sum_to_one():
+    p = Params()
+    for y in (0.0, 0.2, 0.5, 0.9, 1.0):
+        assert lut_apply.tonal_weight(p, y) == pytest.approx(1.0)
+
+
+# --- presety, eksport i import biblioteki ----------------------------------------------
+
+def test_presets_persist(tmp_path):
+    paths = _make_cubes(tmp_path / "src", ["a.cube"])
+    lib = library.Library(str(tmp_path / "bib"))
+    lut_id = lib.add_files(paths).added[0]
+    lib.save_preset("Ciepły wieczór", lut_id, {"strength": 70.0, "shadows": 50.0,
+                                               "nieznane": 1})
+    with pytest.raises(library.LibraryError):
+        lib.save_preset(" ", lut_id, {})
+    again = library.Library(str(tmp_path / "bib"))
+    assert again.presets["Ciepły wieczór"] == {"lut": lut_id, "strength": 70.0,
+                                                "shadows": 50.0}
+    assert again.preset_lut_available("Ciepły wieczór")
+    again.remove(lut_id)
+    assert not again.preset_lut_available("Ciepły wieczór")
+    again.delete_preset("Ciepły wieczór")
+    assert again.presets == {}
+
+
+def test_export_import_library(tmp_path):
+    paths = _make_cubes(tmp_path / "src", ["a.cube", "b.cube"])
+    src_lib = library.Library(str(tmp_path / "bib1"))
+    ids = src_lib.add_files(paths).added
+    src_lib.rename(ids[0], "Mój żółty")
+    src_lib.add_category("Ciepłe")
+    src_lib.set_category(ids[0], "Ciepłe")
+    src_lib.set_favorite(ids[1], True)
+    src_lib.save_preset("P1", ids[0], {"strength": 40.0})
+    zpath = str(tmp_path / "eksport ą.zip")
+    assert src_lib.export_zip(zpath) == 2
+
+    dst = library.Library(str(tmp_path / "bib2"))
+    dst.add_files([paths[1]])                    # jeden już jest (duplikat)
+    res = dst.import_zip(zpath)
+    assert len(res.added) == 1 and len(res.duplicates) == 1
+    names = sorted(dst.display_name(i) for i in dst.entries)
+    assert names == ["Mój żółty", "b"]
+    new_a = [i for i in dst.entries if dst.display_name(i) == "Mój żółty"][0]
+    assert dst.entries[new_a]["category"] == "Ciepłe"
+    assert dst.presets["P1"]["lut"] == new_a
+
+
+def test_import_zip_blocks_path_traversal(tmp_path):
+    zpath = str(tmp_path / "zly.zip")
+    with zipfile.ZipFile(zpath, "w") as z:
+        z.writestr("luts/../../uciekinier.cube", cube_text(2, identity))
+        z.writestr(library.EXPORT_INDEX, json.dumps(
+            {"entries": [{"id": "x", "file": "../../uciekinier.cube"}]}))
+    lib = library.Library(str(tmp_path / "bib"))
+    res = lib.import_zip(zpath)
+    assert not (tmp_path / "uciekinier.cube").exists()
+    assert not res.added and res.errors          # nazwa sprowadzona do pliku, brak go
+
+
+def test_import_zip_not_a_library(tmp_path):
+    bad = tmp_path / "x.zip"
+    bad.write_bytes(b"to nie zip")
+    with pytest.raises(library.LibraryError):
+        library.Library(str(tmp_path / "bib")).import_zip(str(bad))
+
+
+# --- tryb wsadowy (część bez GIMP-a) ---------------------------------------------
+
+import batch  # noqa: E402
+
+
+def test_batch_list_and_paths(tmp_path):
+    src = tmp_path / "zdjęcia"
+    (src / "pod").mkdir(parents=True)
+    out = src / "wyniki"
+    out.mkdir()
+    for p in ("a.JPG", "b.png", "notatka.txt", "pod/c.tiff", "wyniki/stary.jpg"):
+        (src / p).write_bytes(b"x")
+    flat = [os.path.relpath(p, src) for p in batch.list_images(str(src))]
+    assert flat == ["a.JPG", "b.png"]
+    deep = [os.path.relpath(p, src).replace(os.sep, "/")
+            for p in batch.list_images(str(src), True, exclude=str(out))]
+    assert deep == ["a.JPG", "b.png", "pod/c.tiff"]
+    dest = batch.output_path(str(src / "pod" / "c.tiff"), str(src), str(out),
+                             "same", "-lut")
+    assert dest == os.path.join(str(out), "pod", "c-lut.tif")
+    assert batch.output_path(str(src / "a.JPG"), str(src), str(out), "png", "") \
+        == os.path.join(str(out), "a.png")
+
+
+def test_batch_refuses_overwriting_originals(tmp_path):
+    with pytest.raises(batch.BatchError, match="nadpisane"):
+        batch.check_settings(str(tmp_path), str(tmp_path), "same", "")
+    batch.check_settings(str(tmp_path), str(tmp_path), "same", "-lut")
+    batch.check_settings(str(tmp_path), str(tmp_path / "x"), "same", "")
+    with pytest.raises(batch.BatchError):
+        batch.check_settings(str(tmp_path / "brak"), str(tmp_path), "jpg", "")

@@ -57,17 +57,34 @@ def _ask_text(parent, title, label, value=""):
     return text if resp == Gtk.ResponseType.OK else None
 
 
-def _choose(parent, title, action, settings, multiple=False, cube_filter=True):
-    """Natywne okno wyboru plików/folderu. Zwraca listę ścieżek."""
-    accept = "_Wybierz" if action == Gtk.FileChooserAction.SELECT_FOLDER else "_Otwórz"
+LUT_PATTERNS = ("*.cube", "*.CUBE", "*.3dl", "*.3DL", "*.png", "*.PNG")
+
+
+def _choose(parent, title, action, settings, multiple=False, cube_filter=True,
+            patterns=None, filter_name=None, save_name=None):
+    """
+    Natywne okno wyboru plików/folderu. Zwraca listę ścieżek.
+    Domyślny filtr: pliki LUT (.cube, .3dl, Hald .png). Dla zapisu podaj
+    save_name (proponowana nazwa pliku).
+    """
+    if action == Gtk.FileChooserAction.SELECT_FOLDER:
+        accept = "_Wybierz"
+    elif action == Gtk.FileChooserAction.SAVE:
+        accept = "_Zapisz"
+    else:
+        accept = "_Otwórz"
     chooser = Gtk.FileChooserNative.new(title, parent, action, accept, "_Anuluj")
     chooser.set_select_multiple(multiple)
-    if cube_filter and action == Gtk.FileChooserAction.OPEN:
+    if action != Gtk.FileChooserAction.SELECT_FOLDER and (cube_filter or patterns):
         flt = Gtk.FileFilter()
-        flt.set_name("LUT .cube")
-        flt.add_pattern("*.cube")
-        flt.add_pattern("*.CUBE")
+        flt.set_name(filter_name or "LUT (.cube, .3dl, Hald .png)")
+        for pattern in patterns or LUT_PATTERNS:
+            flt.add_pattern(pattern)
         chooser.add_filter(flt)
+    if action == Gtk.FileChooserAction.SAVE:
+        chooser.set_do_overwrite_confirmation(True)
+        if save_name:
+            chooser.set_current_name(save_name)
     last = settings.get("last_dir")
     if last and os.path.isdir(last):
         chooser.set_current_folder(last)

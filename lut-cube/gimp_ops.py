@@ -12,6 +12,7 @@ obrazu, uwzględnia miękkie zaznaczenie i zapisuje krok cofania.
 
 import math
 import os
+import struct
 
 import gi
 gi.require_version("Gimp", "3.0")
@@ -133,6 +134,57 @@ def read_crop(image, layer, x, y, w, h):
     h = min(h, layer.get_height())
     return (_get(layer, x, y, w, h), selection_mask(image, layer, x, y, w, h),
             x, y, w, h)
+
+
+# --- obraz Hald (własny look) -----------------------------------------------------
+
+def new_hald_image(level):
+    """Nowy obraz 16-bitowy z tożsamościowym Hald CLUT poziomu `level`."""
+    import lut_formats
+    side, rgb = lut_formats.hald_identity(level)
+    image = Gimp.Image.new_with_precision(side, side, Gimp.ImageBaseType.RGB,
+                                          Gimp.Precision.U16_NON_LINEAR)
+    layer = Gimp.Layer.new(image, "Hald %d (siatka %d)" % (level, level * level),
+                           side, side, Gimp.ImageType.RGB_IMAGE, 100,
+                           Gimp.LayerMode.NORMAL)
+    image.insert_layer(layer, None, 0)
+    rgba = []
+    for i in range(0, len(rgb), 3):
+        rgba += (rgb[i], rgb[i + 1], rgb[i + 2], 1.0)
+    buf = layer.get_buffer()
+    buf.set(Gegl.Rectangle.new(0, 0, side, side), FORMAT,
+            struct.pack("<%df" % len(rgba), *rgba))
+    buf.flush()
+    return image
+
+
+def image_to_lut(image, title=""):
+    """
+    Widoczny obraz Hald (po korektach) → CubeLUT. Rzuca PluginError, gdy
+    obraz nie ma wymiarów Hald.
+    """
+    import lut_formats
+    from cube_parser import CubeError
+    w, h = image.get_width(), image.get_height()
+    if lut_formats.hald_level(w, h) is None:
+        raise PluginError(
+            "Ten obraz nie jest obrazem Hald (ma %d×%d px). Utwórz go przez "
+            "Filtry → LUT → Utwórz obraz Hald…, popraw kolory i zapisz ponownie. "
+            "Nie zmieniaj rozmiaru ani nie kadruj obrazu Hald." % (w, h))
+    dup = image.duplicate()
+    try:
+        layer = dup.merge_visible_layers(Gimp.MergeType.CLIP_TO_IMAGE)
+        data = _get(layer, 0, 0, w, h)
+    finally:
+        dup.delete()
+    vals = struct.unpack("<%df" % (len(data) // 4), data)
+    rgb = []
+    for i in range(0, len(vals), 4):
+        rgb += (vals[i], vals[i + 1], vals[i + 2])
+    try:
+        return lut_formats.hald_to_lut(w, h, rgb, title)
+    except CubeError as e:
+        raise PluginError(str(e))
 
 
 # --- nakładanie ----------------------------------------------------------------

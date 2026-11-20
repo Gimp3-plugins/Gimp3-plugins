@@ -12,7 +12,11 @@ Wartości wejściowe to kodowanie perceptualne (gamma sRGB, format babl
     D  = LUT(O) − O                  (zmiana, jaką daje LUT)
     dY = 0.2126·Dr + 0.7152·Dg + 0.0722·Db   (część „jasności” zmiany)
     E  = c·(D − dY) + l·dY           (przy c = l = 1: E = D)
-    V  = O + s·(clip(O + E, 0, 1) − O)
+    V  = O + s·t·(clip(O + E, 0, 1) − O)
+
+t to maska tonalna: wagi dla cieni, półtonów i świateł (wc, wp, ws) mieszane
+według jasności oryginału Y: t = wc·(1−Y)² + wp·2Y(1−Y) + ws·Y². Trzy składniki
+sumują się do 1, więc przy wc = wp = ws = 1 maska nic nie zmienia.
 
 Dla s = 0 wynik to dokładnie oryginał, dla s = 1, c = l = 1 – czysty LUT.
 Maska zaznaczenia m (miękkie krawędzie) miesza O i V w świetle liniowym,
@@ -35,20 +39,36 @@ class Params:
     """Ustawienia nakładania LUT-a. Wartości 0–1 (siła, kolor, jasność)."""
 
     def __init__(self, strength=1.0, color=1.0, luminance=1.0,
-                 interpolation=TETRAHEDRAL):
+                 interpolation=TETRAHEDRAL, shadows=1.0, midtones=1.0,
+                 highlights=1.0):
         self.strength = float(strength)
         self.color = float(color)
         self.luminance = float(luminance)
         if interpolation not in (TETRAHEDRAL, TRILINEAR):
             raise ValueError("Nieznana interpolacja: %s" % interpolation)
         self.interpolation = interpolation
+        self.shadows = float(shadows)
+        self.midtones = float(midtones)
+        self.highlights = float(highlights)
 
     @property
     def full_effect(self):
         return self.color == 1.0 and self.luminance == 1.0
 
+    @property
+    def full_tonal(self):
+        return self.shadows == self.midtones == self.highlights == 1.0
+
     def key(self):
-        return (self.strength, self.color, self.luminance, self.interpolation)
+        return (self.strength, self.color, self.luminance, self.interpolation,
+                self.shadows, self.midtones, self.highlights)
+
+
+def tonal_weight(params, y):
+    """Waga maski tonalnej dla jasności y (0–1)."""
+    y = 0.0 if y < 0.0 else (1.0 if y > 1.0 else y)
+    return (params.shadows * (1.0 - y) ** 2 + params.midtones * 2.0 * y * (1.0 - y)
+            + params.highlights * y * y)
 
 
 # ---------------------------------------------------------------------------
@@ -272,9 +292,16 @@ def _apply_pure(lut, buf, params, mask, cache=None):
     rs, gs, bs = buf[0::4], buf[1::4], buf[2::4]
     res = list(map(cache.__getitem__, zip(rs, gs, bs)))
     s = params.strength
+    factors = None
+    if not params.full_tonal:
+        kr, kg, kb = LUMA
+        factors = [s * tonal_weight(params, kr * r + kg * g + kb * b)
+                   for r, g, b in zip(rs, gs, bs)]
     for ch, orig in enumerate((rs, gs, bs)):
         new = [v[ch] for v in res]
-        if s != 1.0:
+        if factors is not None:
+            new = [o + f * (v - o) for o, v, f in zip(orig, new, factors)]
+        elif s != 1.0:
             new = [o + s * (v - o) for o, v in zip(orig, new)]
         if mask is not None:
             dec, enc = srgb_decode, srgb_encode
@@ -438,7 +465,13 @@ def _apply_numpy(np, lut, buf, params, mask):
     def work(start):
         rgb = px[start:start + CHUNK, :3]
         d = _np_effect(np, lut, rgb, params)
-        if params.strength != 1.0:
+        if not params.full_tonal:
+            y = np.clip(rgb @ np.asarray(LUMA, dtype=np.float32), 0.0, 1.0)
+            t = (np.float32(params.shadows) * (1 - y) ** 2
+                 + np.float32(params.midtones) * 2 * y * (1 - y)
+                 + np.float32(params.highlights) * y * y)
+            d *= (t * s)[:, None]
+        elif params.strength != 1.0:
             d *= s
         if m is None:
             rgb += d

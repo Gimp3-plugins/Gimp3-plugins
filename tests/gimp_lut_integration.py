@@ -300,4 +300,154 @@ for mode in ("new-layer", "in-place"):
     check("24 Mpx (%s)" % mode, status == OK, "czas %.1f s" % dt)
 img.delete()
 
+# 15. Maska tonalna przez PDB: tylko światła
+img, bg = new_image(200, 2)
+fill_gradient(bg)
+before = pixels(bg)
+status, _ = run(img, [bg], output="in-place", shadows=0.0, midtones=0.0,
+                highlights=100.0)
+expected, _ = lut_apply.apply_rgba(
+    lut, struct.pack("<%df" % len(before), *before),
+    lut_apply.Params(1.0, shadows=0.0, midtones=0.0, highlights=1.0))
+d = max_diff(pixels(bg), struct.unpack("<%df" % (len(expected) // 4), expected))
+check("maska tonalna przez PDB = lut_apply", status == OK and d <= 1 / 255 + 1e-6,
+      "max różnica %.5f" % d)
+img.delete()
+
+# 16. Plik .3dl przez PDB (ten sam look co .cube)
+tmp3 = os.path.join(helpers.TMP, "test.3dl")
+n3 = 9
+with open(tmp3, "w", encoding="utf-8") as f:
+    f.write(" ".join(str(round(i * 1023 / (n3 - 1))) for i in range(n3)) + "\n")
+    for r in range(n3):
+        for g in range(n3):
+            for b in range(n3):
+                f.write("%d %d %d\n" % tuple(round(v / (n3 - 1) * 4095) for v in (g, b, r)))
+img, bg = new_image(40, 30)
+fill_gradient(bg)
+status, err = run(img, [bg], lut=tmp3, output="in-place")
+px0 = pixels(bg)[:3]
+check("plik .3dl przez PDB", status == OK and len(px0) == 3, err or "")
+img.delete()
+
+# 17. Preset z biblioteki przez PDB
+import gimp_ops  # noqa: E402
+import library  # noqa: E402
+lib = library.Library(gimp_ops.library_root())
+had_preset = "Test integracji" in lib.presets
+tmp_lib_added = []
+res = lib.add_files([LUT_FILE])
+tmp_lib_added = res.added
+lut_id = (res.added or [lib._find_by_hash(library.file_sha256(LUT_FILE))])[0]
+lib.save_preset("Test integracji", lut_id, {"strength": 30.0})
+img, bg = new_image(60, 40)
+fill_gradient(bg)
+status, err = run(img, [bg], preset="test INTEGRACJI", strength=90.0)
+top = img.get_layers()[0]
+check("preset przez PDB (LUT i siła z presetu)",
+      status == OK and top.get_name().endswith(" 30%"), (err, top.get_name()))
+status, err = run(img, [bg], preset="nie ma takiego")
+check("nieznany preset → czytelny błąd",
+      status == Gimp.PDBStatusType.EXECUTION_ERROR and "presetu" in str(err), err)
+img.delete()
+lib = library.Library(gimp_ops.library_root())
+if not had_preset:
+    lib.delete_preset("Test integracji")
+for i in tmp_lib_added:
+    lib.remove(i, delete_file=True)
+
+# 18. Tryb wsadowy
+bdir = os.path.join(helpers.TMP, "wsadowo ąę")
+shutil.rmtree(bdir, ignore_errors=True)
+os.makedirs(os.path.join(bdir, "pod"))
+src_imgs = helpers.make_test_images()
+for name, target in (("male.png", "a.png"), ("alfa.png", "pod/b.png"),
+                     ("16bit.png", "c.png")):
+    shutil.copyfile(os.path.join(src_imgs, name), os.path.join(bdir, target))
+out_dir = os.path.join(bdir, "wyniki")
+os.makedirs(out_dir)        # GIMP sprawdza, czy wskazany folder istnieje
+proc = Gimp.get_pdb().lookup_procedure("python-fu-lut-cube-batch")
+cfg = proc.create_config()
+cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+cfg.set_property("input-folder", Gio.File.new_for_path(bdir))
+cfg.set_property("output-folder", Gio.File.new_for_path(out_dir))
+cfg.set_property("recursive", True)
+cfg.set_property("format", "jpg")
+cfg.set_property("lut-file", Gio.File.new_for_path(LUT_FILE))
+t = time.perf_counter()
+res = proc.run(cfg)
+outs = sorted(os.path.relpath(os.path.join(dp, f), out_dir).replace(os.sep, "/")
+              for dp, _dn, fs in os.walk(out_dir) for f in fs)
+check("wsadowo: 3 zdjęcia zapisane jako JPG (z podfolderem)",
+      res.index(0) == OK and outs == ["a-lut.jpg", "c-lut.jpg", "pod/b-lut.jpg"],
+      "%s, %.1f s %s" % (outs, time.perf_counter() - t,
+                         res.index(1) if res.length() > 1 else ""))
+orig = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE,
+                      Gio.File.new_for_path(os.path.join(bdir, "c.png")))
+done = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE,
+                      Gio.File.new_for_path(os.path.join(out_dir, "c-lut.jpg")))
+ref, _ = lut_apply.apply_rgba(lut, struct.pack("<4f", *pixels(orig.get_layers()[0])[:4]),
+                              lut_apply.Params())
+got = pixels(done.get_layers()[0])[:3]
+check("wsadowo: piksel = LUT (JPG, tolerancja kompresji)",
+      max(abs(a - b) for a, b in zip(got, struct.unpack("<4f", ref)[:3])) < 0.05,
+      ([round(v, 3) for v in got], [round(v, 3) for v in struct.unpack("<4f", ref)[:3]]))
+orig.delete()
+done.delete()
+cfg.set_property("output-folder", Gio.File.new_for_path(bdir))
+cfg.set_property("suffix", "")
+cfg.set_property("format", "same")
+res = proc.run(cfg)
+check("wsadowo: odmowa nadpisania oryginałów",
+      res.index(0) == Gimp.PDBStatusType.EXECUTION_ERROR
+      and "nadpisane" in str(res.index(1)), res.index(1))
+
+# 19. Własny look: obraz Hald → korekta GIMP-a → .cube → ten sam efekt na zdjęciu
+proc_new = Gimp.get_pdb().lookup_procedure("python-fu-lut-cube-hald-new")
+cfg = proc_new.create_config()
+cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+cfg.set_property("level", "l6")
+res = proc_new.run(cfg)
+hald = res.index(1)
+check("Hald: nowy obraz 216×216, 16 bit",
+      res.index(0) == OK and hald.get_width() == 216
+      and hald.get_precision() == Gimp.Precision.U16_NON_LINEAR)
+look = lambda d: (d.curves_spline(Gimp.HistogramChannel.VALUE,  # noqa: E731
+                                  [0.0, 0.08, 0.5, 0.6, 1.0, 0.95])
+                  and d.hue_saturation(Gimp.HueRange.ALL, 15.0, 0.0, -30.0, 0.0))
+look(hald.get_layers()[0])
+cube_out = os.path.join(helpers.TMP, "mój look ż.cube")
+proc_save = Gimp.get_pdb().lookup_procedure("python-fu-lut-cube-hald-save")
+cfg = proc_save.create_config()
+cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+cfg.set_property("image", hald)
+cfg.set_property("file", Gio.File.new_for_path(cube_out))
+cfg.set_property("title", "Mój look")
+cfg.set_property("add-to-library", False)
+res = proc_save.run(cfg)
+saved_lut = cube_parser.parse_cube_file(cube_out) if os.path.exists(cube_out) else None
+check("Hald: zapisany .cube (siatka 36)",
+      res.index(0) == OK and saved_lut is not None and saved_lut.size_3d == 36
+      and saved_lut.title == "Mój look", res.index(1) if res.length() > 1 else "")
+hald.delete()
+img, bg = new_image(120, 80, precision=Gimp.Precision.U16_NON_LINEAR)
+fill_gradient(bg)
+ref_img = img.duplicate()
+look(ref_img.get_layers()[0])
+status, _ = run(img, [bg], lut=cube_out, output="in-place")
+d = max_diff(pixels(bg), pixels(ref_img.get_layers()[0]), alpha_too=False)
+check("Hald: LUT z looku = ta sama korekta GIMP-a na zdjęciu", status == OK and d < 0.02,
+      "max różnica %.4f" % d)
+img.delete()
+ref_img.delete()
+
+# 20. Zapis looku z obrazu, który nie jest Hald → czytelny błąd
+img, bg = new_image(100, 80)
+cfg.set_property("image", img)
+res = proc_save.run(cfg)
+check("Hald: obraz o złych wymiarach → błąd po polsku",
+      res.index(0) == Gimp.PDBStatusType.EXECUTION_ERROR
+      and "Hald" in str(res.index(1)), res.index(1))
+img.delete()
+
 print("WYNIK: %d/%d PASS" % (sum(results), len(results)), flush=True)

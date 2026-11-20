@@ -359,6 +359,90 @@ settle(win)
 snapshot(win, "okno-biblioteka.png")
 win.close()
 
+# 17b. Nowe funkcje okna: siatka porównawcza, presety, maska tonalna, eksport/import
+img = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE,
+                     Gio.File.new_for_path(os.path.join(IMG_DIR, "poziome.png")))
+win = ui.LutWindow(PLUGIN_DIR, img, img.get_layers(), None, offscreen=True)
+settle(win)
+keys = [row[0] for row in win.store]
+win.mode_combo.set_active_id("grid4")
+settle(win)
+pump(0.3)
+check("siatka 2×2: 4 kafelki z różnymi LUT-ami",
+      len(win.grid_cells) == min(4, len(keys))
+      and len({pb_bytes(pb) for _k, pb in win.grid_cells}) == len(win.grid_cells),
+      len(getattr(win, "grid_cells", [])))
+snapshot(win, "okno-siatka.png")
+hits = getattr(win, "_grid_hits", [])
+if len(hits) > 2:
+    (x, y, w, h), key3 = hits[2]
+    # GTK przekazuje do obsługi kliknięcia strukturę EventButton (nie unię Event).
+    ev = Gdk.Event.new(Gdk.EventType.BUTTON_PRESS).button
+    ev.button, ev.x, ev.y = 1, x + w / 2, y + h / 2
+    win._on_area_press(win.area, ev)
+    settle(win)
+    check("siatka: kliknięcie w kafelek wybiera LUT", win.current_key == key3)
+win.mode_combo.set_active_id("grid9")
+settle(win)
+check("siatka 3×3: do 9 kafelków", 0 < len(win.grid_cells) <= 9)
+win.mode_combo.set_active_id("split")
+settle(win)
+
+# Maska tonalna w podglądzie
+full = pb_bytes(win.after_pb)
+for key in ("shadows", "midtones", "highlights"):
+    win.tonal[key].set_value(0)
+win._update_preview()
+check("maska tonalna 0/0/0: podgląd = oryginał",
+      pb_bytes(win.after_pb) == pb_bytes(win.before_pb))
+win.tonal["highlights"].set_value(100)
+win._update_preview()
+partial = pb_bytes(win.after_pb)
+check("tylko światła: podgląd między oryginałem a pełnym efektem",
+      partial != full and partial != pb_bytes(win.before_pb))
+
+# Presety: zapis, zmiana ustawień, wczytanie
+answers.append("Mój preset ą")
+win.strength.set_value(55)
+win._save_preset()
+check("preset zapisany", "Mój preset ą" in win.lib.presets
+      and win.lib.presets["Mój preset ą"]["highlights"] == 100.0
+      and win.lib.presets["Mój preset ą"]["shadows"] == 0.0)
+preset_key = win.current_key
+win.strength.set_value(100)
+for key in ("shadows", "midtones", "highlights"):
+    win.tonal[key].set_value(100)
+win._move_selection(1)
+settle(win)
+win._apply_preset("Mój preset ą")
+settle(win)
+check("preset wczytany: LUT, siła i zakres tonalny",
+      win.current_key == preset_key and win.strength.get_value() == 55
+      and win.tonal["shadows"].get_value() == 0)
+
+# Eksport i import biblioteki (do drugiej biblioteki)
+zip_path = os.path.join(helpers.TMP, "eksport biblioteki.zip")
+if os.path.exists(zip_path):
+    os.remove(zip_path)
+chosen.append([zip_path])
+win._on_export_library()
+check("eksport biblioteki do .zip", os.path.isfile(zip_path), messages[-1][1][:60])
+win.close()
+img.delete()
+other_root = os.path.join(helpers.TMP, "druga biblioteka")
+shutil.rmtree(other_root, ignore_errors=True)
+gimp_ops.library_root = lambda: other_root
+win = ui.LutWindow(PLUGIN_DIR, offscreen=True)
+win.settings["startup_offered"] = True
+chosen.append([zip_path])
+win._on_import_library()
+settle(win)
+check("import biblioteki z .zip: LUT-y i preset",
+      len(win.lib.entries) == N, len(win.lib.entries))
+check("import biblioteki: preset przeniesiony", "Mój preset ą" in win.lib.presets)
+win.close()
+gimp_ops.library_root = lambda: lib_root
+
 # 18. Zestawienie kontrolne: obraz testowy przez wszystkie LUT-y
 lib = library.Library(lib_root)
 src_w, src_h = 240, 160

@@ -3,8 +3,8 @@
 Biblioteka LUT-ów: folder z kopiami plików .cube + indeks JSON.
 
 Układ na dysku (root to zwykle <katalog GIMP-a>/lut-cube):
-    root/index.json        – wpisy, kategorie, ustawienia
-    root/luts/*.cube       – kopie zaimportowanych plików
+    root/index.json        – wpisy, kategorie, presety, ustawienia
+    root/luts/*            – kopie zaimportowanych plików (.cube, .3dl, Hald .png)
     root/cache/<id>.lutc   – sparsowane LUT-y (format binarny, szybki odczyt)
 
 Moduł nie zależy od GIMP-a.
@@ -15,9 +15,14 @@ import hashlib
 import json
 import os
 import shutil
+import tempfile
+import zipfile
 
 import cube_parser
+import lut_formats
 from cube_parser import CubeError
+
+EXPORT_INDEX = "lut-cube-biblioteka.json"
 
 INDEX_VERSION = 1
 DEFAULT_PREFIX = "Zetmar - Cyfrowy Przyjaciel - "
@@ -33,6 +38,9 @@ DEFAULT_SETTINGS = {
     "strength": 100.0,
     "color": 100.0,
     "luminance": 100.0,
+    "shadows": 100.0,           # maska tonalna (%)
+    "midtones": 100.0,
+    "highlights": 100.0,
     "interpolation": "tetrahedral",
     "output": "new-layer",      # new-layer / in-place
     "strength_as_opacity": False,
@@ -82,21 +90,28 @@ def file_sha256(path):
     return h.hexdigest()
 
 
-def find_cube_files(folder, recursive=True):
-    """Pliki .cube w folderze (wielkość liter rozszerzenia bez znaczenia)."""
+def find_lut_files(folder, recursive=True):
+    """
+    Pliki LUT w folderze: .cube, .3dl i obrazy Hald CLUT (.png tylko wtedy,
+    gdy wymiary pasują do Hald – zwykłe zdjęcia są pomijane).
+    """
     found = []
     if recursive:
         for dirpath, dirnames, filenames in os.walk(folder):
             dirnames.sort()
             for name in sorted(filenames):
-                if name.lower().endswith(".cube"):
-                    found.append(os.path.join(dirpath, name))
+                path = os.path.join(dirpath, name)
+                if lut_formats.is_lut_file(path):
+                    found.append(path)
     else:
         for name in sorted(os.listdir(folder)):
             path = os.path.join(folder, name)
-            if name.lower().endswith(".cube") and os.path.isfile(path):
+            if os.path.isfile(path) and lut_formats.is_lut_file(path):
                 found.append(path)
     return found
+
+
+find_cube_files = find_lut_files     # dawna nazwa
 
 
 def short_name(stem, prefix, strip):
@@ -121,6 +136,7 @@ class Library:
         self.index_path = os.path.join(root, "index.json")
         self.entries = {}          # id -> dict
         self.categories = []
+        self.presets = {}          # nazwa -> ustawienia (patrz save_preset)
         self.recent = []           # id ostatnio użytych (najnowszy pierwszy)
         self.settings = dict(DEFAULT_SETTINGS)
         self.load_warning = ""
@@ -161,6 +177,10 @@ class Library:
         self.categories = [c for c in data.get("categories", [])
                            if isinstance(c, str)]
         self.recent = [i for i in data.get("recent", []) if i in self.entries]
+        presets = data.get("presets", {})
+        if isinstance(presets, dict):
+            self.presets = {k: v for k, v in presets.items()
+                            if isinstance(k, str) and isinstance(v, dict)}
         settings = data.get("settings", {})
         if isinstance(settings, dict):
             for k, v in settings.items():
@@ -177,6 +197,7 @@ class Library:
             "entries": list(self.entries.values()),
             "categories": self.categories,
             "recent": self.recent,
+            "presets": self.presets,
             "settings": self.settings,
         }
         tmp = self.index_path + ".tmp"
@@ -240,7 +261,7 @@ class Library:
             result.duplicates.append((src, self.display_name(existing)))
             return result
         try:
-            lut = cube_parser.parse_cube_file(src)
+            lut = lut_formats.load_lut_file(src)
         except CubeError as e:
             result.errors.append((src, str(e)))
             return result
@@ -289,7 +310,7 @@ class Library:
 
     def add_folder(self, folder, recursive=True, category=""):
         try:
-            files = find_cube_files(folder, recursive)
+            files = find_lut_files(folder, recursive)
         except OSError as e:
             raise LibraryError("Nie można odczytać folderu %s: %s"
                                % (folder, e.strerror or e))
@@ -349,6 +370,114 @@ class Library:
                 raise LibraryError("Nie można usunąć pliku %s: %s"
                                    % (path, e.strerror or e))
         return removed
+
+    # --- presety ---------------------------------------------------------------
+
+    PRESET_KEYS = ("strength", "color", "luminance", "interpolation",
+                   "shadows", "midtones", "highlights")
+
+    def save_preset(self, name, lut_key, values):
+        """
+        Zapisuje preset: LUT (id z biblioteki albo "file:<ścieżka>") i ustawienia
+        (siła, kolor, jasność, interpolacja, cienie/półtony/światła w %).
+        """
+        name = name.strip()
+        if not name:
+            raise LibraryError("Nazwa presetu nie może być pusta.")
+        preset = {k: values[k] for k in self.PRESET_KEYS if k in values}
+        preset["lut"] = lut_key
+        self.presets[name] = preset
+        self.save()
+
+    def delete_preset(self, name):
+        self.presets.pop(name, None)
+        self.save()
+
+    def preset_lut_available(self, name):
+        key = self.presets.get(name, {}).get("lut", "")
+        if key.startswith("file:"):
+            return os.path.isfile(key[5:])
+        return key in self.entries
+
+    # --- eksport / import całej biblioteki ------------------------------------
+
+    def export_zip(self, path):
+        """
+        Zapisuje bibliotekę do jednego pliku .zip: pliki LUT-ów, nazwy,
+        kategorie, ulubione i presety. Zwraca liczbę LUT-ów.
+        """
+        data = {"version": INDEX_VERSION, "entries": [], "categories": self.categories,
+                "presets": {k: v for k, v in self.presets.items()
+                            if not v.get("lut", "").startswith("file:")}}
+        tmp = path + ".tmp"
+        try:
+            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+                for lut_id, e in self.entries.items():
+                    src = self.path(lut_id)
+                    if not os.path.isfile(src):
+                        continue
+                    z.write(src, "luts/" + os.path.basename(src))
+                    data["entries"].append({k: e.get(k) for k in (
+                        "id", "file", "name", "category", "favorite", "added", "sha256")})
+                z.writestr(EXPORT_INDEX, json.dumps(data, ensure_ascii=False, indent=1))
+            os.replace(tmp, path)
+        except OSError as e:
+            raise LibraryError("Nie można zapisać pliku %s: %s" % (path, e.strerror or e))
+        return len(data["entries"])
+
+    def import_zip(self, path):
+        """
+        Wczytuje bibliotekę z pliku .zip (z export_zip). Duplikaty (ta sama
+        treść) są pomijane; nazwy, kategorie, ulubione i presety są przenoszone.
+        """
+        result = ImportResult()
+        try:
+            z = zipfile.ZipFile(path)
+        except (OSError, zipfile.BadZipFile) as e:
+            raise LibraryError("To nie jest poprawny plik biblioteki (.zip): %s" % e)
+        with z, tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                data = json.loads(z.read(EXPORT_INDEX).decode("utf-8"))
+            except (KeyError, ValueError) as e:
+                raise LibraryError("W pliku brak indeksu biblioteki (%s)." % e)
+            id_map = {}
+            for e in data.get("entries", []):
+                name = os.path.basename(str(e.get("file", "")))   # bez ścieżek
+                if not name:
+                    continue
+                try:
+                    blob = z.read("luts/" + name)
+                except KeyError:
+                    result.errors.append((name, "brak pliku w archiwum"))
+                    continue
+                src = os.path.join(tmpdir, name)
+                with open(src, "wb") as f:
+                    f.write(blob)
+                r = self.add_file(src, save=False)
+                result.merge(r)
+                new_id = r.added[0] if r.added else self._find_by_hash(file_sha256(src))
+                if new_id is None:
+                    continue
+                id_map[e.get("id")] = new_id
+                if r.added:
+                    cat = e.get("category") or ""
+                    if cat and cat not in self.categories:
+                        self.categories.append(cat)
+                    target = self.entries[new_id]
+                    target["name"] = e.get("name") or ""
+                    target["category"] = cat
+                    target["favorite"] = bool(e.get("favorite"))
+            for cat in data.get("categories", []):
+                if isinstance(cat, str) and cat not in self.categories:
+                    self.categories.append(cat)
+            for pname, preset in (data.get("presets") or {}).items():
+                if pname in self.presets or not isinstance(preset, dict):
+                    continue
+                if preset.get("lut") in id_map:
+                    preset = dict(preset, lut=id_map[preset["lut"]])
+                    self.presets[pname] = preset
+        self.save()
+        return result
 
     def mark_used(self, lut_id):
         if lut_id not in self.entries:
@@ -454,7 +583,7 @@ class Library:
         if lut is None:
             if not os.path.isfile(src):
                 raise CubeError("Brak pliku LUT-a w bibliotece: %s" % src)
-            lut = cube_parser.parse_cube_file(src)
+            lut = lut_formats.load_lut_file(src)
             self._write_cache(lut_id, lut)
         self._luts[lut_id] = lut
         return lut
