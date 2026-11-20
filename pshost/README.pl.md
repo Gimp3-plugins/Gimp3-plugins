@@ -50,7 +50,7 @@ złośliwym kodem.
 
 ## Instalacja
 
-1. Pobierz `PSHost-Setup-<wersja>.exe` i uruchom go (uprawnienia administratora nie są potrzebne). Instalator sam
+1. Pobierz `PSHost-Setup-<wersja>.exe` z [najnowszego wydania](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/latest) (sprawdź sumę SHA-256 w opisie wydania) i uruchom go (uprawnienia administratora nie są potrzebne). Instalator sam
    znajduje GIMP-a 3 (lub pozwala wskazać jego folder). Jeśli znaleziono tylko GIMP-a 2, wyjaśnia, że PSHost wymaga GIMP-a 3.
 2. Gdy instalator o to poprosi, zamknij GIMP-a. Instalator nie dodaje żadnych wtyczek Photoshop.
 3. Uruchom GIMP-a → **Filtry → Photoshop → Zarządzaj wtyczkami…** → **Dodaj katalog…**.
