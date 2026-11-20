@@ -193,8 +193,6 @@ void ps_config_prune_items (PsConfig *c) {
 }
 
 /* ------------------------------------------------------------------ language & translations */
-static Pe8Lang cur_lang = PE8_LANG_EN;
-
 Pe8Lang ps_config_language (const PsConfig *c) {
   if (!g_strcmp0 (c->language, "pl")) return PE8_LANG_PL;
   if (!g_strcmp0 (c->language, "en")) return PE8_LANG_EN;
@@ -202,87 +200,4 @@ Pe8Lang ps_config_language (const PsConfig *c) {
   for (int i = 0; names[i]; i++) { if (g_str_has_prefix (names[i], "pl")) return PE8_LANG_PL; if (g_str_has_prefix (names[i], "en")) return PE8_LANG_EN; }
   return PE8_LANG_EN;
 }
-void ps_set_language (Pe8Lang l) { cur_lang = l; }
-Pe8Lang ps_get_language (void) { return cur_lang; }
 
-typedef struct { const char *en, *pl; } Tr;
-static const Tr table[] = {
-  { "Manage plug-ins...", "Zarządzaj wtyczkami..." },
-  { "About / O wtyczce", "O wtyczce / About" },
-  { "PSHost - Photoshop plug-ins", "PSHost - wtyczki Photoshop" },
-  { "Plug-in directories", "Katalogi z wtyczkami" },
-  { "Directory", "Katalog" },
-  { "Subfolders", "Podkatalogi" },
-  { "Add directory...", "Dodaj katalog..." },
-  { "Remove", "Usuń" },
-  { "Rescan", "Skanuj ponownie" },
-  { "Include subfolders when adding", "Uwzględnij podkatalogi przy dodawaniu" },
-  { "Found plug-ins", "Znalezione wtyczki" },
-  { "Use", "Użyj" },
-  { "Name", "Nazwa" },
-  { "Category", "Kategoria" },
-  { "File", "Plik" },
-  { "Result", "Wynik" },
-  { "Reason", "Powód" },
-  { "OK", "OK" },
-  { "With reservations", "Z zastrzeżeniami" },
-  { "No", "NIE" },
-  { "Details", "Szczegóły" },
-  { "Settings", "Ustawienia" },
-  { "Language:", "Język:" },
-  { "Automatic", "Automatyczny" },
-  { "Test time limit (s):", "Limit czasu testu (s):" },
-  { "Menu names and the language of the filters change after GIMP is restarted.", "Nazwy w menu zmienią się po ponownym uruchomieniu GIMP-a." },
-  { "Adding a plug-in runs third-party code during the test. Add only plug-ins from sources you trust.", "Dodanie wtyczki uruchamia obcy kod podczas testu. Dodawaj tylko wtyczki z zaufanych źródeł." },
-  { "New filters appear in the Filters menu after GIMP is restarted.", "Nowe filtry pojawią się w menu Filtry po ponownym uruchomieniu GIMP-a." },
-  { "Choose a directory with Photoshop plug-ins (.8bf)", "Wybierz katalog z wtyczkami Photoshop (.8bf)" },
-  { "Scanning...", "Skanowanie..." },
-  { "Used: %d, with reservations: %d, skipped: %d", "Użyte: %d, z zastrzeżeniami: %d, pominięte: %d" },
-  { "No plug-ins found yet. Add a directory.", "Nie znaleziono jeszcze wtyczek. Dodaj katalog." },
-  { "Scan result", "Wynik skanowania" },
-  { "No .8bf files were found in this directory.", "W tym katalogu nie znaleziono plików .8bf." },
-  { "This directory is already on the list.", "Ten katalog jest już na liście." },
-  { "Close", "Zamknij" },
-  { "The plug-in is disabled", "Wtyczka jest wyłączona" },
-  { "Filters", "Filtry" },
-  { "Manage", "Zarządzanie" },
-  { "Run on current layer", "Uruchom na bieżącej warstwie" },
-  { "Select a filter and click Run to apply it to the active layer (double-click also works).", "Wybierz filtr i kliknij Uruchom, aby zastosować go na aktywnej warstwie (działa też dwuklik)." },
-  { "No filters yet. Add a directory with plug-ins in the Manage tab.", "Brak filtrów. Dodaj katalog z wtyczkami na karcie Zarządzanie." },
-  { "Applies to: %s", "Zastosowane zostanie do: %s" },
-  { "No image is open. Open an image to run a filter.", "Nie ma otwartego obrazu. Otwórz obraz, aby uruchomić filtr." },
-  { "Remove rejected", "Usuń odrzucone" },
-  { "Remove selected", "Usuń zaznaczone" },
-  { "Restore removed", "Przywróć usunięte" },
-  { "Removes entries from this list only. Files on disk are not deleted.", "Usuwa wpisy tylko z tej listy. Pliki na dysku nie są kasowane." },
-  { "Remove %d rejected plug-ins from the list?", "Usunąć z listy odrzucone wtyczki (%d)?" },
-  { "The plug-in file no longer exists.", "Plik wtyczki już nie istnieje." },
-  { "Layers larger than 32000 pixels are not supported.", "Warstwy większe niż 32000 pikseli nie są obsługiwane." },
-  { "The selection does not overlap the layer.", "Zaznaczenie nie przecina się z warstwą." },
-  { "Cannot create a temporary directory.", "Nie można utworzyć katalogu tymczasowego." },
-  { "Cannot write the temporary image.", "Nie można zapisać obrazu tymczasowego." },
-  { "Cannot start the filter process", "Nie można uruchomić procesu filtra" },
-  { "The filter did not produce a valid result.", "Filtr nie zwrócił poprawnego wyniku." },
-  { "The filter did not finish in time and was stopped. The image was not changed.", "Filtr nie zakończył pracy w czasie i został zatrzymany. Obraz nie został zmieniony." },
-  { "The filter crashed. The image was not changed.", "Filtr uległ awarii. Obraz nie został zmieniony." },
-  { "The plug-in could not be loaded (Windows error %s).", "Nie udało się załadować wtyczki (kod błędu Windows %s)." },
-  { "The filter reported an error", "Filtr zgłosił błąd" },
-  { "The filter reported an error (code %s).", "Filtr zgłosił błąd (kod %s)." },
-  { "The filter process ended unexpectedly (code %u).", "Proces filtra zakończył się nieoczekiwanie (kod %u)." },
-  { "Filter error", "Błąd filtra" },
-  { "Restart GIMP...", "Uruchom ponownie GIMP-a..." },
-  { "Restart GIMP", "Restart GIMP-a" },
-  { "To load the new plug-ins GIMP must be restarted. Restart now?", "Aby załadować nowe wtyczki, GIMP musi zostać uruchomiony ponownie. Uruchomić teraz?" },
-  { "Restart now", "Uruchom ponownie teraz" },
-  { "Later", "Później" },
-  { "Unsaved changes in: %s. GIMP will ask whether to save them before closing.", "Niezapisane zmiany w obrazach: %s. GIMP zapyta o ich zapisanie przed zamknięciem." },
-  { "The filter list changed. Restart GIMP to apply the changes.", "Lista filtrów się zmieniła. Uruchom ponownie GIMP-a, aby zastosować zmiany." },
-  { "Cannot restart GIMP automatically: %s. Close GIMP manually and start it again.", "Nie można automatycznie uruchomić GIMP-a ponownie: %s. Zamknij GIMP-a ręcznie i uruchom go ponownie." },
-  { "cannot find the GIMP process", "nie znaleziono procesu GIMP-a" },
-  { "GIMP does not offer a clean quit", "GIMP nie udostępnia czystego zamknięcia" },
-};
-const char *ps_tr (const char *en) {
-  if (cur_lang == PE8_LANG_EN) return en;
-  for (size_t i = 0; i < G_N_ELEMENTS (table); i++) if (!strcmp (table[i].en, en)) return table[i].pl;
-  return en;
-}

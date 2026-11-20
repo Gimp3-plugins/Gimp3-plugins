@@ -4,6 +4,7 @@
 
 #include <glib.h>
 #include "../common/pe8bf.h"
+#include "../common/i18n.h"
 
 typedef struct { char *path; gboolean recursive; } PsDir;
 
@@ -46,10 +47,7 @@ gboolean ps_path_is_under (const char *path, const char *dir);
 
 /* Language: resolves "auto" using the system/GIMP locale. Returns PE8_LANG_PL or PE8_LANG_EN. */
 Pe8Lang ps_config_language (const PsConfig *c);
-void    ps_set_language (Pe8Lang l);
-Pe8Lang ps_get_language (void);
-/* UI strings are written in English in the code; this returns the Polish text when the language is Polish. */
-const char *ps_tr (const char *english);
-#define _T(s) ps_tr (s)
+#define ps_set_language(l) ps_i18n_set_language (l)
+#define ps_get_language() ps_i18n_get_language ()
 
 #endif

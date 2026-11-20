@@ -10,7 +10,23 @@ target_link_libraries(pshost PRIVATE pe8bf ${GIMP_LIBRARIES})
 target_compile_options(pshost PRIVATE ${GIMP_CFLAGS_OTHER} -Wall)
 
 # --- common static analysis library + dev tool + tests ---
-add_library(pe8bf STATIC src/common/pe8bf.c src/common/pe8_msg.c src/common/pe8_probe.c)
+# --- translations: po/*.po -> locale/<lang>/LC_MESSAGES/pshost.mo (gettext), Polish catalog also embedded as a fallback ---
+find_program(MSGFMT msgfmt REQUIRED)
+set(LOCALE_DIR ${CMAKE_BINARY_DIR}/locale)
+set(MO_FILES "")
+foreach(L pl en)
+  add_custom_command(OUTPUT ${LOCALE_DIR}/${L}/LC_MESSAGES/pshost.mo
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${LOCALE_DIR}/${L}/LC_MESSAGES
+    COMMAND ${MSGFMT} -c -o ${LOCALE_DIR}/${L}/LC_MESSAGES/pshost.mo ${CMAKE_SOURCE_DIR}/po/${L}.po
+    DEPENDS ${CMAKE_SOURCE_DIR}/po/${L}.po)
+  list(APPEND MO_FILES ${LOCALE_DIR}/${L}/LC_MESSAGES/pshost.mo)
+endforeach()
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/i18n_embedded.c
+  COMMAND ${CMAKE_COMMAND} -DMO=${LOCALE_DIR}/pl/LC_MESSAGES/pshost.mo -DOUT=${CMAKE_BINARY_DIR}/i18n_embedded.c -P ${CMAKE_SOURCE_DIR}/cmake/embed_mo.cmake
+  DEPENDS ${LOCALE_DIR}/pl/LC_MESSAGES/pshost.mo ${CMAKE_SOURCE_DIR}/cmake/embed_mo.cmake)
+add_custom_target(locale ALL DEPENDS ${MO_FILES})
+
+add_library(pe8bf STATIC src/common/pe8bf.c src/common/pe8_msg.c src/common/pe8_probe.c src/common/i18n.c ${CMAKE_BINARY_DIR}/i18n_embedded.c)
 target_compile_options(pe8bf PRIVATE -Wall -Wextra)
 add_executable(pe8bf_dump tests/pe8bf_dump.c)
 target_link_libraries(pe8bf_dump PRIVATE pe8bf)

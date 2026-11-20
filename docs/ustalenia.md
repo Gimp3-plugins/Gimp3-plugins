@@ -1,4 +1,4 @@
-# Ustalenia (PSHost) — stan: Etap 6b
+# Ustalenia (PSHost) — stan: Etap 7
 
 ## Zweryfikowane na tej maszynie (fakty)
 - GIMP **3.2.6**, instalacja per-user: `%LOCALAPPDATA%\Programs\GIMP 3`. Katalog użytkownika: `%APPDATA%\GIMP\3.2` (instrukcja zakładała 3.0 — używamy 3.2).
@@ -62,6 +62,14 @@
 - **Wynik:** wszystkie 12 filtrów x64 Nik i Topaz uruchamia się teraz w runnerze bez awarii, a Color Efex Pro 4 wczytuje obraz 640×480, liczy podglądy i go wyświetla (log wtyczki: „Displayed Image update finished”). Zgłaszane jako nieobsługiwane: zestaw Action Descriptor (wtyczki działają dalej), właściwości `unnm`, `xmpd`, `EXIF`, `plip`.
 - **Test regresji:** mini-filtr `pica` dereferuje `sSPBasic` jak Nik; po wyłączeniu poprawki test się oblewa, po włączeniu przechodzi.
 - **Niezweryfikowane:** pełny zapis wyniku (OK → warstwa) dla Nik/Topaz w żywym GIMP-ie; poprawność narysowanych podglądów (`displayPixels`) w oknach Dfine/Sharpener/Viveza — do obejrzenia przez użytkownika.
+
+## Etap 7 — lokalizacja PL/EN (zweryfikowane)
+- **Standardowy gettext:** msgid-y to angielskie teksty w kodzie (`_T()`, `N_()`, `ps_tr_lang()`); `po/pshost.pot` generuje `xgettext` (`po/update_pot.sh` robi też `msgmerge`), `po/pl.po` (93 komunikaty, bez fuzzy/pustych) i `po/en.po`; `msgfmt -c --check-format` buduje `locale/<lang>/LC_MESSAGES/pshost.mo` (ten sam układ, którego używa GIMP). Zamiast dwujęzycznych tabel w kodzie — jedno źródło prawdy w `.po`.
+- **Wybór języka w trakcie działania:** wbudowany czytnik `.mo` (src/common/i18n.c) zamiast `libintl`, bo język musi się przełączać (Auto / Polski / English) niezależnie od locale procesu wtyczki. Katalog ładowany z `<katalog wtyczki>\locale` (lub `PSHOST_LOCALE_DIR`); jeśli go brak — z katalogu **wbudowanego** w binarkę (`cmake/embed_mo.cmake`), więc UI nie „gubi” tłumaczeń.
+- **Auto:** język z `g_get_language_names()` — uwzględnia `LANGUAGE` ustawiany przez GIMP-a (jego ustawienie języka) i język systemu (ten komputer: pl-PL, `gimprc`: language „” = systemowy). Test: `LANGUAGE=pl/en` → właściwy język.
+- **`set_i18n` wyłączone:** GIMP nie tłumaczy sam naszych msgid-ów, bo ręczny wybór „English” byłby nadpisany językiem GIMP-a; znika też ostrzeżenie „catalog directory does not exist”. Nazwy menu filtrów zależą od kategorii z PiPL (nietłumaczone) i etykiet z wtyczek; nazwa kategorii zastępczej: „Inne/Other”; po zmianie języka etykiety menu zmieniają się po restarcie GIMP-a (okno to komunikuje).
+- **Polskie znaki w ścieżkach (UTF-8 ↔ UTF-16):** ścieżki w GLib/GTK i `config.json` są UTF-8; Windows API wywoływane przez wersje `W` (`_wfopen`, `CreateProcessW`, `LoadLibraryExW`, `SearchPathW`). Testy: katalog „Wtyczki zażółć gęślą jaźń” i plik „filtr ŁÓDŹ.8bf” — skan, probe, zapis w `config.json` jako UTF-8 oraz uruchomienie filtra z menu w prawdziwym GIMP-ie (warstwa odwrócona).
+- **Testy:** `tests/test_i18n.py` (poprawność i kompletność katalogów, aktualność `.pot` względem kodu, wybór języka, polskie ścieżki).
 
 ## Założenia / niezweryfikowane
 - Brak Photoshop SDK na dysku; planowane własne minimalne definicje struktur (`src/common/ps_types.h`). Licencja Adobe SDK do sprawdzenia przed jakąkolwiek redystrybucją nagłówków.
