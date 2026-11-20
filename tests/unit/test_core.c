@@ -922,6 +922,20 @@ test_xmp (void)
   g_assert_cmpint (s.wb_mode, ==, WB_CAMERA);
   g_assert_true (isfinite (s.exposure) && isfinite (s.wb_temperature));
   g_free (dt);
+
+  /* a tiny green multiplier must not produce huge / infinite ratios */
+  raw_settings_defaults (&s);
+  dt = g_strdup ("<x><rdf:li darktable:operation=\"temperature\" darktable:enabled=\"1\""
+                 " darktable:params=\"0000004001000000000000400000803f\"/></x>");   /* g = 1.4e-45 */
+  rawheic_xmp_apply_data (dt, strlen (dt), &s);
+  g_assert_cmpint (s.wb_mode, ==, WB_CAMERA);
+  g_free (dt);
+  raw_settings_defaults (&s);
+  dt = g_strdup ("<x><rdf:li darktable:operation=\"temperature\" darktable:enabled=\"1\""
+                 " darktable:params=\"0000784200000040000000000000803f\"/></x>");   /* r=62 g=2 b=0 */
+  rawheic_xmp_apply_data (dt, strlen (dt), &s);
+  g_assert_cmpint (s.wb_mode, ==, WB_CAMERA);                       /* b = 0 rejected */
+  g_free (dt);
   g_assert_null (rawheic_xmp_apply_data ("", 0, &s));
 }
 

@@ -321,13 +321,16 @@ rawheic_xmp_apply_data (const gchar *xml,
             {
               gfloat r = le_float (p), g = le_float (p + 4), b = le_float (p + 8);
 
+              gdouble mr = (gdouble) r / g, mb = (gdouble) b / g;
+
               if (isfinite (r) && isfinite (g) && isfinite (b) &&
-                  r > 0 && g > 0 && b > 0 && r < 64 && g < 64 && b < 64)
+                  g >= 1e-3f && r > 0 && b > 0 && r < 64 && g < 64 && b < 64 &&
+                  isfinite (mr) && isfinite (mb))
                 {
                   s->wb_mode   = WB_MULTIPLIERS;
-                  s->wb_mul[0] = r / g;
+                  s->wb_mul[0] = CLAMP (mr, 0.05, 20.0);
                   s->wb_mul[1] = 1.0;
-                  s->wb_mul[2] = b / g;
+                  s->wb_mul[2] = CLAMP (mb, 0.05, 20.0);
                   any = TRUE;
                 }
             }

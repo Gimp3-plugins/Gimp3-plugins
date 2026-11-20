@@ -383,9 +383,10 @@ apply_settings (libraw_data_t     *lr,
       break;
 
     case WB_MULTIPLIERS:
-      p->user_mul[0] = (float) s->wb_mul[0];
+      /* from files (XMP, XCF): never trust the range */
+      p->user_mul[0] = isfinite (s->wb_mul[0]) ? (float) CLAMP (s->wb_mul[0], 0.05, 20.0) : 1.0f;
       p->user_mul[1] = 1.0f;
-      p->user_mul[2] = (float) s->wb_mul[2];
+      p->user_mul[2] = isfinite (s->wb_mul[2]) ? (float) CLAMP (s->wb_mul[2], 0.05, 20.0) : 1.0f;
       p->user_mul[3] = 1.0f;
       break;
 
