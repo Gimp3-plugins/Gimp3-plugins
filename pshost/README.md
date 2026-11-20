@@ -9,6 +9,8 @@ used (and why the others will not), and adds the usable ones to **Filters → Ph
 > **Status: 0.8.0 — works, with limits.** Tested with GIMP 3.2.6 on Windows 11. See [Known limitations](#known-limitations).
 > A result of "will be used" means the plug-in passed a basic test, **not** that it works in every situation.
 
+**Demo video (3:55):** [docs/PSHost-demo.mp4](docs/PSHost-demo.mp4) — adding plug-ins, the Filters menu, Nik / Topaz / Podpis (Watermark) running in GIMP 3.
+
 ## What it does
 
 - **Manage plug-ins…** (Filters → Photoshop): add / remove / rescan directories (optionally with subfolders), see a table
