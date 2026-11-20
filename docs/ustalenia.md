@@ -1,4 +1,4 @@
-# Ustalenia (PSHost) — stan: Etap 6
+# Ustalenia (PSHost) — stan: Etap 6b
 
 ## Zweryfikowane na tej maszynie (fakty)
 - GIMP **3.2.6**, instalacja per-user: `%LOCALAPPDATA%\Programs\GIMP 3`. Katalog użytkownika: `%APPDATA%\GIMP\3.2` (instrukcja zakładała 3.0 — używamy 3.2).
@@ -53,6 +53,15 @@
 - **Restart (wybrany wariant):** tryb `pshost_runner --mode restart` (osobny proces pomocniczy, bez dodatkowego pliku exe) czeka na zakończenie GIMP-a (PID rodzica wtyczki, ścieżka exe z `QueryFullProcessImageName`, **bez zgadywania**), po 1,5 s uruchamia GIMP-a ponownie. Zamknięcie: wywołanie PDB `gimp-quit(force=FALSE)` — ta sama ścieżka co Plik → Zakończ, więc GIMP sam pyta o niezapisane obrazy; **procesu nie zabijamy**. Jeśli użytkownik anuluje zamykanie, pomocnik po 180 s kończy się bez uruchamiania GIMP-a (kod 124). Okno przed restartem prosi o zgodę i wymienia obrazy z niezapisanymi zmianami (`gimp_image_is_dirty`); „Później” niczego nie zamyka.
 - **Zweryfikowane testami (13 kontroli):** procedura menu zarejestrowana i działa (warstwa odwrócona), `registered.json`, helper czeka/uruchamia/rezygnuje przy anulowaniu, `pshost-restart` w GIMP-ie znajduje proces rodzica, a helper przeżywa jego zakończenie; okno: wykrycie „potrzebny restart”, zgoda „Później”/„Teraz”, ostrzeżenie o niezapisanych obrazach.
 - **Niezweryfikowane:** prawdziwy restart okienkowego GIMP-a (test użył gimp-console i zastępczego exe — celowo nie ruszam Twojego pulpitu); czy GIMP na Windows nie umieszcza wtyczek w obiekcie job z KILL_ON_JOB_CLOSE (helper próbuje `CREATE_BREAKAWAY_FROM_JOB`, a przy odmowie startuje bez niego); wygląd pozycji menu w żywym GIMP-ie.
+
+## Etap 6b — awaria Nik Collection w GIMP-ie (zdiagnozowana i naprawiona)
+- **Objaw:** Color Efex Pro 4 uruchomiony z menu pokazał własne okno „The application did crash”. **Test probe (tylko `Prepare`) tego nie wykrył** — wtyczka żąda funkcji hosta dopiero w `Start`.
+- **Diagnoza (z raportu awarii wtyczki):** minidump: `EXCEPTION_ACCESS_VIOLATION` (odczyt spod adresu 0) w kodzie samego `Color Efex Pro 4.8bf` (+0x15261). Dezasemblacja: `mov rax,[rax+0x1d0]; call [rax]` — wtyczka bierze z `FilterRecord` wskaźnik `sSPBasic` (offset 0x1D0 **zgadza się** z `offsetof(FilterRecord,sSPBasic)` w `ps_types.h` — niezależne potwierdzenie układu struktury) i bez sprawdzania wywołuje `AcquireSuite`. Mój host zostawiał to pole puste.
+- **Naprawa (runner):** `SPBasicSuite` + zestawy PICA: *Photoshop Handle Suite* v1/v2, *Photoshop Property Suite* v1, *Photoshop UIHooks Suite* v1, *AS ZString Suite* v1 (układy z PSFilterPdn, MIT). Nieobsługiwane zestawy (np. Action Descriptor `df135115-…` v2, Progress, Feature) zwracają `kSPSuiteNotFoundError` i są logowane jako UNSUPPORTED. Dodatkowo `displayPixels` (rysowanie podglądu przez `SetDIBitsToDevice`) według `PSPixelMap` oraz poprawiony podpis `displayPixels` w `ps_types.h`.
+- **Błąd w obsłudze zawieszeń wykryty przy okazji:** `ExitProcess` w watchdogu/filtrze wyjątków czekał na wątki wtyczki Nik i runner nie kończył się w limicie czasu; zamienione na `TerminateProcess`.
+- **Wynik:** wszystkie 12 filtrów x64 Nik i Topaz uruchamia się teraz w runnerze bez awarii, a Color Efex Pro 4 wczytuje obraz 640×480, liczy podglądy i go wyświetla (log wtyczki: „Displayed Image update finished”). Zgłaszane jako nieobsługiwane: zestaw Action Descriptor (wtyczki działają dalej), właściwości `unnm`, `xmpd`, `EXIF`, `plip`.
+- **Test regresji:** mini-filtr `pica` dereferuje `sSPBasic` jak Nik; po wyłączeniu poprawki test się oblewa, po włączeniu przechodzi.
+- **Niezweryfikowane:** pełny zapis wyniku (OK → warstwa) dla Nik/Topaz w żywym GIMP-ie; poprawność narysowanych podglądów (`displayPixels`) w oknach Dfine/Sharpener/Viveza — do obejrzenia przez użytkownika.
 
 ## Założenia / niezweryfikowane
 - Brak Photoshop SDK na dysku; planowane własne minimalne definicje struktur (`src/common/ps_types.h`). Licencja Adobe SDK do sprawdzenia przed jakąkolwiek redystrybucją nagłówków.

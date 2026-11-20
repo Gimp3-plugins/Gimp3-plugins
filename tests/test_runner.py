@@ -35,9 +35,9 @@ def inverted_ok(out, mask=None):
         if out[i*4+3] != src[i*4+3]: return False
     return True
 
-for v in ("invert", "tiled"):
+for v in ("invert", "tiled", "pica"):
     rc, out = run_variant(v)
-    check(rc == 0 and "RUN_OK" in out, f"{v}: exit 0")
+    check(rc == 0 and "RUN_OK" in out, f"{v}: exit 0" + (" (PICA suites acquired via sSPBasic)" if v == "pica" else ""))
     check(inverted_ok(open(fout, "rb").read()), f"{v}: RGB inverted, alpha preserved")
 
 mask = bytes(255 if (i % W) < W // 2 else 0 for i in range(W * H))
@@ -91,19 +91,19 @@ if os.path.isdir(os.path.join(GIMP, "bin")):
     def ui(lang, *dirs):
         return subprocess.run([os.path.join(B, "ui_snapshot.exe"), png, lang, *dirs], capture_output=True, text=True, env=env, timeout=120).stdout
     o = ui("en", os.path.join(B, "mini"))
-    check("items=5 ok=2 warn=0 no=3 dirs=1 ignored=0 needs_restart=1 png=yes" in o, "UI: scanning mini dir -> 2 usable, 3 rejected")
+    check("items=6 ok=3 warn=0 no=3 dirs=1 ignored=0 needs_restart=1 png=yes" in o, "UI: scanning mini dir -> 3 usable, 3 rejected")
     cfg = open(os.path.join(cfgdir, "config.json"), encoding="utf-8").read()
     import re
     has = lambda k, v: re.search(r'"%s"\s*:\s*"%s"' % (k, v), cfg) is not None
     check(has("verdict", "NO") and has("reason", "probe-crash") and has("reason", "missing-dep") and has("language", "en"), "UI: config.json written with verdicts/reasons")
     o = ui("pl", os.path.join(B, "mini"))   # same dir again: no duplicate, config reloaded
-    check("items=5" in o and "dirs=1" in o, "UI: config reload, directory not duplicated")
+    check("items=6" in o and "dirs=1" in o, "UI: config reload, directory not duplicated")
     def ui_act(act):
         e = dict(env, PSHOST_TEST=act)
         return subprocess.run([os.path.join(B, "ui_snapshot.exe"), png, "en", os.path.join(B, "mini")], capture_output=True, text=True, env=e, timeout=120).stdout
-    o = ui_act("remove-rejected"); check("items=2 ok=2 warn=0 no=0" in o and "ignored=3" in o, "UI: 'Remove rejected' drops the 3 rejected entries and remembers them")
-    o = ui_act("rescan"); check("items=2" in o and "ignored=3" in o, "UI: rescan does not bring removed entries back")
-    o = ui_act("restore"); check("items=5" in o and "ignored=0" in o, "UI: 'Restore removed' + rescan brings them back")
+    o = ui_act("remove-rejected"); check("items=3 ok=3 warn=0 no=0" in o and "ignored=3" in o, "UI: 'Remove rejected' drops the 3 rejected entries and remembers them")
+    o = ui_act("rescan"); check("items=3" in o and "ignored=3" in o, "UI: rescan does not bring removed entries back")
+    o = ui_act("restore"); check("items=6" in o and "ignored=0" in o, "UI: 'Restore removed' + rescan brings them back")
 else:
     print("skip UI tests (GIMP runtime not found)")
 

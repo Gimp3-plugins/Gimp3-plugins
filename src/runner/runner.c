@@ -43,7 +43,7 @@ static void logmsg (const char *fmt, ...) {
 static char unsup[48][64]; static int n_unsup = 0;
 static void unsupported (const char *what) {
   for (int i = 0; i < n_unsup; i++) if (!strcmp (unsup[i], what)) return;
-  if (n_unsup < 48) { strncpy (unsup[n_unsup], what, 63); n_unsup++; }
+  if (n_unsup < 48) { snprintf (unsup[n_unsup], sizeof unsup[0], "%.63s", what); n_unsup++; }
   logmsg ("UNSUPPORTED %s", what);
 }
 
@@ -93,9 +93,126 @@ static int16_t is_interp (PSImagePlane *a, PSImagePlane *b, Rect16 *r, Fixed16 *
 static PSBoolean abort_proc (void) { return 0; }
 static void progress_proc (int32_t done, int32_t total) { (void) done; (void) total; }
 static void process_event (void *e) { (void) e; }
-static void display_pixels (const void *a, const Rect16 *b, int32_t c, int32_t d, const void *e) { (void) a; (void) b; (void) c; (void) d; (void) e; unsupported ("displayPixels"); }
+/* Draws a PSPixelMap (8-bit RGB or gray, planar/interleaved) into a device context: used for previews in plug-in windows. */
+static int16_t display_pixels (const PSPixelMap *src, const PSVRect *sr, int32_t dstRow, int32_t dstCol, void *ctx) {
+  if (!src || !sr || !ctx || !src->baseAddr) return PS_ERR_HOST_INSUFFICIENT;
+  int w = sr->right - sr->left, h = sr->bottom - sr->top;
+  if (w <= 0 || h <= 0 || w > 16384 || h > 16384) return 0;
+  if (sr->left < src->bounds.left || sr->right > src->bounds.right || sr->top < src->bounds.top || sr->bottom > src->bounds.bottom) return PS_ERR_HOST_INSUFFICIENT;
+  if (src->imageMode != ps_modeRGB && src->imageMode != 1) { unsupported ("displayPixels:mode"); return PS_ERR_HOST_INSUFFICIENT; }
+  uint8_t *bgra = malloc ((size_t) w * h * 4); if (!bgra) return PS_ERR_MEMORY_FULL;
+  for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+    const uint8_t *px = (const uint8_t *) src->baseAddr + (size_t) (sr->top - src->bounds.top + y) * src->rowBytes + (size_t) (sr->left - src->bounds.left + x) * src->colBytes;
+    uint8_t *d = bgra + ((size_t) y * w + x) * 4;
+    if (src->imageMode == 1) d[0] = d[1] = d[2] = px[0];
+    else { d[2] = px[0]; d[1] = px[src->planeBytes]; d[0] = px[2 * (size_t) src->planeBytes]; }
+    d[3] = 255;
+  }
+  BITMAPINFO bi; memset (&bi, 0, sizeof bi);
+  bi.bmiHeader.biSize = sizeof bi.bmiHeader; bi.bmiHeader.biWidth = w; bi.bmiHeader.biHeight = -h; bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
+  SetDIBitsToDevice ((HDC) ctx, dstCol, dstRow, (DWORD) w, (DWORD) h, 0, 0, 0, (UINT) h, bgra, &bi, DIB_RGB_COLORS);
+  free (bgra);
+  return 0;
+}
 static void host_procs (int16_t s, void *d) { (void) s; (void) d; unsupported ("hostProcs"); }
 static int16_t color_services (void *info) { (void) info; unsupported ("colorServices"); return PS_ERR_HOST_INSUFFICIENT; }
+
+
+/* ------------------------------------------------------------------------------ PICA (SPBasic) suites
+ * Many filters (e.g. the Nik Collection) acquire "suites" through filterRecord->sSPBasic and dereference it
+ * unconditionally. Layouts follow the public PSFilterPdn host (MIT); only the suites below are provided,
+ * everything else returns kSPSuiteNotFoundError and is reported as UNSUPPORTED. */
+static PSPropertyProcs PP;   /* tentative definition: initialised further down */
+#define SP_NO_ERROR 0
+#define SP_BAD_PARAMETER 0x5061726d
+#define SP_SUITE_NOT_FOUND 0x53214664
+#define SP_UNIMPLEMENTED 0x21494d50
+
+typedef struct { PSHandle (*New) (int32_t); void (*Dispose) (PSHandle); void (*SetLock) (PSHandle, PSBoolean, void **, PSBoolean *);
+                 int32_t (*GetSize) (PSHandle); int16_t (*SetSize) (PSHandle, int32_t); void (*RecoverSpace) (int32_t); } PicaHandleSuite1;
+typedef struct { PSHandle (*New) (int32_t); void (*Dispose) (PSHandle); void (*DisposeRegular) (PSHandle); void (*SetLock) (PSHandle, PSBoolean, void **, PSBoolean *);
+                 int32_t (*GetSize) (PSHandle); int16_t (*SetSize) (PSHandle, int32_t); void (*RecoverSpace) (int32_t); } PicaHandleSuite2;
+typedef struct { void (*processEvent) (void *); PSDisplayPixelsProc displayPixels; void (*progressBar) (int32_t, int32_t);
+                 PSBoolean (*testAbort) (void); void *(*MainAppWindow) (void); int32_t (*SetCursor) (void *); uint32_t (*TickCount) (void);
+                 int32_t (*GetPluginName) (void *plugInRef, void **name); } PicaUIHooksSuite1;
+
+static void hs_setlock (PSHandle h, PSBoolean lock, void **addr, PSBoolean *old) { if (old) *old = !lock; if (addr) *addr = lock && h ? h->data : NULL; }
+static PicaHandleSuite1 HS1 = { h_new, h_dispose, hs_setlock, h_size, h_setsize, h_recover };
+static PicaHandleSuite2 HS2 = { h_new, h_dispose, h_dispose, hs_setlock, h_size, h_setsize, h_recover };
+
+/* ASZString: handles are 1-based indices into this table */
+typedef struct { char *s; int ref; } ZStr;
+static ZStr Z[512]; static int n_z = 0;
+static void *z_new (const char *s, size_t n) { if (n_z >= 511) return NULL; ZStr *z = &Z[++n_z]; z->s = malloc (n + 1); memcpy (z->s, s, n); z->s[n] = 0; z->ref = 1; return (void *) (uintptr_t) n_z; }
+static ZStr *z_get (void *h) { uintptr_t i = (uintptr_t) h; return i >= 1 && i <= (uintptr_t) n_z ? &Z[i] : NULL; }
+static int32_t z_from_unicode (const void *src, size_t bytes, void **out) {
+  char *u = malloc (bytes + 1); int n = WideCharToMultiByte (CP_UTF8, 0, (const wchar_t *) src, (int) (bytes / 2), u, (int) bytes * 2, NULL, NULL); if (n < 0) n = 0;
+  *out = z_new (u, (size_t) n); free (u); return *out ? 0 : SP_BAD_PARAMETER; }
+static int32_t z_from_c (const void *src, size_t n, void **out) { *out = z_new ((const char *) src, strnlen ((const char *) src, n)); return *out ? 0 : SP_BAD_PARAMETER; }
+static int32_t z_from_pascal (const void *src, size_t n, void **out) { (void) n; const uint8_t *p = src; *out = z_new ((const char *) p + 1, p[0]); return *out ? 0 : SP_BAD_PARAMETER; }
+static int32_t z_unimpl_i (int32_t a, void **o) { (void) a; (void) o; unsupported ("ASZString.MakeRomanization"); return SP_UNIMPLEMENTED; }
+static int32_t z_unimpl_f (int32_t a, int32_t b, int32_t c, void **o) { (void) a; (void) b; (void) c; (void) o; unsupported ("ASZString.MakeRomanization"); return SP_UNIMPLEMENTED; }
+static int32_t z_unimpl_d (double a, void **o) { (void) a; (void) o; unsupported ("ASZString.MakeRomanization"); return SP_UNIMPLEMENTED; }
+static void *z_empty (void) { static void *e = NULL; if (!e) e = z_new ("", 0); return e; }
+static int32_t z_copy (void *src, void **out) { ZStr *z = z_get (src); if (!z) return SP_BAD_PARAMETER; *out = z_new (z->s, strlen (z->s)); return 0; }
+static int32_t z_replace (void *z, uint32_t i, void *r) { (void) z; (void) i; (void) r; unsupported ("ASZString.Replace"); return SP_UNIMPLEMENTED; }
+static int32_t z_noop (void *z) { (void) z; return 0; }
+static int32_t z_addref (void *h) { ZStr *z = z_get (h); if (z) z->ref++; return 0; }
+static int32_t z_release (void *h) { ZStr *z = z_get (h); if (z && z->ref > 0) z->ref--; return 0; }
+static uint8_t z_allws (void *h) { ZStr *z = z_get (h); if (!z) return 1; for (const char *c = z->s; *c; c++) if (*c != ' ' && *c != '\t' && *c != '\r' && *c != '\n') return 0; return 1; }
+static uint8_t z_isempty (void *h) { ZStr *z = z_get (h); return !z || !z->s[0]; }
+static uint8_t z_willreplace (void *h, uint32_t i) { (void) h; (void) i; return 0; }
+static uint32_t z_len_unicode (void *h) { ZStr *z = z_get (h); return z ? (uint32_t) MultiByteToWideChar (CP_UTF8, 0, z->s, -1, NULL, 0) : 1; }
+static int32_t z_as_unicode (void *h, void *dst, uint32_t size, uint8_t check) { ZStr *z = z_get (h); if (!z || !dst) return SP_BAD_PARAMETER;
+  if (check && size < z_len_unicode (h)) return SP_BAD_PARAMETER;
+  MultiByteToWideChar (CP_UTF8, 0, z->s, -1, (wchar_t *) dst, (int) size);
+  return 0; }
+static uint32_t z_len_c (void *h) { ZStr *z = z_get (h); return z ? (uint32_t) strlen (z->s) + 1 : 1; }
+static int32_t z_as_c (void *h, void *dst, uint32_t size, uint8_t check) { ZStr *z = z_get (h); if (!z || !dst) return SP_BAD_PARAMETER;
+  size_t n = strlen (z->s) + 1; if (check && size < n) return SP_BAD_PARAMETER; if (n > size) n = size; memcpy (dst, z->s, n); if (n) ((char *) dst)[n - 1] = 0; return 0; }
+static uint32_t z_len_p (void *h) { ZStr *z = z_get (h); size_t n = z ? strlen (z->s) : 0; return (uint32_t) (n > 255 ? 255 : n) + 1; }
+static int32_t z_as_p (void *h, void *dst, uint32_t size, uint8_t check) { ZStr *z = z_get (h); if (!z || !dst || size < 1) return SP_BAD_PARAMETER;
+  size_t n = strlen (z->s); if (n > 255) n = 255; if (check && size < n + 1) return SP_BAD_PARAMETER; if (n > size - 1) n = size - 1; ((uint8_t *) dst)[0] = (uint8_t) n; memcpy ((char *) dst + 1, z->s, n); return 0; }
+
+typedef struct { int32_t (*MakeFromUnicode) (const void *, size_t, void **); int32_t (*MakeFromCString) (const void *, size_t, void **);
+  int32_t (*MakeFromPascalString) (const void *, size_t, void **); int32_t (*MakeRomanizationOfInteger) (int32_t, void **);
+  int32_t (*MakeRomanizationOfFixed) (int32_t, int32_t, int32_t, void **); int32_t (*MakeRomanizationOfDouble) (double, void **);
+  void *(*GetEmpty) (void); int32_t (*Copy) (void *, void **); int32_t (*Replace) (void *, uint32_t, void *); int32_t (*TrimEllipsis) (void *);
+  int32_t (*TrimSpaces) (void *); int32_t (*RemoveAccelerators) (void *); int32_t (*AddRef) (void *); int32_t (*Release) (void *);
+  uint8_t (*IsAllWhiteSpace) (void *); uint8_t (*IsEmpty) (void *); uint8_t (*WillReplace) (void *, uint32_t);
+  uint32_t (*LengthAsUnicodeCString) (void *); int32_t (*AsUnicodeCString) (void *, void *, uint32_t, uint8_t);
+  uint32_t (*LengthAsCString) (void *); int32_t (*AsCString) (void *, void *, uint32_t, uint8_t);
+  uint32_t (*LengthAsPascalString) (void *); int32_t (*AsPascalString) (void *, void *, uint32_t, uint8_t); } PicaZStringSuite1;
+static PicaZStringSuite1 ZS1 = { z_from_unicode, z_from_c, z_from_pascal, z_unimpl_i, z_unimpl_f, z_unimpl_d, z_empty, z_copy, z_replace, z_noop, z_noop, z_noop,
+                                 z_addref, z_release, z_allws, z_isempty, z_willreplace, z_len_unicode, z_as_unicode, z_len_c, z_as_c, z_len_p, z_as_p };
+
+static void *ui_main_window (void) { return (void *) O.hwnd; }
+static int32_t ui_set_cursor (void *c) { (void) c; return SP_UNIMPLEMENTED; }
+static uint32_t ui_tick (void) { return (uint32_t) (GetTickCount () * 60ULL / 1000ULL); }
+static int32_t ui_plugin_name (void *ref, void **name) { (void) ref; if (!name) return SP_BAD_PARAMETER; *name = z_new ("PSHost", 6); return 0; }
+static PicaUIHooksSuite1 UIH1 = { process_event, display_pixels, progress_proc, abort_proc, ui_main_window, ui_set_cursor, ui_tick, ui_plugin_name };
+
+static int32_t sp_acquire (const char *name, int32_t version, const void **suite) {
+  char what[160]; if (!name || !suite) return SP_BAD_PARAMETER;
+  *suite = NULL;
+  if (!strcmp (name, "Photoshop Handle Suite for Plug-ins") && version == 1) *suite = &HS1;
+  else if (!strcmp (name, "Photoshop Handle Suite for Plug-ins") && version == 2) *suite = &HS2;
+  else if (!strcmp (name, "Photoshop Property Suite for Plug-ins") && version == 1) *suite = &PP;
+  else if (!strcmp (name, "Photoshop UIHooks Suite for Plug-ins") && version == 1) *suite = &UIH1;
+  else if (!strcmp (name, "AS ZString Suite") && version == 1) *suite = &ZS1;
+  if (*suite) { logmsg ("PICA acquire '%s' v%d", name, version); return SP_NO_ERROR; }
+  snprintf (what, sizeof what, "pica:%s v%d", name, version); unsupported (what);
+  return SP_SUITE_NOT_FOUND;
+}
+static int32_t sp_release (const char *name, int32_t version) { (void) name; (void) version; return SP_NO_ERROR; }
+static uint8_t sp_isequal (const char *a, const char *b) { return a && b && !strcmp (a, b); }
+static int32_t sp_alloc (int32_t size, void **block) { if (!block) return SP_BAD_PARAMETER; *block = calloc (1, size > 0 ? (size_t) size : 1); return *block ? 0 : PS_ERR_MEMORY_FULL; }
+static int32_t sp_free (void *block) { free (block); return 0; }
+static int32_t sp_realloc (void *block, int32_t size, void **nb) { if (!nb) return SP_BAD_PARAMETER; *nb = realloc (block, size > 0 ? (size_t) size : 1); return *nb ? 0 : PS_ERR_MEMORY_FULL; }
+static int32_t sp_undefined (void) { return SP_UNIMPLEMENTED; }
+typedef struct { int32_t (*AcquireSuite) (const char *, int32_t, const void **); int32_t (*ReleaseSuite) (const char *, int32_t); uint8_t (*IsEqual) (const char *, const char *);
+                 int32_t (*AllocateBlock) (int32_t, void **); int32_t (*FreeBlock) (void *); int32_t (*ReallocateBlock) (void *, int32_t, void **); int32_t (*Undefined) (void); } SPBasicSuite;
+static SPBasicSuite SPB = { sp_acquire, sp_release, sp_isequal, sp_alloc, sp_free, sp_realloc, sp_undefined };
 
 /* ------------------------------------------------------------------- image */
 static int W, H;
@@ -177,11 +294,11 @@ static int16_t advance_state (void) {
 /* ----------------------------------------------------------------- plumbing */
 static LONG WINAPI crash_filter (EXCEPTION_POINTERS *ep) {
   logmsg ("CRASH exception=0x%08lX address=%p", ep->ExceptionRecord->ExceptionCode, ep->ExceptionRecord->ExceptionAddress);
-  ExitProcess (0xC0DE0001);
+  TerminateProcess (GetCurrentProcess (), 0xC0DE0001);   /* ExitProcess could block on the plug-in's threads */
   return EXCEPTION_EXECUTE_HANDLER;
 }
 static DWORD WINAPI watchdog (LPVOID p) {
-  Sleep ((DWORD) (uintptr_t) p); logmsg ("TIMEOUT: plug-in did not finish in %d ms", O.timeout_ms); ExitProcess (124); return 0;
+  Sleep ((DWORD) (uintptr_t) p); logmsg ("TIMEOUT: plug-in did not finish in %d ms", O.timeout_ms); TerminateProcess (GetCurrentProcess (), 124); return 0;
 }
 
 static uint8_t *read_all (const wchar_t *path, size_t *n) {
@@ -213,7 +330,7 @@ static void setup_record (void) {
   f->processEvent = process_event; f->displayPixels = display_pixels;
   f->advanceState = advance_state; f->colorServices = color_services;
   f->filterCase = (O.mask && selmask) ? ps_FlatImageWithSelection : ps_FlatImageNoSelection;
-  f->imageServicesProcs = &IP; f->propertyProcs = &PP; f->errorString = &ERRSTR;
+  f->sSPBasic = &SPB; f->imageServicesProcs = &IP; f->propertyProcs = &PP; f->errorString = &ERRSTR;
   f->depth = 8; f->inputRate = f->maskRate = 1 << 16; f->samplingSupport = 1;
   f->inNonLayerPlanes = 3; f->outNonLayerPlanes = 3;
   if (selmask) { f->haveMask = 1; f->autoMask = 1; f->maskRect = f->filterRect; }
