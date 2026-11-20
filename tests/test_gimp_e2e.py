@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 """End-to-end test inside a real GIMP 3 (gimp-console): runs the synthetic 'invert' filter through the installed
 pshost plug-in (procedure pshost-run-filter) and checks pixels, selection handling and a single Undo step.
 Requires: GIMP installed, pshost.exe + pshost_runner.exe installed in %APPDATA%\\GIMP\\3.2\\plug-ins\\pshost,

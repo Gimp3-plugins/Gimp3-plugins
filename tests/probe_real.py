@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 """Dev script: run pshost_runner --mode probe on every statically-OK 64-bit filter found under given roots."""
 import subprocess, glob, os, re, sys
 B = os.path.abspath(sys.argv[1]); roots = sys.argv[2:]

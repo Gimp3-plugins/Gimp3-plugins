@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* Tests for src/common/pe8bf.c. Real-plug-in checks run only when the files exist on this machine. */
 #include "../src/common/pe8bf.h"
 #include <stdio.h>

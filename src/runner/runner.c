@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* pshost_runner - hosts ONE Photoshop filter (.8bf, 64-bit) in a separate process.
  *
  * Usage (all paths UTF-16 command line):

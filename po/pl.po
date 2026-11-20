@@ -7,8 +7,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: PSHost 0.7\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-20 04:33+0100\n"
+"Report-Msgid-Bugs-To: none\n"
+"POT-Creation-Date: 2026-11-20 08:56+0100\n"
 "PO-Revision-Date: 2026-11-20 12:00+0100\n"
 "Last-Translator: PSHost\n"
 "Language-Team: Polish\n"
@@ -17,401 +17,416 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/plugin/filter.c:26
+#: src/plugin/filter.c:28
 msgid "The plug-in file no longer exists."
 msgstr "Plik wtyczki już nie istnieje."
 
-#: src/plugin/filter.c:28
+#: src/plugin/filter.c:30
 msgid "Layers larger than 32000 pixels are not supported."
 msgstr "Warstwy większe niż 32000 pikseli nie są obsługiwane."
 
-#: src/plugin/filter.c:38
+#: src/plugin/filter.c:40
 msgid "The selection does not overlap the layer."
 msgstr "Zaznaczenie nie przecina się z warstwą."
 
-#: src/plugin/filter.c:45
+#: src/plugin/filter.c:47
 msgid "Cannot create a temporary directory."
 msgstr "Nie można utworzyć katalogu tymczasowego."
 
-#: src/plugin/filter.c:54
+#: src/plugin/filter.c:56
 msgid "Cannot write the temporary image."
 msgstr "Nie można zapisać obrazu tymczasowego."
 
-#: src/plugin/filter.c:73
+#: src/plugin/filter.c:75
 msgid "Cannot start the filter process"
 msgstr "Nie można uruchomić procesu filtra"
 
-#: src/plugin/filter.c:96
+#: src/plugin/filter.c:98
 msgid "The filter did not produce a valid result."
 msgstr "Filtr nie zwrócił poprawnego wyniku."
 
-#: src/plugin/filter.c:99
+#: src/plugin/filter.c:101
 msgid ""
 "The filter did not finish in time and was stopped. The image was not changed."
-msgstr "Filtr nie zakończył pracy w czasie i został zatrzymany. Obraz nie został zmieniony."
+msgstr ""
+"Filtr nie zakończył pracy w czasie i został zatrzymany. Obraz nie został "
+"zmieniony."
 
-#: src/plugin/filter.c:100
+#: src/plugin/filter.c:102
 msgid "The filter crashed. The image was not changed."
 msgstr "Filtr uległ awarii. Obraz nie został zmieniony."
 
-#: src/plugin/filter.c:101
+#: src/plugin/filter.c:103
 #, c-format
 msgid "The plug-in could not be loaded (Windows error %s)."
 msgstr "Nie udało się załadować wtyczki (kod błędu Windows %s)."
 
-#: src/plugin/filter.c:105
+#: src/plugin/filter.c:107
 msgid "The filter reported an error"
 msgstr "Filtr zgłosił błąd"
 
-#: src/plugin/filter.c:105
+#: src/plugin/filter.c:107
 #, c-format
 msgid "The filter reported an error (code %s)."
 msgstr "Filtr zgłosił błąd (kod %s)."
 
-#: src/plugin/filter.c:107
+#: src/plugin/filter.c:109
 #, c-format
 msgid "The filter process ended unexpectedly (code %u)."
 msgstr "Proces filtra zakończył się nieoczekiwanie (kod %u)."
 
-#: src/plugin/main.c:58
+#: src/plugin/main.c:60
 msgid "Filter error"
 msgstr "Błąd filtra"
 
-#: src/plugin/main.c:204
+#: src/plugin/main.c:206
 msgid "About PSHost..."
 msgstr "O PSHost..."
 
-#: src/plugin/main.c:210
+#: src/plugin/main.c:212
 msgid "Manage plug-ins..."
 msgstr "Zarządzaj wtyczkami..."
 
-#: src/plugin/registry.c:13
+#: src/plugin/registry.c:15
 msgid "Other"
 msgstr "Inne"
 
-#: src/plugin/restart.c:45
+#: src/plugin/restart.c:47
 msgid "cannot find the GIMP process"
 msgstr "nie znaleziono procesu GIMP-a"
 
-#: src/plugin/restart.c:68
+#: src/plugin/restart.c:70
 msgid "GIMP does not offer a clean quit"
 msgstr "GIMP nie udostępnia czystego zamknięcia"
 
-#: src/plugin/ui.c:99
+#: src/plugin/ui.c:101
 msgid "Scanning..."
 msgstr "Skanowanie..."
 
-#: src/plugin/ui.c:107
+#: src/plugin/ui.c:109
 msgid "OK"
 msgstr "OK"
 
-#: src/plugin/ui.c:107 src/plugin/ui.c:152
+#: src/plugin/ui.c:109 src/plugin/ui.c:154
 msgid "With reservations"
 msgstr "Z zastrzeżeniami"
 
-#: src/plugin/ui.c:107
+#: src/plugin/ui.c:109
 msgid "No"
 msgstr "NIE"
 
-#: src/plugin/ui.c:137
+#: src/plugin/ui.c:139
 msgid "The plug-in is disabled"
 msgstr "Wtyczka jest wyłączona"
 
-#: src/plugin/ui.c:158
+#: src/plugin/ui.c:160
 msgid ""
 "Select a filter and click Run to apply it to the active layer (double-click "
 "also works)."
-msgstr "Wybierz filtr i kliknij Uruchom, aby zastosować go na aktywnej warstwie (działa też dwuklik)."
+msgstr ""
+"Wybierz filtr i kliknij Uruchom, aby zastosować go na aktywnej warstwie "
+"(działa też dwuklik)."
 
-#: src/plugin/ui.c:158
+#: src/plugin/ui.c:160
 msgid "No filters yet. Add a directory with plug-ins in the Manage tab."
 msgstr "Brak filtrów. Dodaj katalog z wtyczkami na karcie Zarządzanie."
 
-#: src/plugin/ui.c:166
+#: src/plugin/ui.c:168
 msgid "No plug-ins found yet. Add a directory."
 msgstr "Nie znaleziono jeszcze wtyczek. Dodaj katalog."
 
-#: src/plugin/ui.c:167 src/plugin/ui.c:196
+#: src/plugin/ui.c:169 src/plugin/ui.c:198
 #, c-format
 msgid "Used: %d, with reservations: %d, skipped: %d"
 msgstr "Użyte: %d, z zastrzeżeniami: %d, pominięte: %d"
 
-#: src/plugin/ui.c:181
+#: src/plugin/ui.c:183
 msgid "No .8bf files were found in this directory."
 msgstr "W tym katalogu nie znaleziono plików .8bf."
 
-#: src/plugin/ui.c:182 src/plugin/ui.c:206
+#: src/plugin/ui.c:184 src/plugin/ui.c:208
 msgid "Scan result"
 msgstr "Wynik skanowania"
 
-#: src/plugin/ui.c:194 src/plugin/ui.c:198 src/plugin/ui.c:490
+#: src/plugin/ui.c:196 src/plugin/ui.c:200 src/plugin/ui.c:492
 msgid "New filters appear in the Filters menu after GIMP is restarted."
 msgstr "Nowe filtry pojawią się w menu Filtry po ponownym uruchomieniu GIMP-a."
 
-#: src/plugin/ui.c:199 src/plugin/ui.c:462
+#: src/plugin/ui.c:201 src/plugin/ui.c:464
 msgid "Details"
 msgstr "Szczegóły"
 
-#: src/plugin/ui.c:215
+#: src/plugin/ui.c:217
 msgid "This directory is already on the list."
 msgstr "Ten katalog jest już na liście."
 
-#: src/plugin/ui.c:228
+#: src/plugin/ui.c:230
 msgid "Choose a directory with Photoshop plug-ins (.8bf)"
 msgstr "Wybierz katalog z wtyczkami Photoshop (.8bf)"
 
-#: src/plugin/ui.c:274 src/plugin/ui.c:483
+#: src/plugin/ui.c:276 src/plugin/ui.c:485
 msgid ""
 "Menu names and the language of the filters change after GIMP is restarted."
 msgstr "Nazwy w menu zmienią się po ponownym uruchomieniu GIMP-a."
 
-#: src/plugin/ui.c:294 src/plugin/ui.c:455 src/plugin/ui.c:456
+#: src/plugin/ui.c:296 src/plugin/ui.c:457 src/plugin/ui.c:458
 msgid "Removes entries from this list only. Files on disk are not deleted."
 msgstr "Usuwa wpisy tylko z tej listy. Pliki na dysku nie są kasowane."
 
-#: src/plugin/ui.c:299
+#: src/plugin/ui.c:301
 #, c-format
 msgid "Remove %d rejected plug-ins from the list?"
 msgstr "Usunąć z listy odrzucone wtyczki (%d)?"
 
-#: src/plugin/ui.c:324
+#: src/plugin/ui.c:326
 #, c-format
 msgid "Applies to: %s"
 msgstr "Zastosowane zostanie do: %s"
 
-#: src/plugin/ui.c:324
+#: src/plugin/ui.c:326
 msgid "No image is open. Open an image to run a filter."
 msgstr "Nie ma otwartego obrazu. Otwórz obraz, aby uruchomić filtr."
 
-#: src/plugin/ui.c:341
+#: src/plugin/ui.c:343
 msgid "To load the new plug-ins GIMP must be restarted. Restart now?"
-msgstr "Aby załadować nowe wtyczki, GIMP musi zostać uruchomiony ponownie. Uruchomić teraz?"
+msgstr ""
+"Aby załadować nowe wtyczki, GIMP musi zostać uruchomiony ponownie. Uruchomić "
+"teraz?"
 
-#: src/plugin/ui.c:344
+#: src/plugin/ui.c:346
 #, c-format
 msgid ""
 "Unsaved changes in: %s. GIMP will ask whether to save them before closing."
-msgstr "Niezapisane zmiany w obrazach: %s. GIMP zapyta o ich zapisanie przed zamknięciem."
+msgstr ""
+"Niezapisane zmiany w obrazach: %s. GIMP zapyta o ich zapisanie przed "
+"zamknięciem."
 
-#: src/plugin/ui.c:347
+#: src/plugin/ui.c:349
 msgid "Later"
 msgstr "Później"
 
-#: src/plugin/ui.c:348
+#: src/plugin/ui.c:350
 msgid "Restart now"
 msgstr "Uruchom ponownie teraz"
 
-#: src/plugin/ui.c:349
+#: src/plugin/ui.c:351
 msgid "Restart GIMP"
 msgstr "Restart GIMP-a"
 
-#: src/plugin/ui.c:357
+#: src/plugin/ui.c:359
 #, c-format
 msgid ""
 "Cannot restart GIMP automatically: %s. Close GIMP manually and start it "
 "again."
-msgstr "Nie można automatycznie uruchomić GIMP-a ponownie: %s. Zamknij GIMP-a ręcznie i uruchom go ponownie."
+msgstr ""
+"Nie można automatycznie uruchomić GIMP-a ponownie: %s. Zamknij GIMP-a "
+"ręcznie i uruchom go ponownie."
 
-#: src/plugin/ui.c:385
+#: src/plugin/ui.c:387
 msgid "PSHost - Photoshop plug-ins"
 msgstr "PSHost - wtyczki Photoshop"
 
-#: src/plugin/ui.c:388
+#: src/plugin/ui.c:390
 msgid "Restart GIMP..."
 msgstr "Uruchom ponownie GIMP-a..."
 
-#: src/plugin/ui.c:389
+#: src/plugin/ui.c:391
 msgid "Close"
 msgstr "Zamknij"
 
-#: src/plugin/ui.c:403 src/plugin/ui.c:446
+#: src/plugin/ui.c:405 src/plugin/ui.c:448
 msgid "Name"
 msgstr "Nazwa"
 
-#: src/plugin/ui.c:403 src/plugin/ui.c:446
+#: src/plugin/ui.c:405 src/plugin/ui.c:448
 msgid "File"
 msgstr "Plik"
 
-#: src/plugin/ui.c:403 src/plugin/ui.c:447
+#: src/plugin/ui.c:405 src/plugin/ui.c:449
 msgid "Result"
 msgstr "Wynik"
 
-#: src/plugin/ui.c:407
+#: src/plugin/ui.c:409
 msgid "Run on current layer"
 msgstr "Uruchom na bieżącej warstwie"
 
-#: src/plugin/ui.c:412
+#: src/plugin/ui.c:414
 msgid "Filters"
 msgstr "Filtry"
 
-#: src/plugin/ui.c:413
+#: src/plugin/ui.c:415
 msgid "Manage"
 msgstr "Zarządzanie"
 
-#: src/plugin/ui.c:417
+#: src/plugin/ui.c:419
 msgid "Plug-in directories"
 msgstr "Katalogi z wtyczkami"
 
-#: src/plugin/ui.c:421
+#: src/plugin/ui.c:423
 msgid "Directory"
 msgstr "Katalog"
 
-#: src/plugin/ui.c:425
+#: src/plugin/ui.c:427
 msgid "Subfolders"
 msgstr "Podkatalogi"
 
-#: src/plugin/ui.c:427
+#: src/plugin/ui.c:429
 msgid "Add directory..."
 msgstr "Dodaj katalog..."
 
-#: src/plugin/ui.c:427
+#: src/plugin/ui.c:429
 msgid "Remove"
 msgstr "Usuń"
 
-#: src/plugin/ui.c:427
+#: src/plugin/ui.c:429
 msgid "Rescan"
 msgstr "Skanuj ponownie"
 
-#: src/plugin/ui.c:430
+#: src/plugin/ui.c:432
 msgid "Include subfolders when adding"
 msgstr "Uwzględnij podkatalogi przy dodawaniu"
 
-#: src/plugin/ui.c:438
+#: src/plugin/ui.c:440
 msgid "Found plug-ins"
 msgstr "Znalezione wtyczki"
 
-#: src/plugin/ui.c:445
+#: src/plugin/ui.c:447
 msgid "Use"
 msgstr "Użyj"
 
-#: src/plugin/ui.c:446
+#: src/plugin/ui.c:448
 msgid "Category"
 msgstr "Kategoria"
 
-#: src/plugin/ui.c:447
+#: src/plugin/ui.c:449
 msgid "Reason"
 msgstr "Powód"
 
-#: src/plugin/ui.c:454
+#: src/plugin/ui.c:456
 msgid "Remove rejected"
 msgstr "Usuń odrzucone"
 
-#: src/plugin/ui.c:454
+#: src/plugin/ui.c:456
 msgid "Remove selected"
 msgstr "Usuń zaznaczone"
 
-#: src/plugin/ui.c:454
+#: src/plugin/ui.c:456
 msgid "Restore removed"
 msgstr "Przywróć usunięte"
 
-#: src/plugin/ui.c:471
+#: src/plugin/ui.c:473
 msgid "Settings"
 msgstr "Ustawienia"
 
-#: src/plugin/ui.c:474
+#: src/plugin/ui.c:476
 msgid "Automatic"
 msgstr "Automatyczny"
 
-#: src/plugin/ui.c:479
+#: src/plugin/ui.c:481
 msgid "Language:"
 msgstr "Język:"
 
-#: src/plugin/ui.c:479
+#: src/plugin/ui.c:481
 msgid "Test time limit (s):"
 msgstr "Limit czasu testu (s):"
 
-#: src/plugin/ui.c:488
+#: src/plugin/ui.c:490
 msgid ""
 "Adding a plug-in runs third-party code during the test. Add only plug-ins "
 "from sources you trust."
-msgstr "Dodanie wtyczki uruchamia obcy kod podczas testu. Dodawaj tylko wtyczki z zaufanych źródeł."
+msgstr ""
+"Dodanie wtyczki uruchamia obcy kod podczas testu. Dodawaj tylko wtyczki z "
+"zaufanych źródeł."
 
-#: src/plugin/ui.c:492
+#: src/plugin/ui.c:494
 msgid "The filter list changed. Restart GIMP to apply the changes."
-msgstr "Lista filtrów się zmieniła. Uruchom ponownie GIMP-a, aby zastosować zmiany."
+msgstr ""
+"Lista filtrów się zmieniła. Uruchom ponownie GIMP-a, aby zastosować zmiany."
 
-#: src/common/pe8_msg.c:9
+#: src/common/pe8_msg.c:11
 msgid "the file cannot be read"
 msgstr "nie można odczytać pliku"
 
-#: src/common/pe8_msg.c:10
+#: src/common/pe8_msg.c:12
 msgid "the file is damaged or is not a Windows plug-in"
 msgstr "plik jest uszkodzony lub nie jest wtyczką systemu Windows"
 
-#: src/common/pe8_msg.c:11
+#: src/common/pe8_msg.c:13
 msgid "it is a 32-bit plug-in (GIMP 3 needs 64-bit)"
 msgstr "jest 32-bitowa (GIMP 3 wymaga wtyczek 64-bitowych)"
 
-#: src/common/pe8_msg.c:12
+#: src/common/pe8_msg.c:14
 msgid "it was built for an unsupported processor architecture"
 msgstr "jest zbudowana dla nieobsługiwanej architektury procesora"
 
-#: src/common/pe8_msg.c:13
+#: src/common/pe8_msg.c:15
 msgid "it has no PiPL description (old or unsupported plug-in format)"
 msgstr "brak opisu PiPL (stary lub nieobsługiwany format wtyczki)"
 
-#: src/common/pe8_msg.c:14
+#: src/common/pe8_msg.c:16
 msgid "it is not a filter (only filters are supported)"
 msgstr "to nie jest filtr (obsługiwane są tylko filtry)"
 
-#: src/common/pe8_msg.c:15
+#: src/common/pe8_msg.c:17
 msgid "it is a hidden helper filter of another plug-in"
 msgstr "to ukryty, pomocniczy filtr innej wtyczki"
 
-#: src/common/pe8_msg.c:16
+#: src/common/pe8_msg.c:18
 #, c-format
 msgid "its entry point '%s' was not found"
 msgstr "nie znaleziono jej funkcji wejściowej „%s”"
 
-#: src/common/pe8_msg.c:17
+#: src/common/pe8_msg.c:19
 msgid "it does not support RGB images"
 msgstr "nie obsługuje obrazów RGB"
 
-#: src/common/pe8_msg.c:18
+#: src/common/pe8_msg.c:20
 #, c-format
 msgid "the library %s is missing"
 msgstr "brakuje biblioteki %s"
 
-#: src/common/pe8_msg.c:19
+#: src/common/pe8_msg.c:21
 #, c-format
 msgid "it could not be loaded (Windows error %s)"
 msgstr "nie udało się jej załadować (kod błędu Windows %s)"
 
-#: src/common/pe8_msg.c:20
+#: src/common/pe8_msg.c:22
 msgid "it crashed during the compatibility test"
 msgstr "uległa awarii podczas testu zgodności"
 
-#: src/common/pe8_msg.c:21
+#: src/common/pe8_msg.c:23
 msgid "it did not respond during the test (it hung or waits for a window)"
 msgstr "nie odpowiedziała w czasie testu (zawiesiła się lub czeka na okno)"
 
-#: src/common/pe8_msg.c:22
+#: src/common/pe8_msg.c:24
 #, c-format
 msgid "it reported an error during the test (code %s)"
 msgstr "zgłosiła błąd podczas testu (kod %s)"
 
-#: src/common/pe8_msg.c:23
+#: src/common/pe8_msg.c:25
 #, c-format
 msgid "it requests host features that are not supported yet: %s"
 msgstr "wymaga funkcji hosta, które nie są jeszcze obsługiwane: %s"
 
-#: src/common/pe8_msg.c:37
+#: src/common/pe8_msg.c:39
 #, c-format
 msgid "Plug-in ‘%s’ will be used in GIMP."
 msgstr "Wtyczka »%s« zostanie użyta w GIMP-ie."
 
-#: src/common/pe8_msg.c:39
+#: src/common/pe8_msg.c:41
 #, c-format
 msgid "Plug-in ‘%s’ will be used with reservations: %s."
 msgstr "Wtyczka »%s« zostanie użyta z zastrzeżeniami: %s."
 
-#: src/common/pe8_msg.c:41
+#: src/common/pe8_msg.c:43
 #, c-format
 msgid "Plug-in ‘%s’ will not be used: %s."
 msgstr "Wtyczka »%s« nie zostanie użyta: %s."
 
-#: src/common/pe8_msg.c:46
+#: src/common/pe8_msg.c:48
 msgid ""
 "\"Will be used\" means the plug-in passed the basic test, not that it is "
 "guaranteed to work in every situation."
-msgstr "„Zostanie użyta” oznacza, że wtyczka przeszła test podstawowy, a nie że na pewno zadziała w każdej sytuacji."
+msgstr ""
+"„Zostanie użyta” oznacza, że wtyczka przeszła test podstawowy, a nie że na "
+"pewno zadziała w każdej sytuacji."

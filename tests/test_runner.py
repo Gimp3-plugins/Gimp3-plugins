@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 """Integration tests for pshost_runner against the synthetic mini filters. Usage: python -I test_runner.py <build_dir>"""
 import os, subprocess, sys, tempfile, struct
 

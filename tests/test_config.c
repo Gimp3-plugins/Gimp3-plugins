@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* Unit tests: config.json (de)serialization, corrupt input, path helpers, filter registry (labels/menu/signature),
  * scan-result merge. Run with GIMP's GTK/GLib runtime on PATH (see tests/test_runner.py). */
 #include <glib.h>

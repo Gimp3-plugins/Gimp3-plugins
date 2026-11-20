@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 """Stage 6 tests in a real GIMP 3 (gimp-console): dynamic menu procedures (init_procedures), registered-state file,
 and the restart mechanism (helper waits for the process to exit, relaunches, never fires on cancelled quit).
 Usage: python -I test_gimp_stage6.py <build_dir>"""

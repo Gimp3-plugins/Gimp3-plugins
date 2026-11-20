@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - directory scanning (file collection + static/dynamic checks). Thread-safe: no GTK, no shared config. */
 #ifndef PS_SCAN_H
 #define PS_SCAN_H

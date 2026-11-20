@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 """Installer tests (silent, isolated: uses /GIMPDATA so the real GIMP user directory is never touched).
 Usage: python -I test_installer.py <build_dir>   -- builds the installer with ISCC first."""
 import sys as _s0, os as _o0
@@ -40,6 +42,7 @@ def reg(root, path, name):
 p = setup(f"/GIMPDATA={DATA}")
 files = [os.path.join(PLUG, f) for f in ("pshost.exe", "pshost_runner.exe", r"locale\pl\LC_MESSAGES\pshost.mo", r"locale\en\LC_MESSAGES\pshost.mo")]
 check(p.returncode == 0 and all(os.path.exists(f) for f in files), "silent install: pshost.exe, pshost_runner.exe, locale/{pl,en} installed in <GIMP data>/plug-ins/pshost")
+check(os.path.exists(os.path.join(PLUG, "LICENSE.txt")) and "GNU GENERAL PUBLIC LICENSE" in open(os.path.join(PLUG, "LICENSE.txt"), encoding="utf-8", errors="replace").read(), "GPL licence text installed as LICENSE.txt")
 check(reg(winreg.HKEY_CURRENT_USER, r"Software\PSHost", "DataDir") == DATA and reg(winreg.HKEY_CURRENT_USER, KEY, "DisplayName") is not None, "per-user registry entries (HKCU) written, no HKLM needed")
 check(os.path.exists(UNINS) and not os.path.exists(os.path.join(PLUG, "unins000.exe")), "uninstaller lives outside the GIMP plug-in folder")
 check(not os.path.exists(os.path.join(PLUG, "..", "..", "..", "pshost", "config.json")), "installer does not create configuration or add any Photoshop plug-ins")

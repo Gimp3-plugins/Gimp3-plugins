@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* Headless UI test: builds the manager window off-screen, adds a directory (async scan), waits for it,
  * checks the model and writes a PNG snapshot. Usage: ui_snapshot OUT.png LANG(pl|en) DIR...
  * Env: PSHOST_CONFIG_DIR (isolated config), PSHOST_RUNNER. */

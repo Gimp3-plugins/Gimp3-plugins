@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - user-facing verdict messages. English msgids, translated through the gettext catalog (see i18n.h). */
 #include "pe8bf.h"
 #include <stdio.h>

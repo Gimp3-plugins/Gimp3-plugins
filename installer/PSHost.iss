@@ -1,3 +1,5 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Copyright (C) 2026 PSHost contributors
 ; PSHost - Inno Setup script. Per-user installer (no administrator rights), Polish / English.
 ;   ISCC.exe /DAppVersion=0.8.0 /DBuildDir=..\build PSHost.iss      ->  installer\output\PSHost-Setup-0.8.0.exe
 ; Command line switches of the installer (besides the standard Inno ones):
@@ -48,6 +50,7 @@ Name: "polish"; MessagesFile: "compiler:Languages\Polish.isl"; InfoAfterFile: "i
 [Files]
 Source: "{#BuildDir}\pshost.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\pshost_runner.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "{#BuildDir}\locale\*"; DestDir: "{app}\locale"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [InstallDelete]

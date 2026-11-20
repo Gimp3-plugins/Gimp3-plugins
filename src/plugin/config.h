@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - user configuration (%APPDATA%\GIMP\3.2\pshost\config.json) and scan-result cache. */
 #ifndef PS_CONFIG_H
 #define PS_CONFIG_H

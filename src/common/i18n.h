@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - runtime translation using standard gettext catalogs (.po -> .mo, domain "pshost").
  *
  * Why not libintl directly: the language must be switchable at run time (Auto / Polski / English) independently

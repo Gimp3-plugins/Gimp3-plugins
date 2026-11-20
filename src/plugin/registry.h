@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - which filters are (to be) registered in GIMP's Filters menu, and whether a GIMP restart is needed.
  * No libgimp dependency (usable from the headless tests). */
 #ifndef PS_REGISTRY_H

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* Synthetic test filter (.8bf). Variants selected at build time:
  *   (default) invert RGB in one go        -DTILED  invert in 16-row tiles driven by Continue
  *   -DCRASH   crash in Prepare            -DHANG   hang in Prepare

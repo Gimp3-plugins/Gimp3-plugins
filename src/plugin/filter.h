@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - run one Photoshop filter on a GIMP layer (shared by the manager window and the Filters menu). */
 #ifndef PS_FILTER_H
 #define PS_FILTER_H

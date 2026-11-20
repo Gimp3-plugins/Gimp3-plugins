@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 """Known-folder lookup that does not depend on environment variables (the MSYS shell used by ctest does not set them)."""
 import ctypes, os
 

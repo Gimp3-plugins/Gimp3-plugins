@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 PSHost contributors
 """Translation tests: catalog validity/completeness, .pot freshness, language selection, Polish characters in paths.
 Usage: python -I test_i18n.py <build_dir>   (needs MSYS2 UCRT64 gettext-tools and, for the UI parts, GIMP's GTK runtime)"""
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile

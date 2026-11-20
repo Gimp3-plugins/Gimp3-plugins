@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 PSHost contributors */
 /* PSHost - "Manage plug-ins" window (GTK3). */
 #ifndef PS_UI_H
 #define PS_UI_H

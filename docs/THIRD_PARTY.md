@@ -26,11 +26,14 @@ loaded from it at run time (they are not redistributed by the PSHost installer).
 MSYS2 UCRT64 (GCC, CMake, Ninja, GNU gettext), Inno Setup 6 (installer).
 
 ## PSHost's own licence
-**Not decided yet** — the project owner has to choose one before public distribution (no licence file is included on purpose).
+**GPL-3.0-or-later** (see `LICENSE`). Compatibility notes: PSHost links dynamically to GIMP's LGPL libraries (compatible
+with GPL-3.0); PSFilterPdn (MIT) was only a reference for layouts, no code copied (MIT is GPL-compatible in any case);
+the MinGW-w64 runtime used by the build carries the GCC Runtime Library Exception. Photoshop plug-ins added by the user
+are separate works with their own licences and are not distributed with PSHost.
 
 ---
 
 **PSHost nie zawiera kodu Adobe, nagłówków Adobe SDK ani wtyczek Photoshop.** Definicje struktur w `ps_types.h` napisano
 niezależnie, porównując układy z otwartoźródłowym hostem PSFilterPdn (MIT) i weryfikując je na prawdziwych wtyczkach;
-kodu PSFilterPdn nie kopiowano. Biblioteki GIMP-a są brane z instalacji użytkownika. **Licencja samego PSHost nie została
-jeszcze wybrana** — wymaga decyzji właściciela projektu przed publiczną dystrybucją.
+kodu PSFilterPdn nie kopiowano. Biblioteki GIMP-a są brane z instalacji użytkownika. Licencja samego PSHost:
+**GPL-3.0-or-later** (plik `LICENSE`).
