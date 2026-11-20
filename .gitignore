@@ -4,3 +4,4 @@ third_party/photoshop_sdk/*
 *.8bf
 *.exe
 *.o
+installer/output/

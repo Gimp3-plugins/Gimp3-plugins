@@ -1,0 +1,16 @@
+PSHost has been installed.
+
+HOW TO USE
+1. Start GIMP 3.
+2. Open Filters > Photoshop > Manage plug-ins...
+3. Click "Add directory..." and choose a folder with your Photoshop plug-ins (.8bf files).
+   PSHost tests every plug-in and tells you whether it will be used and why not.
+4. Accept the restart of GIMP when asked. The filters then appear in Filters > Photoshop > <Category>.
+
+IMPORTANT
+- This installer does NOT install any Photoshop plug-ins. You add your own folders later.
+- Only 64-bit Photoshop FILTER plug-ins (.8bf) are supported. 32-bit plug-ins are rejected.
+- Adding a plug-in runs third-party code during the test and when you use the filter. Add only plug-ins from sources you trust.
+- A plug-in that crashes or hangs runs in a separate process and does not close GIMP.
+- This installer is not code-signed, so Windows SmartScreen may show a warning ("Windows protected your PC").
+  Choose "More info" > "Run anyway" only if you obtained the installer from a source you trust.
