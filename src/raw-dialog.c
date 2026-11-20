@@ -671,6 +671,7 @@ raw_dialog_run (GimpProcedure       *procedure,
   gimp_procedure_dialog_get_label (dialog, "det-label", _("Detail"),        FALSE, FALSE);
   gimp_procedure_dialog_get_label (dialog, "out-label", _("Output"),        FALSE, FALSE);
   gimp_procedure_dialog_get_label (dialog, "lens-label", _("Lens"),         FALSE, FALSE);
+  gimp_procedure_dialog_get_label (dialog, "col-label", _("Colour"),        FALSE, FALSE);
   gimp_procedure_dialog_get_label (dialog, "lens-hint",
                                    rawheic_lens_db_available () ?
                                    _("Corrections come from the lensfun database; the "
@@ -700,11 +701,15 @@ raw_dialog_run (GimpProcedure       *procedure,
                                   "lens-vignetting", "lens-distortion", "lens-tca",
                                   "lens-hint", NULL);
 
+  gimp_procedure_dialog_fill_box (dialog, "col-box",
+                                  "camera-profile", "camera-profile-look", NULL);
+
   gimp_procedure_dialog_fill_notebook (dialog, "settings",
                                        "wb-label",   "wb-box",
                                        "exp-label",  "exp-box",
                                        "det-label",  "det-box",
                                        "lens-label", "lens-box",
+                                       "col-label",  "col-box",
                                        "out-label",  "out-box",
                                        NULL);
 

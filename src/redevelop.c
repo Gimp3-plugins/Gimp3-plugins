@@ -190,6 +190,11 @@ redevelop_run (GimpProcedure        *procedure,
                                                GIMP_PDB_EXECUTION_ERROR, error);
     }
 
+  /* the camera profile path also comes from the image file */
+  if (stored.camera_profile[0] && rawheic_path_is_remote (stored.camera_profile) &&
+      (run_mode != GIMP_RUN_INTERACTIVE || ! rawheic_confirm_remote (stored.camera_profile)))
+    stored.camera_profile[0] = '\0';
+
   if (! g_file_test (path, G_FILE_TEST_IS_REGULAR))
     {
       g_set_error (&error, G_FILE_ERROR, G_FILE_ERROR_NOENT,

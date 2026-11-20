@@ -155,6 +155,7 @@ raw_settings_defaults (RawSettings *s)
   s->lens_vignetting   = FALSE;
   s->lens_distortion   = FALSE;
   s->lens_tca          = FALSE;
+  s->camera_profile_look = TRUE;
 }
 
 void
@@ -289,6 +290,16 @@ raw_settings_add_arguments (GimpProcedure *procedure)
                                        _("Correct lateral chromatic _aberration"),
                                        _("Remove colour fringes towards the corners (lensfun)"),
                                        d.lens_tca, RW);
+  gimp_procedure_add_file_argument (procedure, "camera-profile",
+                                    _("Camera _profile"),
+                                    _("Camera input profile (.icc, .icm or Adobe .dcp); "
+                                      "empty = LibRaw's built-in colour matrix"),
+                                    GIMP_FILE_CHOOSER_ACTION_OPEN, TRUE, NULL, RW);
+  gimp_procedure_add_boolean_argument (procedure, "camera-profile-look",
+                                       _("Use the profile's _look (DCP)"),
+                                       _("Apply the DCP look table and tone curve, as Adobe "
+                                         "Camera Raw does; off = colour only"),
+                                       d.camera_profile_look, RW);
 #undef RW
 }
 
@@ -331,7 +342,20 @@ raw_settings_from_config (RawSettings         *s,
                 "lens-vignetting",   &s->lens_vignetting,
                 "lens-distortion",   &s->lens_distortion,
                 "lens-tca",          &s->lens_tca,
+                "camera-profile-look", &s->camera_profile_look,
                 NULL);
+
+  {
+    GFile *f = NULL;
+    gchar *path;
+
+    g_object_get (config, "camera-profile", &f, NULL);
+    path = f ? g_file_get_path (f) : NULL;
+    if (path)
+      g_strlcpy (s->camera_profile, path, sizeof s->camera_profile);
+    g_free (path);
+    g_clear_object (&f);
+  }
 
   s->wb_mode     = id_for_nick (wb_items,       wb, WB_CAMERA);
   s->highlight   = id_for_nick (hl_items,       hl, HL_CLIP);
@@ -378,7 +402,15 @@ raw_settings_to_config (const RawSettings   *s,
                 "lens-vignetting",   s->lens_vignetting,
                 "lens-distortion",   s->lens_distortion,
                 "lens-tca",          s->lens_tca,
+                "camera-profile-look", s->camera_profile_look,
                 NULL);
+
+  {
+    GFile *f = s->camera_profile[0] ? g_file_new_for_path (s->camera_profile) : NULL;
+
+    g_object_set (config, "camera-profile", f, NULL);
+    g_clear_object (&f);
+  }
 }
 
 #define GROUP "raw"
@@ -419,6 +451,8 @@ raw_settings_serialize (const RawSettings *s,
   g_key_file_set_boolean (kf, GROUP, "lens-vignetting", s->lens_vignetting);
   g_key_file_set_boolean (kf, GROUP, "lens-distortion", s->lens_distortion);
   g_key_file_set_boolean (kf, GROUP, "lens-tca", s->lens_tca);
+  g_key_file_set_string  (kf, GROUP, "camera-profile", s->camera_profile);
+  g_key_file_set_boolean (kf, GROUP, "camera-profile-look", s->camera_profile_look);
 
   data = g_key_file_to_data (kf, NULL, NULL);
   g_key_file_free (kf);
@@ -490,6 +524,11 @@ raw_settings_deserialize (RawSettings  *s,
   GET_B ("lens-vignetting", s->lens_vignetting);
   GET_B ("lens-distortion", s->lens_distortion);
   GET_B ("lens-tca", s->lens_tca);
+  GET_B ("camera-profile-look", s->camera_profile_look);
+  str = g_key_file_get_string (kf, GROUP, "camera-profile", NULL);
+  if (str)
+    g_strlcpy (s->camera_profile, str, sizeof s->camera_profile);
+  g_free (str);
 
   /* clamp everything: the parasite may come from an edited XCF */
   s->wb_temperature    = CLAMP (s->wb_temperature, 2000.0, 25000.0);

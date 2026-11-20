@@ -258,5 +258,25 @@ check("exported TIFF is 16-bit, half size",
 if tif:
     tif.delete()
 
+# Step 9: camera profiles
+cfg = lp.create_config()
+cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+cfg.set_property("file", Gio.File.new_for_path(SRC))
+cfg.set_property("half-size", True)
+cfg.set_property("camera-profile", Gio.File.new_for_path("C:/does/not/exist.dcp"))
+st = lp.run(cfg).index(0)
+check("missing camera profile -> clean error", st in (Gimp.PDBStatusType.EXECUTION_ERROR, Gimp.PDBStatusType.CALLING_ERROR),
+      pdb.get_last_error()[:60])
+
+img = load()
+par = img.get_parasite("gimp-raw-heic-source")
+txt = bytes(par.get_data()).decode("utf-8").rstrip("\0")
+txt += "\ncamera-profile=\\\\example.invalid\\share\\cam.dcp\n"
+img.attach_parasite(Gimp.Parasite.new("gimp-raw-heic-source", 1, (txt + "\0").encode("utf-8")))
+st = run("plug-in-raw-heic-redevelop", image=img)
+check("network camera profile in XCF ignored (non-interactive)", st == Gimp.PDBStatusType.SUCCESS,
+      pdb.get_last_error()[:60])
+img.delete()
+
 with open(os.path.join("build", "test-out", "regressions.txt"), "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")

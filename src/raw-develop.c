@@ -642,6 +642,10 @@ session_develop (RawSession         *ses,
 
   apply_settings (lr, s, ! region && max_size > 0 && max_size <= 2048);
 
+  /* a camera profile works on LibRaw's camera RGB */
+  if (s->camera_profile[0] && lr->idata.colors == 3)
+    lr->params.output_color = 0;
+
   if (region)
     {
       libraw_output_params_t *p = &lr->params;
@@ -716,6 +720,7 @@ session_develop (RawSession         *ses,
    * rolled off softly); float output keeps compensated values above 1.0
    */
   if (max_size <= 0 && mem->colors == 3 && ! lens_flags (s) &&
+      ! (s->camera_profile[0] && lr->idata.colors == 3) &&
       ! (gain > 1.0 && s->depth == DEPTH_FLOAT))
     {
       if (gain > 1.0)
@@ -734,6 +739,23 @@ session_develop (RawSession         *ses,
 
   if (img->pixels && gain > 1.0)
     compensate_float (img->pixels, (gsize) img->width * img->height * 3, gain);
+
+  if (img->pixels && s->camera_profile[0] && lr->idata.colors == 3)
+    {
+      gfloat mul[4];
+      gint   c;
+
+      for (c = 0; c < 4; c++)
+        mul[c] = lr->color.pre_mul[c];
+
+      if (! rawheic_camprofile_apply (s->camera_profile, img->pixels,
+                                      (gsize) img->width * img->height, mul,
+                                      s->color_space, s->camera_profile_look, error))
+        {
+          raw_image_free (img);
+          return NULL;
+        }
+    }
 
   if (img->pixels)
     {

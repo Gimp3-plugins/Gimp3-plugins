@@ -88,6 +88,8 @@ typedef struct
   gboolean      lens_vignetting;
   gboolean      lens_distortion;
   gboolean      lens_tca;
+  gchar         camera_profile[1024]; /* .icc/.icm/.dcp path, "" = built-in */
+  gboolean      camera_profile_look;  /* DCP: LookTable + tone curve */
 } RawSettings;
 
 #define RAWHEIC_LENS_VIGNETTING (1 << 0)
@@ -221,7 +223,19 @@ gint              rawheic_lens_correct         (gfloat               *rgb,
                                                 const LensInfo       *info,
                                                 gint                  flags);
 
+/* camprofile.c */
+gboolean          rawheic_camprofile_apply     (const gchar          *path,
+                                                gfloat               *rgb,
+                                                gsize                 n,
+                                                const gfloat          pre_mul[4],
+                                                ColorSpace            cs,
+                                                gboolean              look,
+                                                GError              **error);
+
 /* profiles.c */
+void              rawheic_space_xy             (ColorSpace            cs,
+                                                gdouble               prim[3][2],
+                                                gdouble               white[2]);
 GimpColorProfile* rawheic_profile_new          (ColorSpace            cs,
                                                 gboolean              linear);
 GimpColorProfile* rawheic_profile_rec2100_linear (void);

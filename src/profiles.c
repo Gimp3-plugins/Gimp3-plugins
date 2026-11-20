@@ -98,6 +98,20 @@ rawheic_profile_new (ColorSpace cs,
   return profile;
 }
 
+void
+rawheic_space_xy (ColorSpace cs,
+                  gdouble    prim[3][2],
+                  gdouble    white[2])
+{
+  const SpaceDef *def = &spaces[CLAMP (cs, 0, CS_N - 1)];
+
+  prim[0][0] = def->primaries.Red.x;   prim[0][1] = def->primaries.Red.y;
+  prim[1][0] = def->primaries.Green.x; prim[1][1] = def->primaries.Green.y;
+  prim[2][0] = def->primaries.Blue.x;  prim[2][1] = def->primaries.Blue.y;
+  white[0]   = def->white.x;
+  white[1]   = def->white.y;
+}
+
 GimpColorProfile *
 rawheic_profile_rec2100_linear (void)
 {

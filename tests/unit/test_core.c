@@ -528,6 +528,259 @@ test_apple_hdr (void)
   g_rand_free (r);
 }
 
+
+/* --- camera profiles (DCP / ICC) ----------------------------------------- */
+
+typedef struct { guint16 tag, type; guint32 count; GByteArray *data; } DcpTag;
+
+/* Minimal little-endian DCP writer: tags sorted by the caller. */
+static gchar *
+write_dcp (DcpTag *tags, gint n)
+{
+  GByteArray *f = g_byte_array_new ();
+  guint8      hdr[8] = { 'I','I','R','C', 8,0,0,0 };
+  guint32     data_off = 8 + 2 + n * 12 + 4;
+  gchar      *path;
+  gint        i;
+
+  g_byte_array_append (f, hdr, 8);
+  { guint8 c[2] = { (guint8) n, (guint8) (n >> 8) }; g_byte_array_append (f, c, 2); }
+  for (i = 0; i < n; i++)
+    {
+      guint8  e[12];
+      guint32 len = tags[i].data->len, v;
+
+      e[0] = tags[i].tag; e[1] = tags[i].tag >> 8;
+      e[2] = tags[i].type; e[3] = 0;
+      memcpy (e + 4, &tags[i].count, 4);
+      if (len <= 4)
+        { memset (e + 8, 0, 4); memcpy (e + 8, tags[i].data->data, len); }
+      else
+        { v = data_off; memcpy (e + 8, &v, 4); data_off += len; }
+      g_byte_array_append (f, e, 12);
+    }
+  { guint8 z[4] = { 0 }; g_byte_array_append (f, z, 4); }
+  for (i = 0; i < n; i++)
+    if (tags[i].data->len > 4)
+      g_byte_array_append (f, tags[i].data->data, tags[i].data->len);
+
+  path = g_build_filename (g_get_tmp_dir (), "rawheic-test.dcp", NULL);
+  g_file_set_contents (path, (gchar *) f->data, f->len, NULL);
+  g_byte_array_free (f, TRUE);
+  for (i = 0; i < n; i++)
+    g_byte_array_free (tags[i].data, TRUE);
+
+  return path;
+}
+
+static DcpTag
+tag_short (guint16 tag, guint16 v)
+{
+  DcpTag t = { tag, 3, 1, g_byte_array_new () };
+  g_byte_array_append (t.data, (guint8 *) &v, 2);
+  return t;
+}
+
+static DcpTag
+tag_srat9 (guint16 tag, const gdouble m[9])
+{
+  DcpTag t = { tag, 10, 9, g_byte_array_new () };
+  gint   i;
+  for (i = 0; i < 9; i++)
+    {
+      gint32 num = (gint32) lround (m[i] * 1000000.0), den = 1000000;
+      g_byte_array_append (t.data, (guint8 *) &num, 4);
+      g_byte_array_append (t.data, (guint8 *) &den, 4);
+    }
+  return t;
+}
+
+static DcpTag
+tag_longs (guint16 tag, const guint32 *v, gint n)
+{
+  DcpTag t = { tag, 4, (guint32) n, g_byte_array_new () };
+  g_byte_array_append (t.data, (const guint8 *) v, n * 4);
+  return t;
+}
+
+static DcpTag
+tag_floats (guint16 tag, const gfloat *v, gint n)
+{
+  DcpTag t = { tag, 11, (guint32) n, g_byte_array_new () };
+  g_byte_array_append (t.data, (const guint8 *) v, n * 4);
+  return t;
+}
+
+static void
+test_dcp_identity_and_hsm (void)
+{
+  /* ForwardMatrix = ProPhoto -> XYZ(D50): camera RGB is ProPhoto */
+  const gdouble fm[9] = { 0.797675, 0.135192, 0.031353,
+                          0.288040, 0.711874, 0.000086,
+                          0.000000, 0.000000, 0.825210 };
+  const gfloat  one[4] = { 1, 1, 1, 1 };
+  gfloat        px[6]  = { 0.10f, 0.20f, 0.30f, 0.50f, 0.25f, 0.05f };
+  gfloat        ref[6];
+  GError       *error = NULL;
+  gchar        *path;
+  DcpTag        t[4];
+  gint          i;
+
+  memcpy (ref, px, sizeof px);
+  t[0] = tag_short (50778, 23);
+  t[1] = tag_srat9 (50964, fm);
+  path = write_dcp (t, 2);
+  g_assert_true (rawheic_camprofile_apply (path, px, 2, one, CS_PROPHOTO, TRUE, &error));
+  g_assert_no_error (error);
+  for (i = 0; i < 6; i++)
+    g_assert_cmpfloat_with_epsilon (px[i], ref[i], 2e-3);
+  g_free (path);
+
+  /* HueSatMap 4x2x1 with saturation scale 0: everything turns grey */
+  {
+    guint32 dims[3] = { 4, 2, 1 };
+    gfloat  map[4 * 2 * 3];
+
+    for (i = 0; i < 8; i++)
+      { map[i * 3] = 0; map[i * 3 + 1] = 0; map[i * 3 + 2] = 1; }
+    t[0] = tag_short (50778, 23);
+    t[1] = tag_longs (50937, dims, 3);
+    t[2] = tag_floats (50938, map, 24);
+    t[3] = tag_srat9 (50964, fm);
+    path = write_dcp (t, 4);
+    memcpy (px, ref, sizeof px);
+    g_assert_true (rawheic_camprofile_apply (path, px, 2, one, CS_PROPHOTO, TRUE, &error));
+    g_assert_no_error (error);
+    g_assert_cmpfloat_with_epsilon (px[0], px[1], 1e-4);
+    g_assert_cmpfloat_with_epsilon (px[1], px[2], 1e-4);
+    g_assert_cmpfloat_with_epsilon (px[2], ref[2], 1e-3);   /* value = max kept */
+    g_free (path);
+  }
+}
+
+static void
+test_dcp_hostile (void)
+{
+  const gfloat one[4] = { 1, 1, 1, 1 };
+  gfloat       px[3]  = { 0.2f, 0.2f, 0.2f };
+  GError      *error  = NULL;
+  gchar       *path   = g_build_filename (g_get_tmp_dir (), "rawheic-bad.dcp", NULL);
+  GRand       *r      = g_rand_new_with_seed (9);
+  gint         i;
+
+  g_file_set_contents (path, "IIRC\xff\xff\xff\x7f", 8, NULL);
+  g_assert_false (rawheic_camprofile_apply (path, px, 1, one, CS_SRGB, TRUE, &error));
+  g_clear_error (&error);
+
+  g_file_set_contents (path, "not a profile at all", -1, NULL);
+  g_assert_false (rawheic_camprofile_apply (path, px, 1, one, CS_SRGB, TRUE, &error));
+  g_clear_error (&error);
+
+  for (i = 0; i < 500; i++)
+    {
+      gsize   len = 8 + g_rand_int_range (r, 0, 400);
+      guint8 *buf = g_malloc (len);
+      gsize   k;
+
+      for (k = 0; k < len; k++)
+        buf[k] = (guint8) g_rand_int (r);
+      memcpy (buf, "IIRC\x08\x00\x00\x00", 8);
+      g_file_set_contents (path, (gchar *) buf, len, NULL);
+      rawheic_camprofile_apply (path, px, 1, one, CS_SRGB, TRUE, NULL);
+      g_free (buf);
+    }
+
+  g_rand_free (r);
+  g_remove (path);
+  g_free (path);
+}
+
+static void
+test_icc_profile (void)
+{
+  GimpColorProfile *adobe = rawheic_profile_new (CS_ADOBE, TRUE);
+  gchar            *path  = g_build_filename (g_get_tmp_dir (), "rawheic-cam.icc", NULL);
+  GFile            *f     = g_file_new_for_path (path);
+  const gfloat      one[4] = { 1, 1, 1, 1 };
+  gfloat            px[6] = { 0.5f, 0.5f, 0.5f,   0.0f, 0.6f, 0.0f };
+  GError           *error = NULL;
+
+  g_assert_true (gimp_color_profile_save_to_file (adobe, f, NULL));
+  g_assert_true (rawheic_camprofile_apply (path, px, 2, one, CS_SRGB, TRUE, &error));
+  g_assert_no_error (error);
+  /* grey stays grey, Adobe green is outside sRGB (red < 0 or green > 0.6) */
+  g_assert_cmpfloat_with_epsilon (px[0], 0.5, 2e-3);
+  g_assert_cmpfloat_with_epsilon (px[1], 0.5, 2e-3);
+  g_assert_cmpfloat_with_epsilon (px[2], 0.5, 2e-3);
+  g_assert_true (px[3] < -0.01f || px[4] > 0.61f);
+
+  g_object_unref (f);
+  g_object_unref (adobe);
+  g_remove (path);
+  g_free (path);
+}
+
+/* A DCP built from LibRaw's own Adobe matrix must reproduce LibRaw. */
+static void
+test_dcp_matches_libraw (void)
+{
+  gchar      *raw = g_build_filename (samples_dir, "Nikon-D750.nef", NULL);
+  RawSession *ses;
+  RawSettings s;
+  RawImage   *a, *b;
+  GError     *error = NULL;
+  gdouble     cm[9], ma[3] = { 0 }, mb[3] = { 0 };
+  DcpTag      t[2];
+  gchar      *dcp;
+  gsize       i, n;
+  gint        c;
+
+  if (! g_file_test (raw, G_FILE_TEST_EXISTS))
+    {
+      g_test_skip ("sample missing");
+      g_free (raw);
+      return;
+    }
+
+  ses = raw_session_open (raw, &error);
+  g_assert_no_error (error);
+  for (i = 0; i < 9; i++)
+    cm[i] = ses->lr->color.cam_xyz[i / 3][i % 3];
+
+  t[0] = tag_short (50778, 21);          /* D65, like Adobe ColorMatrix2 */
+  t[1] = tag_srat9 (50721, cm);
+  dcp  = write_dcp (t, 2);
+
+  raw_settings_defaults (&s);
+  s.half_size = TRUE;
+  a = raw_session_develop (ses, &s, 900, NULL, NULL, &error);
+  g_assert_no_error (error);
+  g_strlcpy (s.camera_profile, dcp, sizeof s.camera_profile);
+  b = raw_session_develop (ses, &s, 900, NULL, NULL, &error);
+  g_assert_no_error (error);
+  g_assert_cmpint (a->width, ==, b->width);
+
+  n = (gsize) a->width * a->height;
+  for (i = 0; i < n; i++)
+    for (c = 0; c < 3; c++)
+      {
+        ma[c] += a->pixels[i * 3 + c];
+        mb[c] += MAX (b->pixels[i * 3 + c], 0.0f);
+      }
+  for (c = 0; c < 3; c++)
+    {
+      g_test_message ("channel %d: LibRaw %.5f  DCP %.5f", c, ma[c] / n, mb[c] / n);
+      g_assert_cmpfloat (fabs (mb[c] / ma[c] - 1.0), <, 0.05);
+    }
+
+  raw_image_free (a);
+  raw_image_free (b);
+  raw_session_free (ses);
+  g_remove (dcp);
+  g_free (dcp);
+  g_free (raw);
+}
+
 /* --- batch session -------------------------------------------------------- */
 
 static void
@@ -661,6 +914,10 @@ main (int argc, char **argv)
   g_test_add_func ("/loupe/region-rotated-auto", test_region_rotated_auto_wb);
   g_test_add_func ("/lens/lensfun",             test_lens);
   g_test_add_func ("/heif/apple-hdr-makernote", test_apple_hdr);
+  g_test_add_func ("/camprofile/dcp-identity-hsm", test_dcp_identity_and_hsm);
+  g_test_add_func ("/camprofile/dcp-hostile",   test_dcp_hostile);
+  g_test_add_func ("/camprofile/icc",           test_icc_profile);
+  g_test_add_func ("/camprofile/dcp-vs-libraw", test_dcp_matches_libraw);
 
   return g_test_run ();
 }
