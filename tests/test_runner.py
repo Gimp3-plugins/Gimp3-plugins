@@ -1,0 +1,73 @@
+"""Integration tests for pshost_runner against the synthetic mini filters. Usage: python -I test_runner.py <build_dir>"""
+import os, subprocess, sys, tempfile, struct
+
+B = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build")
+RUN = os.path.join(B, "pshost_runner.exe")
+fails = 0
+def check(c, msg):
+    global fails
+    print(("ok   " if c else "FAIL ") + msg)
+    if not c: fails += 1
+
+def runner(args, timeout=30):
+    p = subprocess.run([RUN] + args, capture_output=True, text=True, timeout=timeout)
+    return p.returncode & 0xFFFFFFFF, p.stdout
+
+T = tempfile.mkdtemp(prefix="pshost_t_")
+W, H = 40, 37
+src = bytearray()
+for y in range(H):
+    for x in range(W):
+        src += bytes([(x * 6) & 255, (y * 7) & 255, (x + y) & 255, (x * y) & 255])
+fin, fout, fmask = (os.path.join(T, n) for n in ("in.raw", "out.raw", "mask.raw"))
+open(fin, "wb").write(src)
+
+def run_variant(variant, extra=()):
+    plug = os.path.join(B, "mini", f"mini_{variant}.8bf")
+    return runner(["--mode", "run", "--plugin", plug, "--entry", "PluginMain", "--width", str(W), "--height", str(H), "--in", fin, "--out", fout, *extra])
+
+def inverted_ok(out, mask=None):
+    for i in range(W * H):
+        m = 255 if mask is None else mask[i]
+        for c in range(3):
+            exp = (255 - src[i*4+c]) if m == 255 else src[i*4+c]
+            if out[i*4+c] != exp: return False
+        if out[i*4+3] != src[i*4+3]: return False
+    return True
+
+for v in ("invert", "tiled"):
+    rc, out = run_variant(v)
+    check(rc == 0 and "RUN_OK" in out, f"{v}: exit 0")
+    check(inverted_ok(open(fout, "rb").read()), f"{v}: RGB inverted, alpha preserved")
+
+mask = bytes(255 if (i % W) < W // 2 else 0 for i in range(W * H))
+open(fmask, "wb").write(mask)
+rc, _ = run_variant("invert", ["--mask", fmask])
+check(rc == 0 and inverted_ok(open(fout, "rb").read(), mask), "invert with selection mask: only selected half changed")
+
+p1, p2 = os.path.join(T, "p1.bin"), os.path.join(T, "p2.bin")
+rc, _ = run_variant("invert", ["--params-out", p1])
+rc2, _ = run_variant("invert", ["--params-in", p1, "--params-out", p2])
+check(rc == 0 and rc2 == 0 and struct.unpack("<i", open(p1, "rb").read())[0] == 1 and struct.unpack("<i", open(p2, "rb").read())[0] == 2, "parameters round trip (1 -> 2)")
+
+rc, out = runner(["--mode", "probe", "--plugin", os.path.join(B, "mini", "mini_invert.8bf"), "--entry", "PluginMain"])
+check(rc == 0 and "PROBE_PREPARE_OK unsupported=0" in out, "probe invert OK, nothing unsupported")
+
+rc, out = runner(["--mode", "probe", "--plugin", os.path.join(B, "mini", "mini_crash.8bf"), "--entry", "PluginMain"])
+check(rc == 0xC0DE0001 and "CRASH" in out, "crashing plug-in is contained (exit 0xC0DE0001)")
+
+rc, out = runner(["--mode", "probe", "--plugin", os.path.join(B, "mini", "mini_hang.8bf"), "--entry", "PluginMain", "--timeout-ms", "1500"])
+check(rc == 124 and "TIMEOUT" in out, "hanging plug-in is killed by watchdog (exit 124)")
+
+rc, out = runner(["--mode", "probe", "--plugin", os.path.join(B, "mini", "mini_missingdep.8bf"), "--entry", "PluginMain"])
+check(rc == 3 and "LOAD_FAILED win32=126" in out, "missing dependency -> cannot load (win32=126)")
+dump = subprocess.run([os.path.join(B, "pe8bf_dump.exe"), os.path.join(B, "mini", "mini_missingdep.8bf")], capture_output=True, text=True).stdout
+check("NO/missing-dep:absent_dep.dll" in dump, "static check names the missing DLL")
+dump = subprocess.run([os.path.join(B, "pe8bf_dump.exe"), os.path.join(B, "mini", "mini_invert.8bf")], capture_output=True, text=True).stdout
+check("OK/none" in dump and "json" in dump, "static check: mini_invert OK via JSON PiPL")
+
+rc, out = runner(["--mode", "probe", "--plugin", os.path.join(B, "mini", "mini_invert.8bf"), "--entry", "NoSuchEntry"])
+check(rc == 4, "missing entry point -> exit 4")
+
+print("failures:", fails)
+sys.exit(1 if fails else 0)

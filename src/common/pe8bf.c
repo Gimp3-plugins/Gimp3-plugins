@@ -177,10 +177,10 @@ static void parse_json_pipl (Pe8File *f, const Res *r, const char *path) {
     if (p >= e || *p == ']') break;
     const char *start = p; int depth = 0, instr = 0;
     for (; p < e; p++) {
-      if (instr) { if (*p == '\\') p++; else if (*p == '"') instr = 0; continue; }
+      if (instr) { if (*p == '\\') { if (p + 1 < e) p++; } else if (*p == '"') instr = 0; continue; }
       if (*p == '"') instr = 1; else if (*p == '{') depth++; else if (*p == '}' && --depth == 0) { p++; break; }
     }
-    const char *oe = p;
+    const char *oe = p < e ? p : e;   /* never read past the resource end (truncated/malicious JSON) */
     Pe8Plugin it; memset (&it, 0, sizeof it);
     it.path = xstrdup (path); it.from_json = 1; it.resource_id = -1;
     char *kind = json_get_string (start, oe, "Kind");
