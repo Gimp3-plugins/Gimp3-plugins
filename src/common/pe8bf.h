@@ -4,6 +4,7 @@
 #define PE8BF_H
 
 #include <stddef.h>
+#include "i18n.h"
 
 typedef enum {
   PE8_VERDICT_OK = 0,        /* passes static checks */
@@ -31,7 +32,7 @@ typedef enum {
   PE8_R_UNSUPPORTED_CB       /* WARN: plug-in asked for host features we do not provide (detail = list) */
 } Pe8Reason;
 
-typedef enum { PE8_LANG_EN = 0, PE8_LANG_PL = 1 } Pe8Lang;
+/* Pe8Lang (PE8_LANG_EN / PE8_LANG_PL) comes from i18n.h */
 
 typedef struct {
   char   *path;              /* UTF-8 path of the .8bf */

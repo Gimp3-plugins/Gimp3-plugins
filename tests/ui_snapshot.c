@@ -12,8 +12,10 @@ static char **stub_dirty (gpointer d) { (void) d; dirty_asked++; char **v = g_ne
 static gboolean stub_restart (char **err, gpointer d) { (void) err; (void) d; restart_calls++; return TRUE; }
 static gboolean emit_close (gpointer dlg) { gtk_dialog_response (GTK_DIALOG (dlg), GTK_RESPONSE_CLOSE); return G_SOURCE_REMOVE; }
 
-int main (int argc, char **argv) {
-  gtk_init (&argc, &argv);
+int main (int argc, char **argv_ansi) {
+  gtk_init (&argc, &argv_ansi);
+  char **argv = g_win32_get_command_line ();   /* UTF-8, unlike the ANSI argv */
+  for (argc = 0; argv[argc]; argc++) ;
   if (argc < 4) { g_printerr ("usage: ui_snapshot OUT.png pl|en DIR...\n"); return 2; }
   PsConfig *cfg = ps_config_load ();
   g_free (cfg->language); cfg->language = g_strdup (argv[2]);
@@ -58,7 +60,7 @@ int main (int argc, char **argv) {
   if (pb) gdk_pixbuf_save (pb, argv[1], "png", NULL, NULL);
   int ok = 0, warn = 0, no = 0;
   for (guint i = 0; i < cfg->items->len; i++) { PsItem *p = g_ptr_array_index (cfg->items, i); if (p->verdict == PE8_VERDICT_OK) ok++; else if (p->verdict == PE8_VERDICT_WARN) warn++; else no++; }
-  printf ("items=%u ok=%d warn=%d no=%d dirs=%u ignored=%u needs_restart=%d png=%s\n", cfg->items->len, ok, warn, no, cfg->dirs->len, cfg->ignored->len, ps_manage_needs_restart (dlg), pb ? "yes" : "no");
+  printf ("items=%u ok=%d warn=%d no=%d dirs=%u ignored=%u needs_restart=%d lang=%d png=%s\n", cfg->items->len, ok, warn, no, cfg->dirs->len, cfg->ignored->len, ps_manage_needs_restart (dlg), (int) ps_get_language (), pb ? "yes" : "no");
   ps_config_free (cfg);
   return 0;
 }

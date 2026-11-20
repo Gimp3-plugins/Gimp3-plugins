@@ -1,0 +1,417 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PSHost package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PSHost 0.7\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-20 04:33+0100\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/plugin/filter.c:26
+msgid "The plug-in file no longer exists."
+msgstr ""
+
+#: src/plugin/filter.c:28
+msgid "Layers larger than 32000 pixels are not supported."
+msgstr ""
+
+#: src/plugin/filter.c:38
+msgid "The selection does not overlap the layer."
+msgstr ""
+
+#: src/plugin/filter.c:45
+msgid "Cannot create a temporary directory."
+msgstr ""
+
+#: src/plugin/filter.c:54
+msgid "Cannot write the temporary image."
+msgstr ""
+
+#: src/plugin/filter.c:73
+msgid "Cannot start the filter process"
+msgstr ""
+
+#: src/plugin/filter.c:96
+msgid "The filter did not produce a valid result."
+msgstr ""
+
+#: src/plugin/filter.c:99
+msgid ""
+"The filter did not finish in time and was stopped. The image was not changed."
+msgstr ""
+
+#: src/plugin/filter.c:100
+msgid "The filter crashed. The image was not changed."
+msgstr ""
+
+#: src/plugin/filter.c:101
+#, c-format
+msgid "The plug-in could not be loaded (Windows error %s)."
+msgstr ""
+
+#: src/plugin/filter.c:105
+msgid "The filter reported an error"
+msgstr ""
+
+#: src/plugin/filter.c:105
+#, c-format
+msgid "The filter reported an error (code %s)."
+msgstr ""
+
+#: src/plugin/filter.c:107
+#, c-format
+msgid "The filter process ended unexpectedly (code %u)."
+msgstr ""
+
+#: src/plugin/main.c:58
+msgid "Filter error"
+msgstr ""
+
+#: src/plugin/main.c:204
+msgid "About PSHost..."
+msgstr ""
+
+#: src/plugin/main.c:210
+msgid "Manage plug-ins..."
+msgstr ""
+
+#: src/plugin/registry.c:13
+msgid "Other"
+msgstr ""
+
+#: src/plugin/restart.c:45
+msgid "cannot find the GIMP process"
+msgstr ""
+
+#: src/plugin/restart.c:68
+msgid "GIMP does not offer a clean quit"
+msgstr ""
+
+#: src/plugin/ui.c:99
+msgid "Scanning..."
+msgstr ""
+
+#: src/plugin/ui.c:107
+msgid "OK"
+msgstr ""
+
+#: src/plugin/ui.c:107 src/plugin/ui.c:152
+msgid "With reservations"
+msgstr ""
+
+#: src/plugin/ui.c:107
+msgid "No"
+msgstr ""
+
+#: src/plugin/ui.c:137
+msgid "The plug-in is disabled"
+msgstr ""
+
+#: src/plugin/ui.c:158
+msgid ""
+"Select a filter and click Run to apply it to the active layer (double-click "
+"also works)."
+msgstr ""
+
+#: src/plugin/ui.c:158
+msgid "No filters yet. Add a directory with plug-ins in the Manage tab."
+msgstr ""
+
+#: src/plugin/ui.c:166
+msgid "No plug-ins found yet. Add a directory."
+msgstr ""
+
+#: src/plugin/ui.c:167 src/plugin/ui.c:196
+#, c-format
+msgid "Used: %d, with reservations: %d, skipped: %d"
+msgstr ""
+
+#: src/plugin/ui.c:181
+msgid "No .8bf files were found in this directory."
+msgstr ""
+
+#: src/plugin/ui.c:182 src/plugin/ui.c:206
+msgid "Scan result"
+msgstr ""
+
+#: src/plugin/ui.c:194 src/plugin/ui.c:198 src/plugin/ui.c:490
+msgid "New filters appear in the Filters menu after GIMP is restarted."
+msgstr ""
+
+#: src/plugin/ui.c:199 src/plugin/ui.c:462
+msgid "Details"
+msgstr ""
+
+#: src/plugin/ui.c:215
+msgid "This directory is already on the list."
+msgstr ""
+
+#: src/plugin/ui.c:228
+msgid "Choose a directory with Photoshop plug-ins (.8bf)"
+msgstr ""
+
+#: src/plugin/ui.c:274 src/plugin/ui.c:483
+msgid ""
+"Menu names and the language of the filters change after GIMP is restarted."
+msgstr ""
+
+#: src/plugin/ui.c:294 src/plugin/ui.c:455 src/plugin/ui.c:456
+msgid "Removes entries from this list only. Files on disk are not deleted."
+msgstr ""
+
+#: src/plugin/ui.c:299
+#, c-format
+msgid "Remove %d rejected plug-ins from the list?"
+msgstr ""
+
+#: src/plugin/ui.c:324
+#, c-format
+msgid "Applies to: %s"
+msgstr ""
+
+#: src/plugin/ui.c:324
+msgid "No image is open. Open an image to run a filter."
+msgstr ""
+
+#: src/plugin/ui.c:341
+msgid "To load the new plug-ins GIMP must be restarted. Restart now?"
+msgstr ""
+
+#: src/plugin/ui.c:344
+#, c-format
+msgid ""
+"Unsaved changes in: %s. GIMP will ask whether to save them before closing."
+msgstr ""
+
+#: src/plugin/ui.c:347
+msgid "Later"
+msgstr ""
+
+#: src/plugin/ui.c:348
+msgid "Restart now"
+msgstr ""
+
+#: src/plugin/ui.c:349
+msgid "Restart GIMP"
+msgstr ""
+
+#: src/plugin/ui.c:357
+#, c-format
+msgid ""
+"Cannot restart GIMP automatically: %s. Close GIMP manually and start it "
+"again."
+msgstr ""
+
+#: src/plugin/ui.c:385
+msgid "PSHost - Photoshop plug-ins"
+msgstr ""
+
+#: src/plugin/ui.c:388
+msgid "Restart GIMP..."
+msgstr ""
+
+#: src/plugin/ui.c:389
+msgid "Close"
+msgstr ""
+
+#: src/plugin/ui.c:403 src/plugin/ui.c:446
+msgid "Name"
+msgstr ""
+
+#: src/plugin/ui.c:403 src/plugin/ui.c:446
+msgid "File"
+msgstr ""
+
+#: src/plugin/ui.c:403 src/plugin/ui.c:447
+msgid "Result"
+msgstr ""
+
+#: src/plugin/ui.c:407
+msgid "Run on current layer"
+msgstr ""
+
+#: src/plugin/ui.c:412
+msgid "Filters"
+msgstr ""
+
+#: src/plugin/ui.c:413
+msgid "Manage"
+msgstr ""
+
+#: src/plugin/ui.c:417
+msgid "Plug-in directories"
+msgstr ""
+
+#: src/plugin/ui.c:421
+msgid "Directory"
+msgstr ""
+
+#: src/plugin/ui.c:425
+msgid "Subfolders"
+msgstr ""
+
+#: src/plugin/ui.c:427
+msgid "Add directory..."
+msgstr ""
+
+#: src/plugin/ui.c:427
+msgid "Remove"
+msgstr ""
+
+#: src/plugin/ui.c:427
+msgid "Rescan"
+msgstr ""
+
+#: src/plugin/ui.c:430
+msgid "Include subfolders when adding"
+msgstr ""
+
+#: src/plugin/ui.c:438
+msgid "Found plug-ins"
+msgstr ""
+
+#: src/plugin/ui.c:445
+msgid "Use"
+msgstr ""
+
+#: src/plugin/ui.c:446
+msgid "Category"
+msgstr ""
+
+#: src/plugin/ui.c:447
+msgid "Reason"
+msgstr ""
+
+#: src/plugin/ui.c:454
+msgid "Remove rejected"
+msgstr ""
+
+#: src/plugin/ui.c:454
+msgid "Remove selected"
+msgstr ""
+
+#: src/plugin/ui.c:454
+msgid "Restore removed"
+msgstr ""
+
+#: src/plugin/ui.c:471
+msgid "Settings"
+msgstr ""
+
+#: src/plugin/ui.c:474
+msgid "Automatic"
+msgstr ""
+
+#: src/plugin/ui.c:479
+msgid "Language:"
+msgstr ""
+
+#: src/plugin/ui.c:479
+msgid "Test time limit (s):"
+msgstr ""
+
+#: src/plugin/ui.c:488
+msgid ""
+"Adding a plug-in runs third-party code during the test. Add only plug-ins "
+"from sources you trust."
+msgstr ""
+
+#: src/plugin/ui.c:492
+msgid "The filter list changed. Restart GIMP to apply the changes."
+msgstr ""
+
+#: src/common/pe8_msg.c:9
+msgid "the file cannot be read"
+msgstr ""
+
+#: src/common/pe8_msg.c:10
+msgid "the file is damaged or is not a Windows plug-in"
+msgstr ""
+
+#: src/common/pe8_msg.c:11
+msgid "it is a 32-bit plug-in (GIMP 3 needs 64-bit)"
+msgstr ""
+
+#: src/common/pe8_msg.c:12
+msgid "it was built for an unsupported processor architecture"
+msgstr ""
+
+#: src/common/pe8_msg.c:13
+msgid "it has no PiPL description (old or unsupported plug-in format)"
+msgstr ""
+
+#: src/common/pe8_msg.c:14
+msgid "it is not a filter (only filters are supported)"
+msgstr ""
+
+#: src/common/pe8_msg.c:15
+msgid "it is a hidden helper filter of another plug-in"
+msgstr ""
+
+#: src/common/pe8_msg.c:16
+#, c-format
+msgid "its entry point '%s' was not found"
+msgstr ""
+
+#: src/common/pe8_msg.c:17
+msgid "it does not support RGB images"
+msgstr ""
+
+#: src/common/pe8_msg.c:18
+#, c-format
+msgid "the library %s is missing"
+msgstr ""
+
+#: src/common/pe8_msg.c:19
+#, c-format
+msgid "it could not be loaded (Windows error %s)"
+msgstr ""
+
+#: src/common/pe8_msg.c:20
+msgid "it crashed during the compatibility test"
+msgstr ""
+
+#: src/common/pe8_msg.c:21
+msgid "it did not respond during the test (it hung or waits for a window)"
+msgstr ""
+
+#: src/common/pe8_msg.c:22
+#, c-format
+msgid "it reported an error during the test (code %s)"
+msgstr ""
+
+#: src/common/pe8_msg.c:23
+#, c-format
+msgid "it requests host features that are not supported yet: %s"
+msgstr ""
+
+#: src/common/pe8_msg.c:37
+#, c-format
+msgid "Plug-in ‘%s’ will be used in GIMP."
+msgstr ""
+
+#: src/common/pe8_msg.c:39
+#, c-format
+msgid "Plug-in ‘%s’ will be used with reservations: %s."
+msgstr ""
+
+#: src/common/pe8_msg.c:41
+#, c-format
+msgid "Plug-in ‘%s’ will not be used: %s."
+msgstr ""
+
+#: src/common/pe8_msg.c:46
+msgid ""
+"\"Will be used\" means the plug-in passed the basic test, not that it is "
+"guaranteed to work in every situation."
+msgstr ""

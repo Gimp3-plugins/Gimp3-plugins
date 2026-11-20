@@ -30,6 +30,9 @@ def console(scm, extra_env=None):
     e = dict(env, **(extra_env or {}))
     return subprocess.run([CONSOLE, "-i", "--batch-interpreter", "plug-in-script-fu-eval", "--batch", scm, "--quit"], env=e, capture_output=True, text=True, timeout=180)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pngutil import decode_png
+
 # --- 1. the dynamic procedure exists and runs (pixels inverted) via the PDB
 png = os.path.join(T, "o.png").replace("\\", "/")
 scm = f'''(let* ((image (car (gimp-image-new 40 30 RGB))) (layer (car (gimp-layer-new image "L" 40 30 RGBA-IMAGE 100 LAYER-MODE-NORMAL))))
@@ -88,6 +91,30 @@ check("needs_restart=1" in ui("pl"), "window: changing the menu language require
 o = ui("pl", "close-later"); check("restart_calls=0" in o and "dirty_asked=1" in o, "closing with pending changes: asks about unsaved images; answer 'later' does not restart")
 o = ui("pl", "close-restart"); check("restart_calls=1" in o and "dirty_asked=1" in o, "answer 'restart now' triggers exactly one restart request")
 o = ui("en", "close-restart"); check("restart_calls=0" in o, "no restart request when nothing changed")
+
+# --- 7. Polish characters in directory + file name: scan, register and run through the GIMP menu procedure ---
+import shutil
+pdir = os.path.join(T, "Wtyczki zażółć gęślą")
+os.makedirs(pdir)
+pfile = os.path.join(pdir, "filtr ŁÓDŹ.8bf")
+shutil.copy(os.path.join(B, "mini", "mini_invert.8bf"), pfile)
+CFG_PL = os.path.join(T, "cfg_pl")
+envpl = dict(env, PSHOST_CONFIG_DIR=CFG_PL)
+subprocess.run([os.path.join(B, "ui_snapshot.exe"), os.path.join(T, "p.png"), "pl", pdir], env=envpl, capture_output=True, timeout=120)
+cpl = json.load(open(os.path.join(CFG_PL, "config.json"), encoding="utf-8"))
+it = cpl["plugins"][0]
+procpl = "pshost-filter-" + hashlib.md5(f'{it["path"]}|{it["entry"]}|{it["name"]}'.encode()).hexdigest()[:12]
+pngpl = os.path.join(T, "pl.png").replace("\\", "/")
+scm = f'''(let* ((image (car (gimp-image-new 40 30 RGB))) (layer (car (gimp-layer-new image "L" 40 30 RGBA-IMAGE 100 LAYER-MODE-NORMAL))))
+  (gimp-image-insert-layer image layer 0 0) (gimp-context-set-foreground '(51 102 153)) (gimp-drawable-edit-fill layer FILL-FOREGROUND)
+  ({procpl} RUN-NONINTERACTIVE image (vector layer))
+  (file-png-export RUN-NONINTERACTIVE image "{pngpl}" 0 0 0 0 0 0 0 0 0))'''
+subprocess.run([CONSOLE, "-i", "--batch-interpreter", "plug-in-script-fu-eval", "--batch", scm, "--quit"], env=envpl, capture_output=True, text=True, timeout=180)
+ok = os.path.exists(pngpl)
+if ok:
+    w, h, bpp, rows = decode_png(pngpl)
+    ok = all(tuple(rows[y][x * bpp:x * bpp + 3]) == (204, 153, 102) for x in range(w) for y in range(h))
+check(ok, "GIMP menu filter loaded from a path with Polish characters inverts the layer")
 
 print("failures:", fails)
 sys.exit(1 if fails else 0)

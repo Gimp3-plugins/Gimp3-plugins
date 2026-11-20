@@ -201,7 +201,7 @@ pshost_create_procedure (GimpPlugIn *plug_in, const gchar *name)
   if (g_strcmp0 (name, PROC_ABOUT) == 0)
     {
       proc = gimp_image_procedure_new (plug_in, name, GIMP_PDB_PROC_TYPE_PLUGIN, about_run, NULL, NULL);
-      gimp_procedure_set_menu_label (proc, _T ("About / O wtyczce"));
+      gimp_procedure_set_menu_label (proc, _T ("About PSHost..."));
       gimp_procedure_set_documentation (proc, "About PSHost", "Shows information about PSHost.", NULL);
     }
   else if (g_strcmp0 (name, PROC_MANAGE) == 0)
@@ -238,11 +238,19 @@ pshost_create_procedure (GimpPlugIn *plug_in, const gchar *name)
   return proc;
 }
 
+/* Localization is done by PSHost itself (language chosen in the window: Auto / Polski / English), so GIMP's own
+ * per-language lookup of our msgids is disabled; otherwise a manual "English" choice would be overridden. */
+static gboolean pshost_set_i18n (GimpPlugIn *plug_in, const gchar *procedure_name, gchar **gettext_domain, gchar **catalog_dir)
+{
+  return FALSE;
+}
+
 static void pshost_class_init (PSHostClass *klass)
 {
   GimpPlugInClass *pc = GIMP_PLUG_IN_CLASS (klass);
   pc->query_procedures = pshost_query_procedures;
   pc->init_procedures = pshost_init_procedures;
   pc->create_procedure = pshost_create_procedure;
+  pc->set_i18n = pshost_set_i18n;
 }
 static void pshost_init (PSHost *s) {}

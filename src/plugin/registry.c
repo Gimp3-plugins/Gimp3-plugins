@@ -10,7 +10,7 @@ char *ps_escape_mnemonic (const char *s) {      /* '_' is the mnemonic marker in
 }
 
 static char *menu_for (const PsItem *it) {
-  const char *cat = it->category && *it->category && strcmp (it->category, "-") != 0 ? it->category : (ps_get_language () == PE8_LANG_PL ? "Inne" : "Other");
+  const char *cat = it->category && *it->category && strcmp (it->category, "-") != 0 ? it->category : _T (N_ ("Other"));
   char *c = g_strdup (cat);
   for (char *p = c; *p; p++) if (*p == '/' || *p == '\\') *p = '-';
   g_strstrip (c);
