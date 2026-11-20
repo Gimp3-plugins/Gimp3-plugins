@@ -2,11 +2,11 @@ cmake_minimum_required(VERSION 3.20)
 project(PSHost C)
 set(CMAKE_C_STANDARD 11)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GIMP REQUIRED gimp-3.0 gimpui-3.0 gtk+-3.0)
-add_executable(pshost src/plugin/main.c)
+pkg_check_modules(GIMP REQUIRED gimp-3.0 gimpui-3.0 gtk+-3.0 json-glib-1.0)
+add_executable(pshost src/plugin/main.c src/plugin/config.c src/plugin/scan.c src/plugin/ui.c)
 target_include_directories(pshost PRIVATE ${GIMP_INCLUDE_DIRS})
 target_link_directories(pshost PRIVATE ${GIMP_LIBRARY_DIRS})
-target_link_libraries(pshost PRIVATE ${GIMP_LIBRARIES})
+target_link_libraries(pshost PRIVATE pe8bf ${GIMP_LIBRARIES})
 target_compile_options(pshost PRIVATE ${GIMP_CFLAGS_OTHER} -Wall)
 
 # --- common static analysis library + dev tool + tests ---
@@ -47,3 +47,12 @@ add_test(NAME runner COMMAND python -I ${CMAKE_SOURCE_DIR}/tests/test_runner.py 
 
 add_executable(pshost_check tests/pshost_check.c)
 target_link_libraries(pshost_check PRIVATE pe8bf)
+
+# --- headless UI test (no libgimp): window rendered off-screen, scan runs against the real runner ---
+add_library(pscore_sa STATIC src/plugin/config.c src/plugin/scan.c src/plugin/ui.c)
+target_compile_definitions(pscore_sa PUBLIC PSHOST_STANDALONE)
+target_include_directories(pscore_sa PUBLIC ${GIMP_INCLUDE_DIRS})
+target_link_directories(pscore_sa PUBLIC ${GIMP_LIBRARY_DIRS})
+target_link_libraries(pscore_sa PUBLIC pe8bf ${GIMP_LIBRARIES})
+add_executable(ui_snapshot tests/ui_snapshot.c)
+target_link_libraries(ui_snapshot PRIVATE pscore_sa)
