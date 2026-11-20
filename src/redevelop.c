@@ -183,7 +183,7 @@ redevelop_run (GimpProcedure        *procedure,
           return gimp_procedure_new_return_values (procedure, GIMP_PDB_CANCEL, NULL);
         }
       g_set_error (&error, G_FILE_ERROR, G_FILE_ERROR_PERM,
-                   _("The original RAW file is on a network location (%s); "
+                   _("The original RAW file is not on a local disk (%s); "
                      "it is only opened after confirmation in interactive mode."), path);
       g_free (path);
       return gimp_procedure_new_return_values (procedure,

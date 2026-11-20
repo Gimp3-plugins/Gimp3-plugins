@@ -59,3 +59,16 @@ executable('gimp-raw-heic', sources,
   install : false)
 
 subdir('po')
+
+# Unit tests (no running GIMP needed): meson test -C build
+unit_tests = executable('unit-tests',
+  files('tests/unit/test_core.c', 'src/settings.c', 'src/denoise.c', 'src/util.c'),
+  dependencies : [gimp_dep, gimpui_dep, gegl_dep, heif_dep, lcms_dep,
+                  gexiv2_dep, libraw_dep] + extra_deps,
+  c_args : ['-DLIBRAW_NODLL', '-D_USE_MATH_DEFINES', '-fopenmp',
+            '-Wno-unused-parameter',
+            '-DSAMPLES_DIR="' + meson.current_source_dir() / 'samples' + '"'],
+  include_directories : include_directories('.', 'src'),
+  link_language : 'cpp',
+  build_by_default : true)
+test('unit', unit_tests, timeout : 120)
