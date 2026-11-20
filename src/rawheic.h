@@ -121,6 +121,17 @@ void              raw_batch_session_end        (void);
 gboolean          raw_batch_session_lookup     (const gchar          *path,
                                                 RawSettings          *s);
 
+/* presets.c */
+GList           * raw_presets_list             (void);
+gboolean          raw_presets_load             (const gchar          *name,
+                                                RawSettings          *s);
+gboolean          raw_presets_save             (const gchar          *name,
+                                                const RawSettings    *s,
+                                                GError              **error);
+gboolean          raw_presets_delete           (const gchar          *name);
+gboolean          raw_presets_is_builtin       (const gchar          *name);
+gchar           * raw_presets_file_name        (const gchar          *name);
+
 /* raw-develop.c */
 typedef struct _RawSession RawSession;
 RawSession      * raw_session_open             (const gchar          *path,

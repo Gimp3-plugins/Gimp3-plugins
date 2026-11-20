@@ -297,6 +297,165 @@ set_sensitive_if (GimpProcedureDialog *dialog,
                                              choice_property, values, TRUE);
 }
 
+
+/* --- presets ------------------------------------------------------------ */
+
+typedef struct
+{
+  GimpProcedureConfig *config;
+  GtkWidget           *combo;
+  GtkWidget           *delete_button;
+  gboolean             filling;
+} PresetUI;
+
+static void
+presets_fill (PresetUI    *pui,
+              const gchar *select)
+{
+  GList *names = raw_presets_list ();
+  GList *l;
+  gint   i = 1, active = 0;
+
+  pui->filling = TRUE;
+  gtk_combo_box_text_remove_all (GTK_COMBO_BOX_TEXT (pui->combo));
+  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (pui->combo), _("Presets…"));
+
+  for (l = names; l; l = l->next, i++)
+    {
+      gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (pui->combo), l->data);
+      if (select && ! g_strcmp0 (select, l->data))
+        active = i;
+    }
+
+  gtk_combo_box_set_active (GTK_COMBO_BOX (pui->combo), active);
+  gtk_widget_set_sensitive (pui->delete_button,
+                            select && active > 0 && ! raw_presets_is_builtin (select));
+  pui->filling = FALSE;
+
+  g_list_free_full (names, g_free);
+}
+
+static void
+preset_selected (GtkComboBox *combo,
+                 PresetUI    *pui)
+{
+  gchar       *name;
+  RawSettings  s;
+
+  if (pui->filling || gtk_combo_box_get_active (combo) <= 0)
+    {
+      gtk_widget_set_sensitive (pui->delete_button, FALSE);
+      return;
+    }
+
+  name = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (combo));
+  raw_settings_from_config (&s, pui->config);
+  if (raw_presets_load (name, &s))
+    raw_settings_to_config (&s, pui->config);
+
+  gtk_widget_set_sensitive (pui->delete_button, ! raw_presets_is_builtin (name));
+  g_free (name);
+}
+
+static void
+preset_save_clicked (GtkButton *button,
+                     PresetUI  *pui)
+{
+  GtkWidget *dialog, *entry, *box;
+  gchar     *current;
+
+  dialog = gtk_dialog_new_with_buttons (_("Save preset"),
+                                        GTK_WINDOW (gtk_widget_get_toplevel (GTK_WIDGET (button))),
+                                        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                        _("_Cancel"), GTK_RESPONSE_CANCEL,
+                                        _("_Save"),   GTK_RESPONSE_OK,
+                                        NULL);
+  gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
+
+  box = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
+  gtk_container_set_border_width (GTK_CONTAINER (box), 12);
+  gtk_box_pack_start (GTK_BOX (box), gtk_label_new (_("Preset name:")), FALSE, FALSE, 0);
+
+  entry = gtk_entry_new ();
+  gtk_entry_set_max_length (GTK_ENTRY (entry), 64);
+  gtk_entry_set_activates_default (GTK_ENTRY (entry), TRUE);
+  current = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (pui->combo));
+  if (current && gtk_combo_box_get_active (GTK_COMBO_BOX (pui->combo)) > 0 &&
+      ! raw_presets_is_builtin (current))
+    gtk_entry_set_text (GTK_ENTRY (entry), current);
+  g_free (current);
+  gtk_box_pack_start (GTK_BOX (box), entry, FALSE, FALSE, 6);
+  gtk_widget_show_all (box);
+
+  while (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_OK)
+    {
+      const gchar *name = gtk_entry_get_text (GTK_ENTRY (entry));
+      RawSettings  s;
+      GError      *error = NULL;
+
+      raw_settings_from_config (&s, pui->config);
+      if (raw_presets_save (name, &s, &error))
+        {
+          presets_fill (pui, name);
+          break;
+        }
+
+      gimp_message (error->message);
+      g_error_free (error);
+    }
+
+  gtk_widget_destroy (dialog);
+}
+
+static void
+preset_delete_clicked (GtkButton *button,
+                       PresetUI  *pui)
+{
+  gchar     *name = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (pui->combo));
+  GtkWidget *ask;
+
+  if (! name || raw_presets_is_builtin (name))
+    {
+      g_free (name);
+      return;
+    }
+
+  ask = gtk_message_dialog_new (GTK_WINDOW (gtk_widget_get_toplevel (GTK_WIDGET (button))),
+                                GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
+                                _("Delete the preset '%s'?"), name);
+  if (gtk_dialog_run (GTK_DIALOG (ask)) == GTK_RESPONSE_YES)
+    {
+      raw_presets_delete (name);
+      presets_fill (pui, NULL);
+    }
+  gtk_widget_destroy (ask);
+  g_free (name);
+}
+
+static GtkWidget *
+presets_row (PresetUI *pui)
+{
+  GtkWidget *row  = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  GtkWidget *save = gtk_button_new_with_mnemonic (_("Save as…"));
+
+  pui->combo         = gtk_combo_box_text_new ();
+  pui->delete_button = gtk_button_new_with_mnemonic (_("Delete"));
+
+  gtk_widget_set_tooltip_text (pui->combo,
+                               _("Apply a saved set of development settings"));
+  gtk_box_pack_start (GTK_BOX (row), pui->combo, TRUE, TRUE, 0);
+  gtk_box_pack_start (GTK_BOX (row), save, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (row), pui->delete_button, FALSE, FALSE, 0);
+
+  g_signal_connect (pui->combo, "changed", G_CALLBACK (preset_selected), pui);
+  g_signal_connect (save, "clicked", G_CALLBACK (preset_save_clicked), pui);
+  g_signal_connect (pui->delete_button, "clicked", G_CALLBACK (preset_delete_clicked), pui);
+
+  presets_fill (pui, NULL);
+
+  return row;
+}
+
 gboolean
 raw_dialog_run (GimpProcedure       *procedure,
                 GimpProcedureConfig *config,
@@ -305,6 +464,7 @@ raw_dialog_run (GimpProcedure       *procedure,
 {
   GimpProcedureDialog *dialog;
   PreviewUI            ui = { 0 };
+  PresetUI             pui = { 0 };
   GtkWidget           *hbox, *vbox, *frame, *right;
   gboolean             run;
   gulong               handler;
@@ -383,6 +543,14 @@ raw_dialog_run (GimpProcedure       *procedure,
   gtk_label_set_xalign (GTK_LABEL (ui.status), 0.0);
   gtk_label_set_ellipsize (GTK_LABEL (ui.status), PANGO_ELLIPSIZE_END);
   gtk_box_pack_start (GTK_BOX (vbox), ui.status, FALSE, FALSE, 0);
+
+  pui.config = config;
+  {
+    GtkWidget *row = presets_row (&pui);
+
+    gtk_box_pack_start (GTK_BOX (right), row, FALSE, FALSE, 0);
+    gtk_box_reorder_child (GTK_BOX (right), row, 0);
+  }
 
   gtk_box_pack_start (GTK_BOX (hbox), right, TRUE, TRUE, 0);
   gtk_widget_show_all (hbox);

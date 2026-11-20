@@ -75,6 +75,10 @@ raw_load_procedure_new (GimpPlugIn  *plug_in,
                                             RAW_THUMB_PROC);
 
   raw_settings_add_arguments (procedure);
+  gimp_procedure_add_string_argument (procedure, "preset", _("Preset"),
+                                      _("Name of a development preset applied in "
+                                        "non-interactive mode (empty = use the arguments)"),
+                                      "", G_PARAM_READWRITE);
 
   gimp_procedure_add_boolean_aux_argument (procedure, "ask-dialog",
                                            _("Always show this dialog"),
@@ -178,6 +182,24 @@ raw_load_run (GimpProcedure         *procedure,
     }
 
   raw_settings_from_config (&settings, config);
+
+  if (run_mode != GIMP_RUN_INTERACTIVE)
+    {
+      gchar *preset = NULL;
+
+      g_object_get (config, "preset", &preset, NULL);
+      if (preset && *preset && ! raw_presets_load (preset, &settings))
+        {
+          g_set_error (&error, G_FILE_ERROR, G_FILE_ERROR_NOENT,
+                       _("Unknown preset '%s'."), preset);
+          g_free (preset);
+          g_free (name);
+          g_free (path);
+          return gimp_procedure_new_return_values (procedure,
+                                                   GIMP_PDB_CALLING_ERROR, error);
+        }
+      g_free (preset);
+    }
 
   /* File > Open several RAW files: settings chosen once for the queue */
   if (run_mode == GIMP_RUN_NONINTERACTIVE)

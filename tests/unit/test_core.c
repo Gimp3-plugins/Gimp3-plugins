@@ -211,6 +211,66 @@ test_recovery_compensation (void)
   libraw_close (lr);
 }
 
+
+/* --- presets --------------------------------------------------------------- */
+
+static void
+test_presets (void)
+{
+  RawSettings s, t;
+  GList      *names, *l;
+  gboolean    found = FALSE;
+  GError     *error = NULL;
+  gchar      *fn;
+
+  /* file names never escape the preset directory */
+  fn = raw_presets_file_name ("../../evil\\name:*?");
+  g_assert_null (strchr (fn, '/'));
+  g_assert_null (strchr (fn, '\\'));
+  g_assert_null (strchr (fn, ':'));
+  g_assert_false (g_str_has_prefix (fn, "."));
+  g_free (fn);
+  g_assert_null (raw_presets_file_name ("..."));
+  g_assert_null (raw_presets_file_name (""));
+
+  raw_settings_defaults (&s);
+  s.exposure    = 1.25;
+  s.denoise     = 333;
+  s.color_space = CS_DISPLAY_P3;
+  s.spot[0]     = 0.9;                      /* must not be stored */
+  g_assert_true (raw_presets_save ("Ślub – plener", &s, &error));
+  g_assert_no_error (error);
+
+  names = raw_presets_list ();
+  g_assert_cmpstr (names->data, ==, "Default");       /* built-ins first */
+  for (l = names; l; l = l->next)
+    found |= ! g_strcmp0 (l->data, "Ślub – plener");
+  g_assert_true (found);
+  g_list_free_full (names, g_free);
+
+  raw_settings_defaults (&t);
+  t.spot[0] = 0.1;
+  g_assert_true (raw_presets_load ("Ślub – plener", &t));
+  g_assert_cmpfloat (t.exposure, ==, 1.25);
+  g_assert_cmpfloat (t.denoise, ==, 333);
+  g_assert_cmpint (t.color_space, ==, CS_DISPLAY_P3);
+  g_assert_cmpfloat (t.spot[0], ==, 0.1);             /* photo's spot kept */
+
+  /* built-ins: loadable, protected */
+  g_assert_true (raw_presets_load ("Night / high ISO", &t));
+  g_assert_cmpfloat (t.denoise, >, 0);
+  g_assert_false (raw_presets_save ("Default", &s, &error));
+  g_assert_nonnull (error);
+  g_clear_error (&error);
+  g_assert_false (raw_presets_delete ("Default"));
+  g_assert_false (raw_presets_save ("", &s, &error));
+  g_clear_error (&error);
+
+  g_assert_true (raw_presets_delete ("Ślub – plener"));
+  g_assert_false (raw_presets_load ("Ślub – plener", &t));
+  g_assert_false (raw_presets_load ("does not exist", &t));
+}
+
 /* --- batch session -------------------------------------------------------- */
 
 static void
@@ -336,6 +396,7 @@ main (int argc, char **argv)
   g_test_add_func ("/denoise/banded",           test_denoise_banded_equals_full);
   g_test_add_func ("/develop/recovery-comp",    test_recovery_compensation);
   g_test_add_func ("/batch/session",            test_batch_session);
+  g_test_add_func ("/presets/save-load-delete", test_presets);
   g_test_add_func ("/util/remote-paths",        test_remote_paths);
   g_test_add_func ("/develop/errors",           test_develop_errors);
   g_test_add_func ("/develop/sample",           test_develop_sample);

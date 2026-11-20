@@ -149,5 +149,22 @@ r = hp.run(cfg)
 check("HDR builtin mode delegates", r.index(0) == Gimp.PDBStatusType.SUCCESS and
       "sRGB-TRC" in r.index(1).get_color_profile().get_label(), r.index(1).get_color_profile().get_label())
 
+# Step 4: presets from scripts
+proc = pdb.lookup_procedure("file-raw-heic-raw-load")
+for preset, expect_ok in (("Fast preview", True), ("no such preset", False)):
+    cfg = proc.create_config()
+    cfg.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
+    cfg.set_property("file", Gio.File.new_for_path(SRC))
+    cfg.set_property("preset", preset)
+    r = proc.run(cfg)
+    if expect_ok:
+        im = r.index(1)
+        check("preset 'Fast preview' gives half size", r.index(0) == Gimp.PDBStatusType.SUCCESS
+              and im.get_width() == 3016, "%dx%d" % (im.get_width(), im.get_height()))
+        im.delete()
+    else:
+        check("unknown preset refused", r.index(0) == Gimp.PDBStatusType.CALLING_ERROR,
+              pdb.get_last_error()[:60])
+
 with open(os.path.join("build", "test-out", "regressions.txt"), "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")
