@@ -10,6 +10,8 @@ pozostałych — dlaczego nie), i dodaje użyteczne do menu **Filtry → Photosh
 > [Znane ograniczenia](#znane-ograniczenia). Wynik „zostanie użyta” oznacza, że wtyczka przeszła test podstawowy, a
 > **nie** że zadziała w każdej sytuacji.
 
+**Film demonstracyjny (3:55):** [docs/PSHost-demo.mp4](docs/PSHost-demo.mp4) — dodawanie wtyczek, menu Filtry, Nik / Topaz / Podpis (Watermark) działające w GIMP-ie 3.
+
 ## Co robi
 
 - **Zarządzaj wtyczkami…** (Filtry → Photoshop): dodawanie, usuwanie i ponowne skanowanie katalogów (opcjonalnie z
