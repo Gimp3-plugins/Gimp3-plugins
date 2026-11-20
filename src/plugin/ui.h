@@ -12,7 +12,9 @@ void       ps_manage_dialog_run (GtkWidget *dlg);
 
 /* Launcher: called when the user runs a filter from the "Filters" tab. `target` describes what it will be applied to
  * (e.g. "photo.xcf / Layer 1") or is NULL when no image is open (then the Run button is disabled). */
-typedef void (*PsRunFunc) (const PsItem *item, GtkWindow *parent, gpointer data);
+/* Returns TRUE when the filter was applied: the window then closes so the plug-in procedure ends and the result is a
+ * normal, immediately undoable step in GIMP (Ctrl+Z). On error/cancel return FALSE: the window stays open. */
+typedef gboolean (*PsRunFunc) (const PsItem *item, GtkWindow *parent, gpointer data);
 void       ps_manage_set_launcher (GtkWidget *dlg, PsRunFunc func, gpointer data, const char *target);
 
 /* Start scanning a directory (also used by the "Add directory" button). */
