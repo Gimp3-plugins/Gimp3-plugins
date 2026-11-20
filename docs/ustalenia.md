@@ -1,4 +1,4 @@
-# Ustalenia (PSHost) — stan: Etap 5
+# Ustalenia (PSHost) — stan: Etap 6
 
 ## Zweryfikowane na tej maszynie (fakty)
 - GIMP **3.2.6**, instalacja per-user: `%LOCALAPPDATA%\Programs\GIMP 3`. Katalog użytkownika: `%APPDATA%\GIMP\3.2` (instrukcja zakładała 3.0 — używamy 3.2).
@@ -45,6 +45,14 @@
 - `ps_filter_run` (src/plugin/filter.c) działa w prawdziwym GIMP-ie: warstwa → RGBA8 (`R'G'B'A u8`), selekcja → maska 8 bit, osobny proces runnera, wynik przez bufor cienia + `gimp_drawable_merge_shadow(undo=TRUE)` w grupie Cofnij, odświeżenie widoku. Parametry filtra zapisują się w `...\pshost\params\<proc>.bin` i są podawane przy następnym uruchomieniu.
 - Procedura skryptowalna `pshost-run-filter(run-mode, image, drawables, filter, interactive)` (bez pozycji w menu). Dzięki niej test end-to-end w `gimp-console` (tests/test_gimp_e2e.py): cała warstwa odwrócona, selekcja prostokątna respektowana (prawa połowa bez zmian), nieznany filtr → czysty błąd PDB. **Cofnij:** w GIMP-ie 3 nie ma procedury PDB Cofnij, więc ten punkt wymaga ręcznego sprawdzenia (jeden krok Cofnij po filtrze).
 - Ograniczenie: filtry, które pokazują okno w `Start`, wymagają interaktywnego uruchomienia; wtyczki zapamiętujące stan w pamięci procesu (np. „bez okna” przy Ctrl+F) pokażą okno ponownie, bo każdy filtr działa w nowym procesie.
+
+## Etap 6 — filtry w menu i restart GIMP-a (zweryfikowane w gimp-console)
+- **Rejestracja dynamiczna:** `query_procedures` zwraca tylko stałe procedury (manage, about, run-filter, restart), a `init_procedures` (wywoływane przy każdym starcie GIMP-a) — po jednej procedurze `pshost-filter-<hash>` na każdy włączony, użyteczny filtr, w `<Image>/Filters/Photoshop/<Kategoria z PiPL>` (brak kategorii → „Inne/Other”; `/` w kategorii → `-`; `_` w etykiecie jest podwajane, bo GIMP traktuje je jako mnemonik). Kolizje etykiet w jednym menu: dopisek `(plik.8bf)`, potem `#n`. Wstawiane do pluginrc są tylko procedury stałe, więc zmiana konfiguracji nie zostawia nieaktualnych wpisów.
+- **Uruchomienie z menu:** `menu_filter_run` → `ps_filter_run` (jeden krok Cofnij, selekcja respektowana). Tryb interaktywny z menu otwiera okno filtra; „Powtórz ostatni filtr” (WITH_LAST_VALS) używa zapisanych parametrów bez Parameters (wtyczki trzymające stan tylko w pamięci procesu i tak mogą pokazać okno ponownie).
+- **Stan zarejestrowany:** `registered.json` (sygnatura SHA-256 zbioru procedur + języka) zapisywany w `init_procedures`; okno porównuje ją z bieżącą konfiguracją i pokazuje „Zmień → wymagany restart”.
+- **Restart (wybrany wariant):** tryb `pshost_runner --mode restart` (osobny proces pomocniczy, bez dodatkowego pliku exe) czeka na zakończenie GIMP-a (PID rodzica wtyczki, ścieżka exe z `QueryFullProcessImageName`, **bez zgadywania**), po 1,5 s uruchamia GIMP-a ponownie. Zamknięcie: wywołanie PDB `gimp-quit(force=FALSE)` — ta sama ścieżka co Plik → Zakończ, więc GIMP sam pyta o niezapisane obrazy; **procesu nie zabijamy**. Jeśli użytkownik anuluje zamykanie, pomocnik po 180 s kończy się bez uruchamiania GIMP-a (kod 124). Okno przed restartem prosi o zgodę i wymienia obrazy z niezapisanymi zmianami (`gimp_image_is_dirty`); „Później” niczego nie zamyka.
+- **Zweryfikowane testami (13 kontroli):** procedura menu zarejestrowana i działa (warstwa odwrócona), `registered.json`, helper czeka/uruchamia/rezygnuje przy anulowaniu, `pshost-restart` w GIMP-ie znajduje proces rodzica, a helper przeżywa jego zakończenie; okno: wykrycie „potrzebny restart”, zgoda „Później”/„Teraz”, ostrzeżenie o niezapisanych obrazach.
+- **Niezweryfikowane:** prawdziwy restart okienkowego GIMP-a (test użył gimp-console i zastępczego exe — celowo nie ruszam Twojego pulpitu); czy GIMP na Windows nie umieszcza wtyczek w obiekcie job z KILL_ON_JOB_CLOSE (helper próbuje `CREATE_BREAKAWAY_FROM_JOB`, a przy odmowie startuje bez niego); wygląd pozycji menu w żywym GIMP-ie.
 
 ## Założenia / niezweryfikowane
 - Brak Photoshop SDK na dysku; planowane własne minimalne definicje struktur (`src/common/ps_types.h`). Licencja Adobe SDK do sprawdzenia przed jakąkolwiek redystrybucją nagłówków.

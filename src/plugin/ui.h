@@ -17,6 +17,16 @@ void       ps_manage_dialog_run (GtkWidget *dlg);
 typedef gboolean (*PsRunFunc) (const PsItem *item, GtkWindow *parent, gpointer data);
 void       ps_manage_set_launcher (GtkWidget *dlg, PsRunFunc func, gpointer data, const char *target);
 
+/* Restart hooks (GIMP side). dirty: NULL-terminated names of images with unsaved changes (g_strfreev) or NULL.
+ * restart: starts the helper and asks GIMP to quit; returns FALSE and sets *error on failure. */
+typedef char   **(*PsDirtyFunc) (gpointer data);
+typedef gboolean (*PsRestartFunc) (char **error, gpointer data);
+void       ps_manage_set_restart_hooks (GtkWidget *dlg, PsDirtyFunc dirty, PsRestartFunc restart, gpointer data);
+/* TRUE when the filter set / menu language changed since GIMP started (a restart is needed). */
+gboolean   ps_manage_needs_restart (GtkWidget *dlg);
+/* Test hook: the consent dialog is skipped and counted as "restart now" when TRUE, "later" when FALSE. */
+void       ps_ui_set_auto_restart_answer (int answer /* -1 = ask, 0 = later, 1 = restart now */);
+
 /* Start scanning a directory (also used by the "Add directory" button). */
 void       ps_manage_add_directory (GtkWidget *dlg, const char *path, gboolean recursive);
 gboolean   ps_manage_is_busy (GtkWidget *dlg);

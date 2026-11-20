@@ -1,8 +1,11 @@
 #include "ui.h"
 #include "scan.h"
+#include "registry.h"
 #include <string.h>
 
 static gboolean silent = FALSE;
+static int auto_restart_answer = -1;
+void ps_ui_set_auto_restart_answer (int a) { auto_restart_answer = a; }
 void ps_ui_set_silent (gboolean s) { silent = s; }
 
 enum { C_ENABLED, C_ACTIVATABLE, C_NAME, C_CATEGORY, C_FILE, C_RESULT, C_REASON, C_TOOLTIP, C_ITEM, C_N };
@@ -10,6 +13,7 @@ enum { D_PATH, D_RECURSIVE, D_N };
 enum { R_NAME, R_FILE, R_NOTE, R_ITEM, R_N };
 
 typedef struct {
+  GtkWidget *restart_label; PsDirtyFunc dirty_func; PsRestartFunc restart_func; gpointer restart_data; gboolean restart_needed;
   GtkWidget *notebook, *run_view, *b_run, *run_hint, *run_target, *b_rm_rejected, *b_rm_selected, *b_restore;
   GtkTreeStore *run_store;
   PsRunFunc run_func; gpointer run_data; char *target; gboolean running;
@@ -156,6 +160,8 @@ static void refresh (Ui *ui) {
   gtk_widget_set_sensitive (ui->b_rm_rejected, !ui->busy && no_rejected_count (ui) > 0);
   gtk_widget_set_sensitive (ui->b_restore, !ui->busy && ui->cfg->ignored->len > 0);
   update_run_sensitivity (ui);
+  ui->restart_needed = ps_registry_needs_restart (ui->cfg);
+  gtk_widget_set_visible (ui->restart_label, ui->restart_needed);
   char *sum;
   if (ui->cfg->items->len == 0) sum = g_strdup (_T ("No plug-ins found yet. Add a directory."));
   else sum = g_strdup_printf (_T ("Used: %d, with reservations: %d, skipped: %d"), ok, warn, no);
@@ -320,6 +326,42 @@ void ps_manage_set_launcher (GtkWidget *dlg, PsRunFunc func, gpointer data, cons
   update_run_sensitivity (ui);
 }
 
+gboolean ps_manage_needs_restart (GtkWidget *dlg) { Ui *ui = g_object_get_data (G_OBJECT (dlg), "ps-ui"); return ps_registry_needs_restart (ui->cfg); }
+void ps_manage_set_restart_hooks (GtkWidget *dlg, PsDirtyFunc dirty, PsRestartFunc restart, gpointer data) {
+  Ui *ui = g_object_get_data (G_OBJECT (dlg), "ps-ui"); ui->dirty_func = dirty; ui->restart_func = restart; ui->restart_data = data;
+}
+
+/* Asks for consent (never closes GIMP without it) and, if given, starts the restart. Returns TRUE if GIMP was asked to restart. */
+static gboolean ask_and_restart (Ui *ui) {
+  if (!ui->restart_func) return FALSE;
+  gboolean yes;
+  char **dirty = ui->dirty_func ? ui->dirty_func (ui->restart_data) : NULL;
+  if (auto_restart_answer >= 0) yes = auto_restart_answer == 1;
+  else {
+    GtkWidget *m = gtk_message_dialog_new (GTK_WINDOW (ui->dialog), GTK_DIALOG_MODAL, dirty ? GTK_MESSAGE_WARNING : GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s", _T ("To load the new plug-ins GIMP must be restarted. Restart now?"));
+    if (dirty) {
+      char *list = g_strjoinv (", ", dirty);
+      gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (m), _T ("Unsaved changes in: %s. GIMP will ask whether to save them before closing."), list);
+      g_free (list);
+    }
+    gtk_dialog_add_button (GTK_DIALOG (m), _T ("Later"), GTK_RESPONSE_NO);
+    gtk_dialog_add_button (GTK_DIALOG (m), _T ("Restart now"), GTK_RESPONSE_YES);
+    gtk_window_set_title (GTK_WINDOW (m), _T ("Restart GIMP"));
+    yes = gtk_dialog_run (GTK_DIALOG (m)) == GTK_RESPONSE_YES; gtk_widget_destroy (m);
+  }
+  g_strfreev (dirty);
+  if (!yes) return FALSE;
+  char *err = NULL;
+  if (!ui->restart_func (&err, ui->restart_data)) {
+    if (!silent) {
+      GtkWidget *m = gtk_message_dialog_new (GTK_WINDOW (ui->dialog), GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK, _T ("Cannot restart GIMP automatically: %s. Close GIMP manually and start it again."), err ? err : "?");
+      gtk_dialog_run (GTK_DIALOG (m)); gtk_widget_destroy (m);
+    }
+    g_free (err); return FALSE;
+  }
+  return TRUE;
+}
+
 /* --------------------------------------------------------------------------- build */
 static GtkWidget *scrolled (GtkWidget *child, int h) {
   GtkWidget *sw = gtk_scrolled_window_new (NULL, NULL);
@@ -343,6 +385,7 @@ GtkWidget *ps_manage_dialog_new (GtkWindow *parent, PsConfig *cfg) {
   gtk_window_set_title (GTK_WINDOW (dlg), _T ("PSHost - Photoshop plug-ins"));
   if (parent) gtk_window_set_transient_for (GTK_WINDOW (dlg), parent);
   gtk_window_set_default_size (GTK_WINDOW (dlg), 980, 720);
+  gtk_dialog_add_button (GTK_DIALOG (dlg), _T ("Restart GIMP..."), 100);
   gtk_dialog_add_button (GTK_DIALOG (dlg), _T ("Close"), GTK_RESPONSE_CLOSE);
   g_object_set_data_full (G_OBJECT (dlg), "ps-ui", ui, NULL);
 
@@ -446,6 +489,9 @@ GtkWidget *ps_manage_dialog_new (GtkWindow *parent, PsConfig *cfg) {
   gtk_label_set_xalign (GTK_LABEL (warn), 0); gtk_label_set_line_wrap (GTK_LABEL (warn), TRUE);
   GtkWidget *info = gtk_label_new (_T ("New filters appear in the Filters menu after GIMP is restarted."));
   gtk_label_set_xalign (GTK_LABEL (info), 0);
+  ui->restart_label = gtk_label_new (_T ("The filter list changed. Restart GIMP to apply the changes."));
+  gtk_label_set_xalign (GTK_LABEL (ui->restart_label), 0); gtk_widget_set_no_show_all (ui->restart_label, TRUE);
+  gtk_box_pack_start (GTK_BOX (outer_box), ui->restart_label, FALSE, FALSE, 0);
   gtk_box_pack_start (GTK_BOX (outer_box), warn, FALSE, FALSE, 0); gtk_box_pack_start (GTK_BOX (outer_box), info, FALSE, FALSE, 0);
 
   gtk_widget_show_all (outer); gtk_widget_set_visible (ui->progress, FALSE);
@@ -454,6 +500,12 @@ GtkWidget *ps_manage_dialog_new (GtkWindow *parent, PsConfig *cfg) {
 }
 
 void ps_manage_dialog_run (GtkWidget *dlg) {
-  gtk_dialog_run (GTK_DIALOG (dlg));
+  Ui *ui = g_object_get_data (G_OBJECT (dlg), "ps-ui");
+  for (;;) {
+    int r = gtk_dialog_run (GTK_DIALOG (dlg));
+    if (r == 100) { if (ask_and_restart (ui)) break; continue; }       /* explicit "Restart GIMP..." */
+    if (ui->restart_func && ps_registry_needs_restart (ui->cfg)) ask_and_restart (ui);   /* closing with pending changes */
+    break;
+  }
   gtk_widget_destroy (dlg);
 }

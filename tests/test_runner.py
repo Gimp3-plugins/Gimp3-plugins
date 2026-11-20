@@ -91,7 +91,7 @@ if os.path.isdir(os.path.join(GIMP, "bin")):
     def ui(lang, *dirs):
         return subprocess.run([os.path.join(B, "ui_snapshot.exe"), png, lang, *dirs], capture_output=True, text=True, env=env, timeout=120).stdout
     o = ui("en", os.path.join(B, "mini"))
-    check("items=5 ok=2 warn=0 no=3 dirs=1 ignored=0 png=yes" in o, "UI: scanning mini dir -> 2 usable, 3 rejected")
+    check("items=5 ok=2 warn=0 no=3 dirs=1 ignored=0 needs_restart=1 png=yes" in o, "UI: scanning mini dir -> 2 usable, 3 rejected")
     cfg = open(os.path.join(cfgdir, "config.json"), encoding="utf-8").read()
     import re
     has = lambda k, v: re.search(r'"%s"\s*:\s*"%s"' % (k, v), cfg) is not None
