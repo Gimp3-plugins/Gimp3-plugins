@@ -5,6 +5,8 @@ uruchomiony w `pshost_runner` na 8–15 s (`tests/try_plugin.py`): „bez awarii
 obraz; **W GIMP-ie** = co potwierdził użytkownik w prawdziwym GIMP-ie. **„OK” w teście PSHost oznacza tylko test
 podstawowy** — Nik pokazał, że wtyczka może przejść go i zawieść dopiero w `Start` (naprawione w 6b).
 
+**Wersja Nik Collection użyta w testach:** darmowa wersja od Google **1.2.11** (64-bitowe filtry). Wtyczki nie są częścią PSHost i nie są przez niego rozpowszechniane.
+
 | Wtyczka | Test PSHost | Start w runnerze | W GIMP-ie (potwierdzone przez użytkownika) | Uwagi |
 |---|---|---|---|---|
 | ZetmarKolor_64 (własna) | OK | okno + podgląd | **działa** (okno, filtr, Cofnij) | podgląd przez `inputRate` |

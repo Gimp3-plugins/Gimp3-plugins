@@ -11,6 +11,8 @@ used (and why the others will not), and adds the usable ones to **Filters → Ph
 
 **Demo video (3:55):** [docs/PSHost-demo.mp4](docs/PSHost-demo.mp4) — adding plug-ins, the Filters menu, Nik / Topaz / Podpis (Watermark) running in GIMP 3.
 
+**Tested with:** the free **Nik Collection by Google, version 1.2.11** (64-bit filters: Analog, Color, Dfine, HDR, Sharpener, Silver, Viveza), Topaz Labs plug-ins and the author's own plug-ins - see [docs/kompatybilnosc.md](docs/kompatybilnosc.md). PSHost does **not** include or distribute any of these plug-ins; they belong to their owners and are used under their own licences.
+
 ## What it does
 
 - **Manage plug-ins…** (Filters → Photoshop): add / remove / rescan directories (optionally with subfolders), see a table
