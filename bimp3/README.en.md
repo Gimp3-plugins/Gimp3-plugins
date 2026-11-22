@@ -4,7 +4,7 @@ BIMP 3 applies ordered operations to groups of images: resize, crop, flip and ro
 
 ## Install on Windows x64
 
-1. Download `bimp3-v1.0.0-windows-x64.zip` from the [release](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/bimp3-v1.0.0) and extract it.
+1. Download `bimp3-v1.0.1-windows-x64.zip` from the [release](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/bimp3-v1.0.1) and extract it.
 2. Open PowerShell in the extracted folder and run `./install.ps1`.
 3. Restart GIMP and open **File → BIMP 3 — przetwarzanie wsadowe…**.
 
