@@ -1,5 +1,13 @@
 # Komercyjne pliki LUT nigdy nie trafiają do repozytorium
 *.cube
+!bimp3/examples/identity.cube
+!bimp3/examples/warm-demo.cube
 *.3dl
 Luts/
 __pycache__/
+bimp3/build/
+bimp3/tests/output/
+bimp3/tests/profile/
+bimp3/tests/*result.json
+bimp3/.ruff_cache/
+bimp3/bimp3-gimp3.zip

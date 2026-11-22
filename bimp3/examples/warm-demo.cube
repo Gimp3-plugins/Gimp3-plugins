@@ -1,0 +1,12 @@
+TITLE "Warm demo — lekko cieplejsze kolory"
+LUT_3D_SIZE 2
+DOMAIN_MIN 0 0 0
+DOMAIN_MAX 1 1 1
+0.04 0.01 0.00
+1.00 0.01 0.00
+0.04 0.98 0.00
+1.00 0.98 0.00
+0.04 0.01 0.90
+1.00 0.01 0.90
+0.04 0.98 0.90
+1.00 0.98 0.90

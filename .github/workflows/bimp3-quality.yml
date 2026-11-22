@@ -1,0 +1,23 @@
+name: BIMP 3 quality
+on:
+  workflow_dispatch:
+  push:
+    paths: ['bimp3/**', '.github/workflows/bimp3-quality.yml']
+  pull_request:
+    paths: ['bimp3/**', '.github/workflows/bimp3-quality.yml']
+permissions:
+  contents: read
+jobs:
+  model-and-lint:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: bimp3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: ruff check bimp3 tests
+      - run: python -m unittest discover -s tests -p "test_*.py" -v

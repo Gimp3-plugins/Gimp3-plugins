@@ -1,0 +1,22 @@
+{
+  "bimp3": 1,
+  "steps": [
+    {
+      "type": "resize",
+      "settings": {
+        "resize_mode_width": 1,
+        "resize_mode_height": 1,
+        "new_w_px": 1600,
+        "new_h_px": 1600,
+        "stretch_mode": 1
+      }
+    },
+    {
+      "type": "changeformat",
+      "settings": {
+        "format": 3,
+        "arguments": {"quality": 0.85, "progressive": true, "include-color-profile": true}
+      }
+    }
+  ]
+}
