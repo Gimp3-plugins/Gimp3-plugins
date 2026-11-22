@@ -36,7 +36,7 @@ class ModelTests(unittest.TestCase):
 
     def test_output_planning(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             for folder in ("a", "b"):
                 (root / folder).mkdir()
                 (root / folder / "żółć.png").touch()
