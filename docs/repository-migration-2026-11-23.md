@@ -29,6 +29,6 @@ Starsze wydania używają znaczników z prefiksem `migrated/`, aby nie kolidowa�
 
 ## Dodatkowe pliki
 
-Do `gimp-wtyczki/docs/meme-maker/` dołączono trzy oryginalne przykłady PNG z osobnego repozytorium Kreatora memów. Wtyczka w tym folderze pozostaje w nowszej wersji. Licencje i informacje o autorach zachowano w podkatalogach.
+Trzy oryginalne przykłady PNG z osobnego repozytorium Kreatora memów są już obecne w `gimp-wtyczki/docs/meme-maker/`; sprawdzono ich identyczność bajt po bajcie. Wtyczka w tym folderze pozostaje w nowszej wersji. Licencje i informacje o autorach zachowano w podkatalogach.
 
 Oryginalne repozytoria, metadane oraz pliki wydań zabezpieczono także w lokalnej kopii migracji.
