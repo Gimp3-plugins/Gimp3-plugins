@@ -15,6 +15,8 @@ Plug-ins for **GIMP 3** (Windows). · Wtyczki do **GIMP-a 3** (Windows).
 | **[Instagram filters / Filtry Instagram](gimp-instagram-filtry/)** | 22 Instagram-style filters (1977, Lofi, Toaster, X-Pro II…) and a *Text Border* plug-in, ported from GIMP 2 to GIMP 3 - pure Python, no external libraries. | [Releases](../../releases) (`instagram-filtry-v*`) | [English](gimp-instagram-filtry/README.md) · [Polski](gimp-instagram-filtry/README.pl.md) |
 | **[Filtry Instagram](gimp-instagram-filtry/)** (PL) | 22 filtry w stylu Instagrama (1977, Lofi, Toaster, X-Pro II…) i wtyczka *Obramowanie tekstu*, przeniesione z GIMP 2 na GIMP 3 - Python, bez zewnętrznych bibliotek. | [Wydania](../../releases) (`instagram-filtry-v*`) | [Polski](gimp-instagram-filtry/README.pl.md) |
 
+| **[RAW / HEIC / HDR](gimp-raw-heic/)** | Import RAW (LibRaw) and HDR HEIC/HEIF/AVIF directly into GIMP 3.2. Windows x64. / Import zdjęć RAW i HEIC z HDR. | [0.9.0](../../releases/tag/migrated/gimp-raw-heic/v0.9.0) | [Polski](gimp-raw-heic/README.md) |
+
 **PSHost demo video / Film demonstracyjny PSHost:** [pshost/docs/PSHost-demo.mp4](pshost/docs/PSHost-demo.mp4) (3:55)
 
 Each plug-in lives in its own folder with its own README, tests and installer; releases are tagged `<plug-in>-vX.Y.Z`
@@ -29,3 +31,7 @@ w Pythonie (LUT-y, Kreator memów, Podpis) mają wspólny folder [`gimp-wtyczki/
 (`install.ps1`) i testami. Całość jest wolnym oprogramowaniem na licencji **GNU GPL v3 lub nowszej** (zob.
 [LICENSE](LICENSE)), z wyjątkiem *Podpisu na zdjęciu*, który ma licencję MIT ([gimp-wtyczki/LICENSE](gimp-wtyczki/LICENSE)).
 **BIMP 3** i jego oryginalne źródła GIMP 2 są dostępne na licencji **GPL v2 lub nowszej**, zgodnie z [bimp3/bimp3/LICENSE](bimp3/bimp3/LICENSE).
+
+## Consolidated repositories / Połączone repozytoria
+
+Od 23.11.2026 wszystkie wtyczki GIMP 3 z konta zetmar-collab są utrzymywane w tym repozytorium. Nowsze wersje wtyczek pozostały bez zmian; dołączono RAW/HEIC, brakujące grafiki i starsze wydania. Pełna historia oraz oryginalne znaczniki są zachowane pod `migrated/<repozytorium>/<tag>`. [Mapa migracji i wydań](docs/repository-migration-2026-11-23.md).
