@@ -6,9 +6,9 @@ Free, open-source plug-ins for GIMP 3.x written in Python. They work fully offli
 
 | Plug-in | Menu | What it does | Package |
 |---|---|---|---|
-| **Signature** (`podpis-zdjecia/`, [license](LICENSE): MIT) | Filters → Signature | a text signature or a logo as a new layer, 9 positions, size in % of the image, saved templates | [v1.1.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/podpis-zdjecia-v1.1.0) |
-| **Meme Maker** (`meme-maker/`) | Filters → Memes | top and bottom text with an outline, text bar, live preview, JPG/PNG export. [Docs](meme-maker/README.en.md) | [v1.1.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/meme-maker-v1.1.0) |
-| **LUTs (.cube)** (`lut-cube/`) | Filters → LUT | `.cube`, `.3dl` and Hald LUTs with a library, before/after preview, strength, presets, batch mode and your own look. [Docs](lut-cube/README.en.md) | [v1.1.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/lut-cube-v1.1.0) |
+| **Signature** (`podpis-zdjecia/`, [license](LICENSE): MIT) | Filters → Signature | a text signature or a logo as a new layer, 9 positions, size in % of the image, saved templates | [v1.2.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/podpis-zdjecia-v1.2.0) |
+| **Meme Maker** (`meme-maker/`) | Filters → Memes | top and bottom text with an outline, text bar, live preview, JPG/PNG export. [Docs](meme-maker/README.en.md) | [v1.2.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/meme-maker-v1.2.0) |
+| **LUTs (.cube)** (`lut-cube/`) | Filters → LUT | `.cube`, `.3dl` and Hald LUTs with a library, before/after preview, strength, presets, batch mode and your own look. [Docs](lut-cube/README.en.md) | [v1.2.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/lut-cube-v1.2.0) |
 
 This folder is part of the [Gimp3-plugins](../README.md) repository. Run the commands below (installation, tests) from the `gimp-wtyczki` folder. Without parameters `install.ps1` installs all plug-ins that lie next to the script; pick one with `-Plugin podpis-zdjecia`, `-Plugin meme-maker` or `-Plugin lut-cube`.
 
@@ -27,7 +27,7 @@ Everything is one undo operation, so a single Ctrl+Z removes the signature. Exis
 
 ### Installation (Windows)
 
-The easiest way: download `podpis-zdjecia-vX.Y.Z.zip` from the [Releases](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/podpis-zdjecia-v1.1.0), unpack it and run `install.ps1` (right click → "Run with PowerShell"), or copy the `podpis-zdjecia` folder by hand:
+The easiest way: download `podpis-zdjecia-vX.Y.Z.zip` from the [Releases](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/podpis-zdjecia-v1.2.0), unpack it and run `install.ps1` (right click → "Run with PowerShell"), or copy the `podpis-zdjecia` folder by hand:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -114,9 +114,9 @@ proc.run(cfg)
 ## Automatic tests and releases (for contributors)
 
 - **Tests on every change in `gimp-wtyczki/`** (GitHub Actions, `.github/workflows/gimp-wtyczki-testy.yml` in the repository root): pyflakes and pytest for all plug-ins, in two LUT variants (with numpy and pure Python), with ffmpeg as an independent reference. Tests inside GIMP itself (`tests/gimp_*.py`) are run by hand because they need an installed GIMP.
-- **Release packages**: pushing a tag `<plug-in>-v<version>` (e.g. `lut-cube-v1.1.0`) runs `.github/workflows/gimp-wtyczki-wydanie.yml`, which builds the zip (for `lut-cube` together with numpy) and attaches it to the GitHub release.
+- **Release packages**: pushing a tag `<plug-in>-v<version>` (e.g. `lut-cube-v1.2.0`) runs `.github/workflows/gimp-wtyczki-wydanie.yml`, which builds the zip (for `lut-cube` together with numpy) and attaches it to the GitHub release.
 - **By hand** you can build the same zip with:
   ```
-  python tools/build_dist.py lut-cube 1.1.0 --require-vendor
+  python tools/build_dist.py lut-cube 1.2.0 --require-vendor
   ```
 - **Translations**: user-visible texts in the code are Polish and wrapped in `tr("…")`; the English text lives in `en.json` of each plug-in. `tests/test_i18n.py` fails when a text has no translation, when an entry is unused, or when placeholders (`%s`, `%d`) differ.

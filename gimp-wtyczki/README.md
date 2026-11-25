@@ -6,9 +6,9 @@ Darmowe wtyczki open source (GPL-3.0) do GIMP-a 3.x, napisane w Pythonie. Dział
 
 | Wtyczka | Menu | Opis | Paczka |
 |---|---|---|---|
-| **Podpis na zdjęciu** (`podpis-zdjecia/`) | Filtry → Podpis | podpis tekstowy albo logo jako nowa warstwa, 9 pozycji, rozmiar w % obrazu, szablony podpisów | [v1.1.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/podpis-zdjecia-v1.1.0) |
-| **Kreator memów** (`meme-maker/`) | Filtry → Memy | tekst górny i dolny z obrysem, pasek na tekst, podgląd na żywo, eksport JPG/PNG. [Opis](meme-maker/README.md) | [v1.1.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/meme-maker-v1.1.0) |
-| **LUT-y (.cube)** (`lut-cube/`) | Filtry → LUT | LUT-y `.cube`, `.3dl` i Hald z biblioteką, podglądem przed/po, siłą efektu, presetami, trybem wsadowym i własnym lookiem. [Opis](lut-cube/README.md) | [v1.1.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/lut-cube-v1.1.0) |
+| **Podpis na zdjęciu** (`podpis-zdjecia/`) | Filtry → Podpis | podpis tekstowy albo logo jako nowa warstwa, 9 pozycji, rozmiar w % obrazu, szablony podpisów | [v1.2.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/podpis-zdjecia-v1.2.0) |
+| **Kreator memów** (`meme-maker/`) | Filtry → Memy | tekst górny i dolny z obrysem, pasek na tekst, podgląd na żywo, eksport JPG/PNG. [Opis](meme-maker/README.md) | [v1.2.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/meme-maker-v1.2.0) |
+| **LUT-y (.cube)** (`lut-cube/`) | Filtry → LUT | LUT-y `.cube`, `.3dl` i Hald z biblioteką, podglądem przed/po, siłą efektu, presetami, trybem wsadowym i własnym lookiem. [Opis](lut-cube/README.md) | [v1.2.0](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/lut-cube-v1.2.0) |
 
 Ten folder jest częścią repozytorium [Gimp3-plugins](../README.md). Polecenia poniżej (instalacja, testy) uruchamiaj z folderu `gimp-wtyczki`.
 
@@ -32,7 +32,7 @@ Przetestowano na GIMP 3.2.6 (Windows 11). Kod działa na każdym systemie i nie 
 ### Instalacja (Windows)
 
 Najprościej: pobierz `podpis-zdjecia-vX.Y.Z.zip` z
-[Releases](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/podpis-zdjecia-v1.1.0),
+[Releases](https://github.com/Gimp3-plugins/Gimp3-plugins/releases/tag/podpis-zdjecia-v1.2.0),
 rozpakuj i uruchom `install.ps1` (prawy przycisk → „Uruchom za pomocą programu PowerShell”)
 albo skopiuj folder `podpis-zdjecia` ręcznie (patrz niżej).
 
@@ -138,9 +138,9 @@ proc.run(cfg)
 ## Testy automatyczne i wydania (dla współtwórców)
 
 - **Testy przy każdej zmianie w `gimp-wtyczki/`** (GitHub Actions, `.github/workflows/gimp-wtyczki-testy.yml` w głównym folderze repozytorium): pyflakes i pytest dla wszystkich wtyczek, w dwóch wariantach LUT-ów (z numpy i w czystym Pythonie), z ffmpeg jako niezależną referencją. Testy w samym GIMP-ie (`tests/gimp_*.py`) uruchamia się ręcznie, bo wymagają zainstalowanego GIMP-a.
-- **Paczki wydań**: wypchnięcie tagu `<wtyczka>-v<wersja>` (np. `lut-cube-v1.1.0`) uruchamia `.github/workflows/gimp-wtyczki-wydanie.yml`, który buduje zip (dla `lut-cube` razem z numpy) i dołącza go do wydania na GitHubie.
+- **Paczki wydań**: wypchnięcie tagu `<wtyczka>-v<wersja>` (np. `lut-cube-v1.2.0`) uruchamia `.github/workflows/gimp-wtyczki-wydanie.yml`, który buduje zip (dla `lut-cube` razem z numpy) i dołącza go do wydania na GitHubie.
 - **Ręcznie** ten sam zip zbudujesz poleceniem:
   ```
-  python tools/build_dist.py lut-cube 1.1.0 --require-vendor
+  python tools/build_dist.py lut-cube 1.2.0 --require-vendor
   ```
   Skrypt nigdy nie dołącza plików LUT (`.cube`, `.3dl`).
