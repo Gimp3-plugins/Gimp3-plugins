@@ -120,6 +120,9 @@ sample_f (const gfloat *src, gint w, gint h, gdouble x, gdouble y, gint c)
   gint    x0, y0, x1, y1;
   gdouble fx, fy;
 
+  /* NaN passes CLAMP and (gint) NaN is undefined: never index with it */
+  if (! isfinite (x) || ! isfinite (y))
+    return 0.0f;
   x  = CLAMP (x, 0.0, (gdouble) (w - 1));
   y  = CLAMP (y, 0.0, (gdouble) (h - 1));
   x0 = (gint) x;  y0 = (gint) y;
@@ -139,6 +142,8 @@ sample_u (const guint16 *src, gint w, gint h, gdouble x, gdouble y, gint c)
   gint    x0, y0, x1, y1;
   gdouble fx, fy;
 
+  if (! isfinite (x) || ! isfinite (y))
+    return 0.0;
   x  = CLAMP (x, 0.0, (gdouble) (w - 1));
   y  = CLAMP (y, 0.0, (gdouble) (h - 1));
   x0 = (gint) x;  y0 = (gint) y;
@@ -166,6 +171,11 @@ rawheic_geometry_apply (RawImage          *img,
   gpointer out;
 
   if (w < 2 || h < 2)
+    return TRUE;
+  /* settings normally arrive sanitized; refuse anything non-finite anyway */
+  if (! isfinite (s->straighten) ||
+      ! isfinite (s->crop[0]) || ! isfinite (s->crop[1]) ||
+      ! isfinite (s->crop[2]) || ! isfinite (s->crop[3]))
     return TRUE;
   if (uncropped ? fabs (s->straighten) <= 0.005 : ! rawheic_geometry_active (s))
     return TRUE;

@@ -625,6 +625,52 @@ test_xmp_write (void)
     g_assert_cmpfloat (fabs (b.straighten - 1.5), <, 1e-9);
   }
 
+  /* hostile sidecar: non-finite values must never survive (CropAngle used
+   * to reach the geometry code as NaN and index outside the image)
+   */
+  {
+    const gchar *bad = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF><rdf:Description "
+                       "crs:HasCrop=\"True\" crs:CropLeft=\"0.1\" crs:CropTop=\"0.1\" "
+                       "crs:CropRight=\"0.9\" crs:CropBottom=\"0.9\" crs:CropAngle=\"nan\" "
+                       "crs:Exposure2012=\"inf\" crs:Temperature=\"nan\" "
+                       "crs:LuminanceSmoothing=\"-nan\"/></rdf:RDF></x:xmpmeta>";
+    gint k;
+
+    raw_settings_defaults (&b);
+    rawheic_xmp_apply_data (bad, strlen (bad), &b);
+    g_assert_true (isfinite (b.straighten));
+    g_assert_cmpfloat (b.straighten, ==, 0.0);
+    g_assert_true (isfinite (b.exposure));
+    g_assert_true (isfinite (b.wb_temperature));
+    g_assert_true (isfinite (b.denoise));
+    for (k = 0; k < 4; k++)
+      g_assert_true (isfinite (b.crop[k]));
+    g_assert_cmpfloat (fabs (b.crop[0] - 0.1), <, 1e-9);   /* valid parts kept */
+  }
+
+  /* and the geometry code refuses NaN on its own */
+  {
+    RawImage    im = { 0 };
+    RawSettings g;
+    gint        k;
+
+    raw_settings_defaults (&g);
+    g.straighten = NAN;
+    g.crop[2]    = 0.5;
+    im.width     = 64;
+    im.height    = 48;
+    im.pixels    = g_new0 (gfloat, 64 * 48 * 3);
+    g_assert_true (rawheic_geometry_apply (&im, &g, FALSE));
+    g_assert_cmpint (im.width, ==, 64);                       /* left unchanged */
+    g.straighten = 3.0;
+    g.crop[0]    = NAN;
+    g_assert_true (rawheic_geometry_apply (&im, &g, FALSE));
+    g_assert_cmpint (im.width, ==, 64);
+    for (k = 0; k < 64 * 48 * 3; k++)
+      g_assert_true (isfinite (im.pixels[k]));
+    g_free (im.pixels);
+  }
+
   g_remove (target);
   g_free (target);
   g_free (raw);

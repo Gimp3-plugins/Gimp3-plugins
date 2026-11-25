@@ -436,6 +436,9 @@ raw_settings_from_config (RawSettings         *s,
   s->tone_curve  = id_for_nick (tone_items,     tc, TONE_NONE);
 
   g_free (wb); g_free (hl); g_free (dm); g_free (fb); g_free (cs); g_free (dp); g_free (tc);
+
+  /* GParamSpecDouble lets NaN through its range check (scripts, XMP) */
+  raw_settings_sanitize (s);
 }
 
 void
