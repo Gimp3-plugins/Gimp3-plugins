@@ -39,31 +39,44 @@ hat_transform (gfloat       *out,
              base[stride * (2 * size - 2 - (i + sc))];
 }
 
-gboolean
-rawheic_wavelet_denoise (guint16 *rgb,
-                         gint     width,
-                         gint     height,
-                         gdouble  threshold)
+/* Denoise one horizontal band: rows [a, b) of the image are loaded (from
+ * @saved for rows that were already overwritten), filtered, and rows
+ * [y0, y1) are written back.  @fimg holds 3 planes of width * (b - a).
+ */
+static void
+denoise_band (guint16       *rgb,
+              gint           width,
+              gint           a,
+              gint           b,
+              gint           y0,
+              gint           y1,
+              const guint16 *saved,
+              gint           saved_y,
+              gint           saved_n,
+              gfloat        *fimg,
+              gdouble        threshold)
 {
-  gsize   size = (gsize) width * height;
-  gfloat *fimg;
-  gint    c;
-
-  /* the coarsest level uses a step of 16 pixels */
-  if (threshold <= 0 || width <= 2 * 16 + 1 || height <= 2 * 16 + 1)
-    return TRUE;
-
-  fimg = g_try_malloc (size * 3 * sizeof (gfloat));
-  if (! fimg)
-    return FALSE;
+  gint  height = b - a;
+  gsize size   = (gsize) width * height;
+  gint  c;
 
   for (c = 0; c < 3; c++)
     {
       gsize  i, hpass = 0, lpass = 0;
-      gint   lev;
+      gint   lev, r;
 
-      for (i = 0; i < size; i++)
-        fimg[i] = 256.0f * sqrtf ((gfloat) rgb[i * 3 + c]);
+#pragma omp parallel for
+      for (r = 0; r < height; r++)
+        {
+          gint           y   = a + r;
+          const guint16 *src = (saved && y >= saved_y && y < saved_y + saved_n) ?
+                               saved + (gsize) (y - saved_y) * width * 3 :
+                               rgb + (gsize) y * width * 3;
+          gint           x;
+
+          for (x = 0; x < width; x++)
+            fimg[(gsize) r * width + x] = 256.0f * sqrtf ((gfloat) src[x * 3 + c]);
+        }
 
       for (lev = 0; lev < 5; lev++)
         {
@@ -118,16 +131,97 @@ rawheic_wavelet_denoise (guint16 *rgb,
         }
 
 #pragma omp parallel for
-      for (i = 0; i < size; i++)
+      for (r = y0 - a; r < y1 - a; r++)
         {
-          gfloat v = fimg[i] + fimg[lpass + i];
+          guint16 *dst = rgb + (gsize) (a + r) * width * 3;
+          gint     x;
 
-          v = v * v / 65536.0f;
-          rgb[i * 3 + c] = (guint16) CLAMP (v + 0.5f, 0.0f, 65535.0f);
+          for (x = 0; x < width; x++)
+            {
+              gsize  k = (gsize) r * width + x;
+              gfloat v = fimg[k] + fimg[lpass + k];
+
+              v = v * v / 65536.0f;
+              dst[x * 3 + c] = (guint16) CLAMP (v + 0.5f, 0.0f, 65535.0f);
+            }
         }
     }
+}
 
+/* The 5 levels reach 1+2+4+8+16 = 31 rows, so a 64-row margin makes the
+ * banded result identical to filtering the whole image at once.
+ */
+#define BAND_MARGIN 64
+
+gboolean
+rawheic_wavelet_denoise_banded (guint16 *rgb,
+                                gint     width,
+                                gint     height,
+                                gdouble  threshold,
+                                gint     band)
+{
+  gint     max_rows, y0;
+  gfloat  *fimg;
+  guint16 *saved[2] = { NULL, NULL };
+  gint     saved_y = 0, saved_n = 0, cur = 0;
+
+  /* the coarsest level uses a step of 16 pixels */
+  if (threshold <= 0 || width <= 2 * 16 + 1 || height <= 2 * 16 + 1)
+    return TRUE;
+
+  band     = MAX (band, BAND_MARGIN);
+  max_rows = MIN (height, band + 3 * BAND_MARGIN);
+
+  fimg = g_try_malloc ((gsize) width * max_rows * 3 * sizeof (gfloat));
+  if (! fimg)
+    return FALSE;
+
+  saved[0] = g_try_malloc ((gsize) width * BAND_MARGIN * 3 * sizeof (guint16));
+  saved[1] = g_try_malloc ((gsize) width * BAND_MARGIN * 3 * sizeof (guint16));
+  if (! saved[0] || ! saved[1])
+    {
+      g_free (saved[0]);
+      g_free (saved[1]);
+      g_free (fimg);
+      return FALSE;
+    }
+
+  for (y0 = 0; y0 < height; )
+    {
+      /* merge a short remainder into this band */
+      gint y1 = (height - y0 <= band + BAND_MARGIN) ? height : y0 + band;
+      gint a  = MAX (0, y0 - BAND_MARGIN);
+      gint b  = MIN (height, y1 + BAND_MARGIN);
+      gint nxt = 1 - cur;
+      gint keep = MIN (BAND_MARGIN, y1 - y0);
+
+      /* rows the next band reads above its start must stay original */
+      if (y1 < height)
+        memcpy (saved[nxt], rgb + (gsize) (y1 - keep) * width * 3,
+                (gsize) keep * width * 3 * sizeof (guint16));
+
+      denoise_band (rgb, width, a, b, y0, y1,
+                    y0 > 0 ? saved[cur] : NULL, saved_y, saved_n,
+                    fimg, threshold);
+
+      saved_y = y1 - keep;
+      saved_n = keep;
+      cur     = nxt;
+      y0      = y1;
+    }
+
+  g_free (saved[0]);
+  g_free (saved[1]);
   g_free (fimg);
 
   return TRUE;
+}
+
+gboolean
+rawheic_wavelet_denoise (guint16 *rgb,
+                         gint     width,
+                         gint     height,
+                         gdouble  threshold)
+{
+  return rawheic_wavelet_denoise_banded (rgb, width, height, threshold, 1024);
 }

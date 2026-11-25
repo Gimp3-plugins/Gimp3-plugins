@@ -5,6 +5,7 @@
 
 #include "config.h"
 
+#include <math.h>
 #include <string.h>
 
 #include <glib/gstdio.h>
@@ -24,6 +25,7 @@ static const ChoiceItem wb_items[] =
   { "auto",    WB_AUTO,   N_("Automatic") },
   { "manual",  WB_MANUAL, N_("Manual (temperature / tint)") },
   { "spot",    WB_SPOT,   N_("Neutral point (picked area)") },
+  { "multipliers", WB_MULTIPLIERS, N_("Multipliers (from XMP)") },
   { NULL, 0, NULL }
 };
 
@@ -64,6 +66,14 @@ static const ChoiceItem cs_items[] =
   { "display-p3", CS_DISPLAY_P3, N_("Display P3") },
   { "prophoto",   CS_PROPHOTO,   N_("ProPhoto RGB") },
   { "rec2020",    CS_REC2020,    N_("Rec. 2020") },
+  { NULL, 0, NULL }
+};
+
+static const ChoiceItem tone_items[] =
+{
+  { "none",   TONE_NONE,   N_("None (scene-linear)") },
+  { "medium", TONE_MEDIUM, N_("Medium contrast") },
+  { "strong", TONE_STRONG, N_("Strong contrast") },
   { NULL, 0, NULL }
 };
 
@@ -128,6 +138,7 @@ raw_settings_defaults (RawSettings *s)
   s->wb_mode           = WB_CAMERA;
   s->wb_temperature    = 5500.0;
   s->wb_tint           = 0.0;
+  s->wb_mul[0] = s->wb_mul[1] = s->wb_mul[2] = s->wb_mul[3] = 1.0;
   s->spot[0]           = 0.45;
   s->spot[1]           = 0.45;
   s->spot[2]           = 0.1;
@@ -136,6 +147,7 @@ raw_settings_defaults (RawSettings *s)
   s->exposure_preserve = 0.0;
   s->highlight         = HL_CLIP;
   s->rebuild_level     = 5;
+  s->highlight_compensate = TRUE;
   s->brightness        = 1.0;
   s->auto_bright       = FALSE;
   s->demosaic          = 3;
@@ -151,6 +163,15 @@ raw_settings_defaults (RawSettings *s)
   s->half_size         = FALSE;
   s->auto_rotate       = TRUE;
   s->camera_crop       = TRUE;
+  s->lens_vignetting   = FALSE;
+  s->lens_distortion   = FALSE;
+  s->lens_tca          = FALSE;
+  s->camera_profile_look = TRUE;
+  s->straighten        = 0.0;
+  s->crop[0]           = 0.0;
+  s->crop[1]           = 0.0;
+  s->crop[2]           = 1.0;
+  s->crop[3]           = 1.0;
 }
 
 void
@@ -174,6 +195,12 @@ raw_settings_add_arguments (GimpProcedure *procedure)
                                       _("Tint"),
                                       _("Tint for manual white balance: negative = green, positive = magenta"),
                                       -100.0, 100.0, d.wb_tint, RW);
+  gimp_procedure_add_double_argument (procedure, "wb-mul-red", _("Red multiplier"),
+                                      _("Raw red channel multiplier (white balance from XMP)"),
+                                      0.05, 20.0, 1.0, RW);
+  gimp_procedure_add_double_argument (procedure, "wb-mul-blue", _("Blue multiplier"),
+                                      _("Raw blue channel multiplier (white balance from XMP)"),
+                                      0.05, 20.0, 1.0, RW);
   gimp_procedure_add_double_argument (procedure, "spot-x", _("Spot X"),
                                       _("Neutral area left edge (0..1)"),
                                       0.0, 1.0, d.spot[0], RW);
@@ -196,17 +223,29 @@ raw_settings_add_arguments (GimpProcedure *procedure)
                                       0.0, 1.0, d.exposure_preserve, RW);
   gimp_procedure_add_choice_argument (procedure, "highlight",
                                       _("Highlight recovery"),
-                                      _("How clipped highlights are handled; modes other than Clip darken the image by about 1 EV to make room for the recovered highlights (compensate with Exposure)"),
+                                      _("How clipped highlights are handled"),
                                       make_choice (hl_items),
                                       nick_for_id (hl_items, d.highlight), RW);
   gimp_procedure_add_int_argument    (procedure, "rebuild-level",
                                       _("Rebuild level"),
                                       _("Strength of the 'rebuild' highlight mode"),
                                       3, 9, d.rebuild_level, RW);
+  gimp_procedure_add_boolean_argument (procedure, "highlight-compensate",
+                                       _("Compensate recovery darkening"),
+                                       _("Highlight recovery modes darken the image by about 1 EV; "
+                                         "bring the brightness back (32-bit float keeps the recovered "
+                                         "highlights above 1.0, 8/16-bit roll them off softly)"),
+                                       d.highlight_compensate, RW);
   gimp_procedure_add_double_argument (procedure, "brightness",
                                       _("Brightness"),
                                       _("Output brightness multiplier"),
                                       0.25, 4.0, d.brightness, RW);
+  gimp_procedure_add_choice_argument (procedure, "tone-curve",
+                                      _("Base tone curve"),
+                                      _("S-shaped contrast curve like a camera JPEG; hues "
+                                        "are kept and values above 1.0 stay unchanged"),
+                                      make_choice (tone_items),
+                                      nick_for_id (tone_items, d.tone_curve), RW);
   gimp_procedure_add_boolean_argument (procedure, "auto-bright",
                                        _("Automatic brightness"),
                                        _("Stretch the histogram like dcraw (clips one percent of pixels)"),
@@ -267,6 +306,54 @@ raw_settings_add_arguments (GimpProcedure *procedure)
                                        _("Apply camera default crop"),
                                        _("Use the default crop stored in the file (DNG, CR3, ...)"),
                                        d.camera_crop, RW);
+  gimp_procedure_add_boolean_argument (procedure, "lens-vignetting",
+                                       _("Correct vignetting"),
+                                       _("Brighten dark corners using the lensfun lens database"),
+                                       d.lens_vignetting, RW);
+  gimp_procedure_add_boolean_argument (procedure, "lens-distortion",
+                                       _("Correct distortion"),
+                                       _("Straighten barrel / pincushion distortion (lensfun)"),
+                                       d.lens_distortion, RW);
+  gimp_procedure_add_boolean_argument (procedure, "lens-tca",
+                                       _("Correct lateral chromatic aberration"),
+                                       _("Remove colour fringes towards the corners (lensfun)"),
+                                       d.lens_tca, RW);
+  gimp_procedure_add_file_argument (procedure, "camera-profile",
+                                    _("Camera profile"),
+                                    _("Camera input profile (.icc, .icm or Adobe .dcp); "
+                                      "empty = LibRaw's built-in colour matrix"),
+                                    GIMP_FILE_CHOOSER_ACTION_OPEN, TRUE, NULL, RW);
+  gimp_procedure_add_boolean_argument (procedure, "camera-profile-look",
+                                       _("Use the profile's look (DCP)"),
+                                       _("Apply the DCP look table and tone curve, as Adobe "
+                                         "Camera Raw does; off = colour only"),
+                                       d.camera_profile_look, RW);
+  gimp_procedure_add_boolean_argument (procedure, "auto-profile",
+                                       _("Find a camera profile automatically"),
+                                       _("Without a camera profile above, use a DCP made for "
+                                         "this camera (Adobe Standard first) from the profile "
+                                         "folder, <GIMP profile>/gimp-raw-heic/profiles or "
+                                         "Adobe's CameraProfiles folder"),
+                                       d.auto_profile, RW);
+  gimp_procedure_add_file_argument (procedure, "profile-folder", _("Profile folder"),
+                                    _("Extra folder with .dcp camera profiles"),
+                                    GIMP_FILE_CHOOSER_ACTION_SELECT_FOLDER, TRUE, NULL, RW);
+  gimp_procedure_add_double_argument (procedure, "straighten", _("Straighten (°)"),
+                                      _("Rotation in degrees, positive = counter-clockwise; "
+                                        "the image is enlarged so that no empty corners appear"),
+                                      -45.0, 45.0, d.straighten, RW);
+  gimp_procedure_add_double_argument (procedure, "crop-x", _("Crop left"),
+                                      _("Left edge of the crop (0..1)"),
+                                      0.0, 1.0, d.crop[0], RW);
+  gimp_procedure_add_double_argument (procedure, "crop-y", _("Crop top"),
+                                      _("Top edge of the crop (0..1)"),
+                                      0.0, 1.0, d.crop[1], RW);
+  gimp_procedure_add_double_argument (procedure, "crop-width", _("Crop width"),
+                                      _("Width of the crop (0..1)"),
+                                      0.02, 1.0, d.crop[2], RW);
+  gimp_procedure_add_double_argument (procedure, "crop-height", _("Crop height"),
+                                      _("Height of the crop (0..1)"),
+                                      0.02, 1.0, d.crop[3], RW);
 #undef RW
 }
 
@@ -274,7 +361,7 @@ void
 raw_settings_from_config (RawSettings         *s,
                           GimpProcedureConfig *config)
 {
-  gchar *wb, *hl, *dm, *fb, *cs, *dp;
+  gchar *wb, *hl, *dm, *fb, *cs, *dp, *tc;
 
   raw_settings_defaults (s);
 
@@ -282,6 +369,8 @@ raw_settings_from_config (RawSettings         *s,
                 "wb-mode",           &wb,
                 "wb-temperature",    &s->wb_temperature,
                 "wb-tint",           &s->wb_tint,
+                "wb-mul-red",        &s->wb_mul[0],
+                "wb-mul-blue",       &s->wb_mul[2],
                 "spot-x",            &s->spot[0],
                 "spot-y",            &s->spot[1],
                 "spot-width",        &s->spot[2],
@@ -290,6 +379,7 @@ raw_settings_from_config (RawSettings         *s,
                 "exposure-preserve", &s->exposure_preserve,
                 "highlight",         &hl,
                 "rebuild-level",     &s->rebuild_level,
+                "highlight-compensate", &s->highlight_compensate,
                 "brightness",        &s->brightness,
                 "auto-bright",       &s->auto_bright,
                 "demosaic",          &dm,
@@ -305,7 +395,37 @@ raw_settings_from_config (RawSettings         *s,
                 "half-size",         &s->half_size,
                 "auto-rotate",       &s->auto_rotate,
                 "camera-crop",       &s->camera_crop,
+                "lens-vignetting",   &s->lens_vignetting,
+                "lens-distortion",   &s->lens_distortion,
+                "lens-tca",          &s->lens_tca,
+                "camera-profile-look", &s->camera_profile_look,
+                "auto-profile",      &s->auto_profile,
+                "tone-curve",        &tc,
+                "straighten",        &s->straighten,
+                "crop-x",            &s->crop[0],
+                "crop-y",            &s->crop[1],
+                "crop-width",        &s->crop[2],
+                "crop-height",       &s->crop[3],
                 NULL);
+
+  {
+    GFile *f = NULL;
+    gchar *path;
+
+    g_object_get (config, "camera-profile", &f, NULL);
+    path = f ? g_file_get_path (f) : NULL;
+    if (path)
+      g_strlcpy (s->camera_profile, path, sizeof s->camera_profile);
+    g_free (path);
+    g_clear_object (&f);
+
+    g_object_get (config, "profile-folder", &f, NULL);
+    path = f ? g_file_get_path (f) : NULL;
+    if (path)
+      g_strlcpy (s->profile_dir, path, sizeof s->profile_dir);
+    g_free (path);
+    g_clear_object (&f);
+  }
 
   s->wb_mode     = id_for_nick (wb_items,       wb, WB_CAMERA);
   s->highlight   = id_for_nick (hl_items,       hl, HL_CLIP);
@@ -313,8 +433,9 @@ raw_settings_from_config (RawSettings         *s,
   s->fbdd        = id_for_nick (fbdd_items,     fb, 0);
   s->color_space = id_for_nick (cs_items,       cs, CS_SRGB);
   s->depth       = id_for_nick (depth_items,    dp, DEPTH_U16);
+  s->tone_curve  = id_for_nick (tone_items,     tc, TONE_NONE);
 
-  g_free (wb); g_free (hl); g_free (dm); g_free (fb); g_free (cs); g_free (dp);
+  g_free (wb); g_free (hl); g_free (dm); g_free (fb); g_free (cs); g_free (dp); g_free (tc);
 }
 
 void
@@ -325,6 +446,8 @@ raw_settings_to_config (const RawSettings   *s,
                 "wb-mode",           nick_for_id (wb_items, s->wb_mode),
                 "wb-temperature",    s->wb_temperature,
                 "wb-tint",           s->wb_tint,
+                "wb-mul-red",        CLAMP (s->wb_mul[0], 0.05, 20.0),
+                "wb-mul-blue",       CLAMP (s->wb_mul[2], 0.05, 20.0),
                 "spot-x",            s->spot[0],
                 "spot-y",            s->spot[1],
                 "spot-width",        s->spot[2],
@@ -333,6 +456,7 @@ raw_settings_to_config (const RawSettings   *s,
                 "exposure-preserve", s->exposure_preserve,
                 "highlight",         nick_for_id (hl_items, s->highlight),
                 "rebuild-level",     s->rebuild_level,
+                "highlight-compensate", s->highlight_compensate,
                 "brightness",        s->brightness,
                 "auto-bright",       s->auto_bright,
                 "demosaic",          nick_for_id (demosaic_items, s->demosaic),
@@ -348,7 +472,29 @@ raw_settings_to_config (const RawSettings   *s,
                 "half-size",         s->half_size,
                 "auto-rotate",       s->auto_rotate,
                 "camera-crop",       s->camera_crop,
+                "lens-vignetting",   s->lens_vignetting,
+                "lens-distortion",   s->lens_distortion,
+                "lens-tca",          s->lens_tca,
+                "camera-profile-look", s->camera_profile_look,
+                "auto-profile",      s->auto_profile,
+                "tone-curve",        nick_for_id (tone_items, s->tone_curve),
+                "straighten",        s->straighten,
+                "crop-x",            s->crop[0],
+                "crop-y",            s->crop[1],
+                "crop-width",        CLAMP (s->crop[2], 0.02, 1.0),
+                "crop-height",       CLAMP (s->crop[3], 0.02, 1.0),
                 NULL);
+
+  {
+    GFile *f = s->camera_profile[0] ? g_file_new_for_path (s->camera_profile) : NULL;
+
+    g_object_set (config, "camera-profile", f, NULL);
+    g_clear_object (&f);
+
+    f = s->profile_dir[0] ? g_file_new_for_path (s->profile_dir) : NULL;
+    g_object_set (config, "profile-folder", f, NULL);
+    g_clear_object (&f);
+  }
 }
 
 #define GROUP "raw"
@@ -366,10 +512,12 @@ raw_settings_serialize (const RawSettings *s,
   g_key_file_set_double  (kf, GROUP, "wb-temperature", s->wb_temperature);
   g_key_file_set_double  (kf, GROUP, "wb-tint", s->wb_tint);
   g_key_file_set_double_list (kf, GROUP, "spot", (gdouble *) s->spot, 4);
+  g_key_file_set_double_list (kf, GROUP, "wb-mul", (gdouble *) s->wb_mul, 4);
   g_key_file_set_double  (kf, GROUP, "exposure", s->exposure);
   g_key_file_set_double  (kf, GROUP, "exposure-preserve", s->exposure_preserve);
   g_key_file_set_string  (kf, GROUP, "highlight", nick_for_id (hl_items, s->highlight));
   g_key_file_set_integer (kf, GROUP, "rebuild-level", s->rebuild_level);
+  g_key_file_set_boolean (kf, GROUP, "highlight-compensate", s->highlight_compensate);
   g_key_file_set_double  (kf, GROUP, "brightness", s->brightness);
   g_key_file_set_boolean (kf, GROUP, "auto-bright", s->auto_bright);
   g_key_file_set_string  (kf, GROUP, "demosaic", nick_for_id (demosaic_items, s->demosaic));
@@ -385,11 +533,78 @@ raw_settings_serialize (const RawSettings *s,
   g_key_file_set_boolean (kf, GROUP, "half-size", s->half_size);
   g_key_file_set_boolean (kf, GROUP, "auto-rotate", s->auto_rotate);
   g_key_file_set_boolean (kf, GROUP, "camera-crop", s->camera_crop);
+  g_key_file_set_boolean (kf, GROUP, "lens-vignetting", s->lens_vignetting);
+  g_key_file_set_boolean (kf, GROUP, "lens-distortion", s->lens_distortion);
+  g_key_file_set_boolean (kf, GROUP, "lens-tca", s->lens_tca);
+  g_key_file_set_string  (kf, GROUP, "camera-profile", s->camera_profile);
+  g_key_file_set_boolean (kf, GROUP, "camera-profile-look", s->camera_profile_look);
+  g_key_file_set_boolean (kf, GROUP, "auto-profile", s->auto_profile);
+  g_key_file_set_string  (kf, GROUP, "tone-curve", nick_for_id (tone_items, s->tone_curve));
+  g_key_file_set_string  (kf, GROUP, "profile-folder", s->profile_dir);
+  g_key_file_set_double  (kf, GROUP, "straighten", s->straighten);
+  g_key_file_set_double_list (kf, GROUP, "crop", (gdouble *) s->crop, 4);
 
   data = g_key_file_to_data (kf, NULL, NULL);
   g_key_file_free (kf);
 
   return data;
+}
+
+/* CLAMP lets NaN through (every comparison is false) and GKeyFile accepts
+ * "nan" and "inf": non-finite values fall back to the default.
+ */
+static gdouble
+finite_clamp (gdouble v,
+              gdouble lo,
+              gdouble hi,
+              gdouble def)
+{
+  return isfinite (v) ? CLAMP (v, lo, hi) : def;
+}
+
+/* Bring every value into its valid range.  Settings read from files (XCF
+ * parasites, presets, batch sessions) go through this.
+ */
+void
+raw_settings_sanitize (RawSettings *s)
+{
+  RawSettings d;
+  gint        n;
+
+  raw_settings_defaults (&d);
+
+  s->wb_temperature    = finite_clamp (s->wb_temperature, 2000.0, 25000.0, d.wb_temperature);
+  s->wb_tint           = finite_clamp (s->wb_tint, -100.0, 100.0, d.wb_tint);
+  s->exposure          = finite_clamp (s->exposure, -2.0, 3.0, d.exposure);
+  s->exposure_preserve = finite_clamp (s->exposure_preserve, 0.0, 1.0, d.exposure_preserve);
+  s->rebuild_level     = CLAMP (s->rebuild_level, 3, 9);
+  s->brightness        = finite_clamp (s->brightness, 0.25, 4.0, d.brightness);
+  s->denoise           = finite_clamp (s->denoise, 0.0, 2000.0, d.denoise);
+  s->ca_red            = finite_clamp (s->ca_red, 0.99, 1.01, d.ca_red);
+  s->ca_blue           = finite_clamp (s->ca_blue, 0.99, 1.01, d.ca_blue);
+  s->median_passes     = CLAMP (s->median_passes, 0, 10);
+  s->fbdd              = CLAMP (s->fbdd, 0, 2);
+  s->wb_mode           = CLAMP (s->wb_mode, WB_CAMERA, WB_MULTIPLIERS);
+  s->highlight         = CLAMP (s->highlight, HL_CLIP, HL_REBUILD);
+  s->color_space       = CLAMP (s->color_space, 0, CS_N - 1);
+  s->depth             = CLAMP (s->depth, DEPTH_U8, DEPTH_FLOAT);
+  s->tone_curve        = CLAMP (s->tone_curve, TONE_NONE, TONE_STRONG);
+
+  for (n = 0; n < 4; n++)
+    {
+      s->spot[n]   = finite_clamp (s->spot[n], 0.0, 1.0, d.spot[n]);
+      s->wb_mul[n] = finite_clamp (s->wb_mul[n], 0.05, 20.0, 1.0);
+    }
+
+  /* the neutral area must lie inside the image */
+  s->spot[2] = MIN (s->spot[2], 1.0 - s->spot[0]);
+  s->spot[3] = MIN (s->spot[3], 1.0 - s->spot[1]);
+
+  s->straighten = finite_clamp (s->straighten, -45.0, 45.0, 0.0);
+  s->crop[2]    = finite_clamp (s->crop[2], 0.02, 1.0, 1.0);
+  s->crop[3]    = finite_clamp (s->crop[3], 0.02, 1.0, 1.0);
+  s->crop[0]    = finite_clamp (s->crop[0], 0.0, 1.0 - s->crop[2], 0.0);
+  s->crop[1]    = finite_clamp (s->crop[1], 0.0, 1.0 - s->crop[3], 0.0);
 }
 
 /* Reads values that are present; missing keys keep the defaults. */
@@ -433,10 +648,20 @@ raw_settings_deserialize (RawSettings  *s,
   if (spot && n == 4)
     memcpy (s->spot, spot, sizeof (s->spot));
   g_free (spot);
+  spot = g_key_file_get_double_list (kf, GROUP, "wb-mul", &n, NULL);
+  if (spot && n == 4)
+    memcpy (s->wb_mul, spot, sizeof (s->wb_mul));
+  g_free (spot);
+  spot = g_key_file_get_double_list (kf, GROUP, "crop", &n, NULL);
+  if (spot && n == 4)
+    memcpy (s->crop, spot, sizeof (s->crop));
+  g_free (spot);
+  GET_D ("straighten", s->straighten);
   GET_D ("exposure", s->exposure);
   GET_D ("exposure-preserve", s->exposure_preserve);
   GET_C ("highlight", s->highlight, hl_items);
   GET_I ("rebuild-level", s->rebuild_level);
+  GET_B ("highlight-compensate", s->highlight_compensate);
   GET_D ("brightness", s->brightness);
   GET_B ("auto-bright", s->auto_bright);
   GET_C ("demosaic", s->demosaic, demosaic_items);
@@ -452,20 +677,22 @@ raw_settings_deserialize (RawSettings  *s,
   GET_B ("half-size", s->half_size);
   GET_B ("auto-rotate", s->auto_rotate);
   GET_B ("camera-crop", s->camera_crop);
+  GET_B ("lens-vignetting", s->lens_vignetting);
+  GET_B ("lens-distortion", s->lens_distortion);
+  GET_B ("lens-tca", s->lens_tca);
+  GET_B ("camera-profile-look", s->camera_profile_look);
+  str = g_key_file_get_string (kf, GROUP, "camera-profile", NULL);
+  if (str)
+    g_strlcpy (s->camera_profile, str, sizeof s->camera_profile);
+  g_free (str);
+  GET_B ("auto-profile", s->auto_profile);
+  GET_C ("tone-curve", s->tone_curve, tone_items);
+  str = g_key_file_get_string (kf, GROUP, "profile-folder", NULL);
+  if (str)
+    g_strlcpy (s->profile_dir, str, sizeof s->profile_dir);
+  g_free (str);
 
-  /* clamp everything: the parasite may come from an edited XCF */
-  s->wb_temperature    = CLAMP (s->wb_temperature, 2000.0, 25000.0);
-  s->wb_tint           = CLAMP (s->wb_tint, -100.0, 100.0);
-  s->exposure          = CLAMP (s->exposure, -2.0, 3.0);
-  s->exposure_preserve = CLAMP (s->exposure_preserve, 0.0, 1.0);
-  s->rebuild_level     = CLAMP (s->rebuild_level, 3, 9);
-  s->brightness        = CLAMP (s->brightness, 0.25, 4.0);
-  s->denoise           = CLAMP (s->denoise, 0.0, 2000.0);
-  s->ca_red            = CLAMP (s->ca_red, 0.99, 1.01);
-  s->ca_blue           = CLAMP (s->ca_blue, 0.99, 1.01);
-  s->median_passes     = CLAMP (s->median_passes, 0, 10);
-  for (n = 0; n < 4; n++)
-    s->spot[n] = CLAMP (s->spot[n], 0.0, 1.0);
+  raw_settings_sanitize (s);
 
   if (source_path)
     *source_path = g_key_file_get_string (kf, GROUP, "source", NULL);
@@ -503,15 +730,17 @@ canonical (const gchar *path)
   return c;
 }
 
-void
+gboolean
 raw_batch_session_begin (const RawSettings  *s,
-                         gchar             **files)
+                         gchar             **files,
+                         GError            **error)
 {
   gchar    *text = raw_settings_serialize (s, "");
   GKeyFile *kf   = g_key_file_new ();
   gchar    *fn   = batch_session_file ();
   gchar   **canon;
   gchar    *data;
+  gboolean  ok;
   gint      i, n = g_strv_length (files);
 
   g_key_file_load_from_data (kf, text, -1, 0, NULL);
@@ -522,13 +751,16 @@ raw_batch_session_begin (const RawSettings  *s,
   g_key_file_set_int64 (kf, BATCH_GROUP, "created", g_get_real_time () / G_USEC_PER_SEC);
 
   data = g_key_file_to_data (kf, NULL, NULL);
-  g_file_set_contents (fn, data, -1, NULL);
+  /* without the session file every file would open with default settings */
+  ok = g_file_set_contents (fn, data, -1, error);
 
   g_free (data);
   g_strfreev (canon);
   g_free (fn);
   g_free (text);
   g_key_file_free (kf);
+
+  return ok;
 }
 
 void
