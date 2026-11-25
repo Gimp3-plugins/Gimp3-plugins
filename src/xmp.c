@@ -241,11 +241,16 @@ crs_double (GHashTable  *crs,
 {
   const gchar *v = g_hash_table_lookup (crs, key);
   gchar       *end;
+  gdouble      d;
 
   if (! v)
     return FALSE;
-  *out = g_ascii_strtod (v, &end);
-  return end != v && isfinite (*out);
+  d = g_ascii_strtod (v, &end);
+  /* @out is only written on success: callers may ignore the result */
+  if (end == v || ! isfinite (d))
+    return FALSE;
+  *out = d;
+  return TRUE;
 }
 
 /* Apply the sidecar's settings to @s.  Returns a translated description
@@ -345,7 +350,8 @@ rawheic_xmp_apply_data (const gchar *xml,
             crs_double (xp.crs, "CropRight", &r) && crs_double (xp.crs, "CropBottom", &b) &&
             r - l >= 0.02 && b - t >= 0.02)
           {
-            crs_double (xp.crs, "CropAngle", &angle);
+            if (! crs_double (xp.crs, "CropAngle", &angle))
+              angle = 0.0;
             s->crop[0]    = CLAMP (l, 0.0, 1.0);
             s->crop[1]    = CLAMP (t, 0.0, 1.0);
             s->crop[2]    = CLAMP (r - l, 0.02, 1.0 - s->crop[0]);
@@ -417,6 +423,9 @@ done:
     g_free (xp.dt_params[i]);
   g_free (xp.element);
   g_hash_table_unref (xp.crs);
+
+  /* the sidecar is untrusted: whatever it set, keep every value valid */
+  raw_settings_sanitize (s);
 
   return source;
 }
