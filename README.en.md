@@ -4,7 +4,7 @@
 
 A plug-in for **GIMP 3.2** (Windows 11 x64) that opens **camera RAW files** and **HDR HEIC/HEIF/AVIF photos** directly in GIMP. It needs no darktable, RawTherapee, dcraw or any other program: RAW development is done by **LibRaw 0.22.2**, compiled into the plug-in.
 
-Version: **1.0.0** · Licence: **GPL-3.0-or-later** · Library licences: [LICENSES.en.md](LICENSES.en.md) · Changes: [CHANGELOG.md](CHANGELOG.md)
+Version: **1.1.0** · Licence: **GPL-3.0-or-later** · Library licences: [LICENSES.en.md](LICENSES.en.md) · Changes: [CHANGELOG.md](CHANGELOG.md)
 
 The user interface is in **English and Polish**, following GIMP's language setting.
 
@@ -12,7 +12,7 @@ The user interface is in **English and Polish**, following GIMP's language setti
 
 ## Installation
 
-**Download** `gimp-raw-heic-<version>-win64.zip` from [Releases](https://github.com/zetmar-collab/gimp-raw-heic/releases).
+**Download** `gimp-raw-heic-<version>-win64.zip` from [Releases](https://github.com/Gimp3-plugins/Gimp3-plugins/releases).
 
 1. Close GIMP.
 2. Unzip and copy the **`gimp-raw-heic`** folder to:
@@ -131,6 +131,8 @@ The plug-in makes no network connections and sends no data.
 ## For developers
 
 ### Building (Windows, MSYS2 CLANG64, the toolchain GIMP itself uses)
+
+Run the commands from the `gimp-raw-heic/` subdirectory of this repository.
 ```powershell
 .\build.ps1 -Setup      # once: MSYS2 packages (clang, meson, gimp, libraw, libheif, lensfun, ...)
 .\build.ps1 -Install    # build + install to %APPDATA%\GIMP\3.x\plug-ins

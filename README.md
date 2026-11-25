@@ -4,7 +4,7 @@
 
 Wtyczka do **GIMP 3.2** (Windows 11 x64), która otwiera **pliki RAW z aparatów** oraz **zdjęcia HEIC/HEIF/AVIF z HDR** bezpośrednio w GIMP. Nie potrzebuje darktable, RawTherapee, dcraw ani żadnego innego programu: wywoływanie RAW robi biblioteka **LibRaw 0.22.2**, wkompilowana w plik wtyczki.
 
-Wersja: **1.0.0** · Licencja: **GPL-3.0-or-later** · Licencje bibliotek: [LICENSES.md](LICENSES.md) · Zmiany: [CHANGELOG.md](CHANGELOG.md)
+Wersja: **1.1.0** · Licencja: **GPL-3.0-or-later** · Licencje bibliotek: [LICENSES.md](LICENSES.md) · Zmiany: [CHANGELOG.md](CHANGELOG.md)
 
 Interfejs jest **po polsku i po angielsku**, zgodnie z językiem ustawionym w GIMP.
 
@@ -12,7 +12,7 @@ Interfejs jest **po polsku i po angielsku**, zgodnie z językiem ustawionym w GI
 
 ## Instalacja
 
-**Pobierz** plik `gimp-raw-heic-<wersja>-win64.zip` z zakładki [Releases](https://github.com/zetmar-collab/gimp-raw-heic/releases).
+**Pobierz** plik `gimp-raw-heic-<wersja>-win64.zip` z zakładki [Releases](https://github.com/Gimp3-plugins/Gimp3-plugins/releases).
 
 1. Zamknij GIMP.
 2. Rozpakuj ZIP. Folder **`gimp-raw-heic`** skopiuj do:
@@ -131,6 +131,8 @@ Wtyczka nie łączy się z siecią i nie wysyła żadnych danych.
 ## Dla programistów
 
 ### Budowanie (Windows, MSYS2 CLANG64, czyli tym samym toolchainem co GIMP)
+
+Polecenia uruchamiaj z podkatalogu `gimp-raw-heic/` tego repozytorium.
 ```powershell
 .\build.ps1 -Setup      # jednorazowo: pakiety MSYS2 (clang, meson, gimp, libraw, libheif, lensfun, …)
 .\build.ps1 -Install    # kompilacja + instalacja do %APPDATA%\GIMP\3.x\plug-ins
