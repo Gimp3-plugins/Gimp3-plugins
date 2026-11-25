@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include <gio/gio.h>
+#include <glib/gstdio.h>
 
 #include "rawheic.h"
 
@@ -39,6 +40,7 @@ typedef struct
   gboolean    in_li;
   gchar      *li_op, *li_params;
   gint        li_version, li_enabled, li_num;
+  gchar      *own;            /* rawheic:settings, base64 key file */
 } XmpParse;
 
 static const gchar *dt_ops[3] = { "temperature", "exposure", "lens" };
@@ -87,6 +89,8 @@ start_element (GMarkupParseContext *ctx,
         g_hash_table_replace (xp->crs, g_strdup (names[i] + 4), g_strdup (values[i]));
       else if (! strcmp (names[i], "darktable:history_end"))
         xp->history_end = atoi (values[i]);
+      else if (! strcmp (names[i], "rawheic:settings") && ! xp->own)
+        xp->own = g_strdup (values[i]);
     }
 
   if (! strcmp (name, "rdf:li"))
@@ -270,6 +274,35 @@ rawheic_xmp_apply_data (const gchar *xml,
     }
   g_markup_parse_context_free (ctx);
 
+  /* --- written by this plug-in: everything, exactly --- */
+  if (xp.own)
+    {
+      gsize    n = 0;
+      guchar  *raw = g_base64_decode (xp.own, &n);
+      gchar   *text = raw && n < 64 * 1024 ? g_strndup ((const gchar *) raw, n) : NULL;
+      RawSettings own;
+
+      if (text && raw_settings_deserialize (&own, text, NULL))
+        {
+          /* the sidecar comes with the photo: never follow paths in it
+           * to other machines
+           */
+          if (own.camera_profile[0] && rawheic_path_is_remote (own.camera_profile))
+            own.camera_profile[0] = '\0';
+          if (own.profile_dir[0] && rawheic_path_is_remote (own.profile_dir))
+            own.profile_dir[0] = '\0';
+          *s     = own;
+          source = _("gimp-raw-heic");
+        }
+      g_free (text);
+      g_free (raw);
+      g_clear_pointer (&xp.own, g_free);
+
+      if (source)
+        goto done;
+      /* damaged: fall back to the Lightroom / darktable values */
+    }
+
   /* --- Lightroom / Camera Raw --- */
   if (g_hash_table_size (xp.crs))
     {
@@ -299,6 +332,28 @@ rawheic_xmp_apply_data (const gchar *xml,
 
       if (crs_double (xp.crs, "LuminanceSmoothing", &v))
         { s->denoise = CLAMP (v, 0.0, 100.0) * 10.0; any = TRUE; }
+
+      /* crop: exact without rotation, close with a small angle (Lightroom
+       * measures the rectangle before rotating, this plug-in after)
+       */
+      {
+        const gchar *has = g_hash_table_lookup (xp.crs, "HasCrop");
+        gdouble      l, t, r, b, angle = 0.0;
+
+        if (has && ! g_ascii_strcasecmp (has, "True") &&
+            crs_double (xp.crs, "CropLeft", &l) && crs_double (xp.crs, "CropTop", &t) &&
+            crs_double (xp.crs, "CropRight", &r) && crs_double (xp.crs, "CropBottom", &b) &&
+            r - l >= 0.02 && b - t >= 0.02)
+          {
+            crs_double (xp.crs, "CropAngle", &angle);
+            s->crop[0]    = CLAMP (l, 0.0, 1.0);
+            s->crop[1]    = CLAMP (t, 0.0, 1.0);
+            s->crop[2]    = CLAMP (r - l, 0.02, 1.0 - s->crop[0]);
+            s->crop[3]    = CLAMP (b - t, 0.02, 1.0 - s->crop[1]);
+            s->straighten = CLAMP (-angle, -45.0, 45.0);
+            any = TRUE;
+          }
+      }
 
       if (any)
         source = _("Lightroom / Camera Raw");
@@ -357,6 +412,7 @@ rawheic_xmp_apply_data (const gchar *xml,
         source = source ? _("Lightroom and darktable") : _("darktable");
     }
 
+done:
   for (i = 0; i < 3; i++)
     g_free (xp.dt_params[i]);
   g_free (xp.element);
@@ -411,11 +467,132 @@ rawheic_xmp_apply (const gchar *raw_path,
   gsize        len = 0;
   const gchar *source = NULL;
 
-  if (xmp && g_file_get_contents (xmp, &data, &len, NULL) && len <= MAX_XMP_SIZE)
+  GStatBuf     st;
+
+  /* check the size first: never read a huge "sidecar" into memory */
+  if (xmp && g_stat (xmp, &st) == 0 && st.st_size >= 0 && st.st_size <= MAX_XMP_SIZE &&
+      g_file_get_contents (xmp, &data, &len, NULL) && len <= MAX_XMP_SIZE)
     source = rawheic_xmp_apply_data (data, len, s);
 
   g_free (data);
   g_free (xmp);
 
   return source;
+}
+
+/* --- writing ------------------------------------------------------------- */
+
+#define XMP_MARKER "gimp-raw-heic"
+
+/* "photo.xmp" next to @raw_path (Lightroom's convention). */
+gchar *
+rawheic_xmp_target (const gchar *raw_path)
+{
+  gchar *base = g_strdup (raw_path);
+  gchar *dot  = strrchr (base, '.');
+  gchar *out;
+
+  if (dot && ! strpbrk (dot, "\\/"))
+    *dot = '\0';
+  out = g_strconcat (base, ".xmp", NULL);
+  g_free (base);
+
+  return out;
+}
+
+/* Write the settings into a sidecar Lightroom / Camera Raw and this
+ * plug-in can read.  A sidecar written by another program is never
+ * replaced: it may hold someone's whole edit.
+ */
+gboolean
+rawheic_xmp_write (const gchar        *raw_path,
+                   const RawSettings  *s,
+                   GError            **error)
+{
+  gchar       *target = rawheic_xmp_target (raw_path);
+  gchar       *old = NULL, *text, *b64, *xml;
+  const gchar *wb;
+  gchar        temp[G_ASCII_DTOSTR_BUF_SIZE], tint[G_ASCII_DTOSTR_BUF_SIZE];
+  gchar        ev[G_ASCII_DTOSTR_BUF_SIZE], nr[G_ASCII_DTOSTR_BUF_SIZE];
+  gchar        cl[G_ASCII_DTOSTR_BUF_SIZE], ct[G_ASCII_DTOSTR_BUF_SIZE];
+  gchar        cr[G_ASCII_DTOSTR_BUF_SIZE], cb[G_ASCII_DTOSTR_BUF_SIZE];
+  gchar        ca[G_ASCII_DTOSTR_BUF_SIZE];
+  gboolean     ok;
+
+  if (g_file_get_contents (target, &old, NULL, NULL) && ! strstr (old, XMP_MARKER))
+    {
+      gchar *name = g_filename_display_name (target);
+
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_EXIST,
+                   _("'%s' was written by another program and is kept. Remove it "
+                     "first to save this plug-in's settings there."), name);
+      g_free (name);
+      g_free (old);
+      g_free (target);
+      return FALSE;
+    }
+  g_free (old);
+
+  /* the full settings, without the RAW path */
+  text = raw_settings_serialize (s, "");
+  b64  = g_base64_encode ((const guchar *) text, strlen (text));
+  g_free (text);
+
+  switch (s->wb_mode)
+    {
+    case WB_CAMERA: wb = "As Shot"; break;
+    case WB_AUTO:   wb = "Auto";    break;
+    default:        wb = "Custom";  break;
+    }
+
+  g_ascii_formatd (temp, sizeof temp, "%.0f", s->wb_temperature);
+  g_ascii_formatd (tint, sizeof tint, "%.0f", s->wb_tint);
+  g_ascii_formatd (ev,   sizeof ev,   "%.2f",
+                   s->exposure + log2 (MAX (s->brightness, 0.01)));
+  g_ascii_formatd (nr,   sizeof nr,   "%.0f", CLAMP (s->denoise / 10.0, 0.0, 100.0));
+  g_ascii_formatd (cl,   sizeof cl,   "%.6f", s->crop[0]);
+  g_ascii_formatd (ct,   sizeof ct,   "%.6f", s->crop[1]);
+  g_ascii_formatd (cr,   sizeof cr,   "%.6f", s->crop[0] + s->crop[2]);
+  g_ascii_formatd (cb,   sizeof cb,   "%.6f", s->crop[1] + s->crop[3]);
+  g_ascii_formatd (ca,   sizeof ca,   "%.3f", -s->straighten);
+
+  xml = g_strdup_printf (
+    "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"" XMP_MARKER " " PLUGIN_VERSION "\">\n"
+    " <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n"
+    "  <rdf:Description rdf:about=\"\"\n"
+    "    xmlns:crs=\"http://ns.adobe.com/camera-raw-settings/1.0/\"\n"
+    "    xmlns:rawheic=\"https://github.com/gimp-raw-heic/ns/1.0/\"\n"
+    "    crs:Version=\"15.0\"\n"
+    "    crs:ProcessVersion=\"11.0\"\n"
+    "    crs:WhiteBalance=\"%s\"\n"
+    "%s%s%s%s%s"
+    "    crs:Exposure2012=\"%s\"\n"
+    "    crs:LuminanceSmoothing=\"%s\"\n"
+    "    crs:LensProfileEnable=\"%d\"\n"
+    "    crs:AutoLateralCA=\"%d\"\n"
+    "    crs:HasCrop=\"%s\"\n"
+    "    crs:CropLeft=\"%s\" crs:CropTop=\"%s\" crs:CropRight=\"%s\" crs:CropBottom=\"%s\"\n"
+    "    crs:CropAngle=\"%s\"\n"
+    "    rawheic:settings=\"%s\"/>\n"
+    " </rdf:RDF>\n"
+    "</x:xmpmeta>\n",
+    wb,
+    s->wb_mode == WB_MANUAL ? "    crs:Temperature=\"" : "",
+    s->wb_mode == WB_MANUAL ? temp : "",
+    s->wb_mode == WB_MANUAL ? "\" crs:Tint=\"" : "",
+    s->wb_mode == WB_MANUAL ? tint : "",
+    s->wb_mode == WB_MANUAL ? "\"\n" : "",
+    ev, nr,
+    (s->lens_distortion || s->lens_vignetting) ? 1 : 0,
+    s->lens_tca ? 1 : 0,
+    rawheic_geometry_active (s) ? "True" : "False",
+    cl, ct, cr, cb, ca, b64);
+
+  ok = g_file_set_contents (target, xml, -1, error);
+
+  g_free (xml);
+  g_free (b64);
+  g_free (target);
+
+  return ok;
 }

@@ -5,6 +5,7 @@
 
 #include "config.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "rawheic.h"
@@ -46,6 +47,13 @@ write_pixels (GimpDrawable      *drawable,
   const Babl       *src_format;
   GeglBuffer       *buffer;
   gint              y, rows;
+
+  if (! src_profile)
+    {
+      g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                           _("Could not create the colour profile."));
+      return FALSE;
+    }
 
   src_format = gimp_color_profile_get_format (src_profile,
                                               babl_format (img->pixels16 ? "RGB u16"
@@ -125,6 +133,24 @@ rawheic_image_from_raw (RawImage           *img,
     }
 
   return image;
+}
+
+/* Automatic and neutral-point white balance are measured per photo: keep
+ * the measured multipliers too, so the settings can be applied to other
+ * photos (Filters > RAW > Apply these settings) as fixed multipliers.
+ */
+void
+rawheic_settings_remember_wb (RawSettings    *s,
+                              const RawImage *img)
+{
+  if (img && (s->wb_mode == WB_AUTO || s->wb_mode == WB_SPOT))
+    {
+      gint c;
+
+      for (c = 0; c < 4; c++)
+        s->wb_mul[c] = isfinite (img->used_mul[c]) ?
+                       CLAMP (img->used_mul[c], 0.05, 20.0) : 1.0;
+    }
 }
 
 void

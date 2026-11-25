@@ -368,23 +368,33 @@ load_hdr (HeifFile  *hf,
 
   maxv = (gfloat) ((1 << bits) - 1);
 
+  /* the transfer function as a table: at most 65536 code values instead
+   * of two pow()/exp() calls per sample
+   */
+  {
+    gint    nlut = (1 << bits), i;
+    gfloat *lut  = g_new (gfloat, nlut);
+
+    for (i = 0; i < nlut; i++)
+      lut[i] = (tc == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ) ?
+               pq_to_linear (i / maxv) : hlg_to_linear (i / maxv);
+
 #pragma omp parallel for private (x)
-  for (y = 0; y < h; y++)
-    {
-      const guint16 *src = (const guint16 *) (plane + (gsize) y * stride);
-      gfloat        *dst = buf + (gsize) y * w * channels;
+    for (y = 0; y < h; y++)
+      {
+        const guint16 *src = (const guint16 *) (plane + (gsize) y * stride);
+        gfloat        *dst = buf + (gsize) y * w * channels;
 
-      for (x = 0; x < w * channels; x++)
-        {
-          gfloat e = GUINT16_FROM_LE (src[x]) / maxv;
+        for (x = 0; x < w * channels; x++)
+          {
+            guint v = MIN ((guint) GUINT16_FROM_LE (src[x]), (guint) nlut - 1);
 
-          if (alpha && x % 4 == 3)
-            dst[x] = e;
-          else
-            dst[x] = (tc == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ) ?
-                     pq_to_linear (e) : hlg_to_linear (e);
-        }
-    }
+            dst[x] = (alpha && x % 4 == 3) ? v / maxv : lut[v];
+          }
+      }
+
+    g_free (lut);
+  }
 
   heif_image_release (img);
 
@@ -402,8 +412,22 @@ load_hdr (HeifFile  *hf,
   if (mode == HDR_SDR)
     tone_map_sdr (buf, (gsize) w * h, channels);
 
-  image   = gimp_image_new_with_precision (w, h, GIMP_RGB, GIMP_PRECISION_FLOAT_LINEAR);
   profile = rawheic_profile_rec2100_linear ();
+  fmt     = profile ? gimp_color_profile_get_format (profile,
+                                                     babl_format (alpha ? "RGBA float" : "RGB float"),
+                                                     GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                                                     error) : NULL;
+  if (! fmt)
+    {
+      g_clear_object (&profile);
+      g_free (buf);
+      if (error && ! *error)
+        g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                             _("Could not create the Rec. 2100 colour profile."));
+      return NULL;
+    }
+
+  image   = gimp_image_new_with_precision (w, h, GIMP_RGB, GIMP_PRECISION_FLOAT_LINEAR);
   gimp_image_set_color_profile (image, profile);
 
   name  = g_file_get_basename (file);
@@ -413,10 +437,6 @@ load_hdr (HeifFile  *hf,
   g_free (name);
   gimp_image_insert_layer (image, layer, NULL, 0);
 
-  fmt  = gimp_color_profile_get_format (profile,
-                                        babl_format (alpha ? "RGBA float" : "RGB float"),
-                                        GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
-                                        NULL);
   gbuf = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
   gegl_buffer_set (gbuf, GEGL_RECTANGLE (0, 0, w, h), 0, fmt, buf, GEGL_AUTO_ROWSTRIDE);
   g_object_unref (gbuf);
@@ -696,7 +716,9 @@ load_apple_gainmap (HeifFile                 *hf,
 
   if (! plane || ! gplane || w < 1 || h < 1 || gw < 1 || gh < 1 ||
       w > MAX_DIMENSION || h > MAX_DIMENSION || (gint64) w * h > MAX_PIXELS ||
-      gw > w * 4 || gh > h * 4 || stride < (size_t) w * 3 || gstride < (size_t) gw)
+      /* gain maps are at most full resolution (in either orientation) */
+      gw > MAX (w, h) || gh > MAX (w, h) ||
+      stride < (size_t) w * 3 || gstride < (size_t) gw)
     {
       heif_image_release (img);
       heif_image_release (gimg);
@@ -708,7 +730,15 @@ load_apple_gainmap (HeifFile                 *hf,
   /* gain map in [0,1] linear; follow the primary's rotation if the aux
    * image was stored without it
    */
-  gmap = g_new (gfloat, (gsize) gw * gh);
+  gmap = g_try_new (gfloat, (gsize) gw * gh);
+  if (! gmap)
+    {
+      heif_image_release (img);
+      heif_image_release (gimg);
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_NOMEM,
+                   _("Not enough memory to load the image."));
+      return NULL;
+    }
   for (y = 0; y < gh; y++)
     {
       gint x;
@@ -722,8 +752,17 @@ load_apple_gainmap (HeifFile                 *hf,
     {
       gint    rot  = heif_item_get_property_transform_rotation_ccw (
                        hf->ctx, heif_image_handle_get_item_id (hf->handle), 0);
-      gfloat *r    = g_new (gfloat, (gsize) gw * gh);
+      gfloat *r    = g_try_new (gfloat, (gsize) gw * gh);
       gint    x;
+
+      if (! r)
+        {
+          g_free (gmap);
+          heif_image_release (img);
+          g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_NOMEM,
+                       _("Not enough memory to load the image."));
+          return NULL;
+        }
 
       for (y = 0; y < gh; y++)
         for (x = 0; x < gw; x++)
@@ -878,7 +917,8 @@ heif_load_run (GimpProcedure         *procedure,
       dialog = gimp_procedure_dialog_new (procedure, config, title);
       gchar     *info  = gain ?
         g_strdup_printf (_("This is an Apple HDR photo (gain map, up to %.1f× "
-                           "brighter than SDR white)."), headroom) :
+                           "brighter than SDR white).\nThe SDR choice opens the "
+                           "photo's own SDR image (8-bit Display P3)."), headroom) :
         g_strdup (tc == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ ?
                   _("This image is HDR (PQ, BT.2100).") :
                   _("This image is HDR (HLG, BT.2100)."));

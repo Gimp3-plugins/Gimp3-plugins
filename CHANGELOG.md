@@ -1,5 +1,55 @@
 # Changelog / Zmiany
 
+## 1.1.0 – 2026-11-25
+
+### English
+
+**Fixes**
+- Settings read from files (XCF, presets, batch sessions) could carry `nan`, which passed the range checks and reached LibRaw; non-finite values now fall back to the defaults.
+- The XMP sidecar is applied also when the import dialog is not shown ("Always show this dialog" off, or Shift).
+- Portrait previews were cut at the top and bottom; previews now fit the preview area in both directions.
+- HEIF: a hostile gain map size can no longer abort the plug-in; the XMP size limit is checked before reading; stricter thumbnail size check; repeated DCP tone curves no longer leak.
+- Batch open / export stop with an error when the settings file cannot be written (instead of opening everything with the defaults), and never overwrite a file when "Overwrite" is off.
+- Preset names that are Windows device names (`CON`, `NUL`, …) and names that map to an existing preset's file are handled.
+- *Develop again* keeps the image's colour space and precision and records them correctly.
+- CI: narrower token permissions; the Linux job runs `build.sh` through `sh`.
+
+**New**
+- **Histogram** and **clipping warning** in the preview; the preview **grows with the dialog**.
+- **Crop and straighten** (Geometry tab, crop tool on the preview), also taken over from Lightroom XMP.
+- **Apply these settings to RAW files** (Filters → RAW).
+- **Automatic camera profile**: a DCP for the camera from a folder or Adobe's CameraProfiles.
+- **HDR export** to HEIF/HEIC (HEVC) and AVIF (AV1) with PQ or HLG, 10/12 bits.
+- **Base tone curve** (medium / strong contrast).
+- **Snapshot** for the before/after comparison.
+- **Save to XMP sidecar** (Lightroom-readable, full settings for this plug-in).
+- Batch open returns the opened images to scripts.
+- Faster: PQ/HLG tables, cached camera profile file, the 100% loupe develops once.
+
+### Polski
+
+**Poprawki**
+- Ustawienia odczytane z plików (XCF, presety, sesje wsadowe) mogły zawierać `nan`, które przechodziło przez kontrolę zakresów aż do LibRaw; wartości nieskończone i NaN zastępuje teraz wartość domyślna.
+- Plik XMP jest stosowany także wtedy, gdy okno importu się nie pokazuje („Zawsze pokazuj to okno” wyłączone albo Shift).
+- Podgląd zdjęć pionowych był ucinany u góry i u dołu; teraz mieści się w obszarze podglądu w obu kierunkach.
+- HEIF: wroga wielkość mapy wzmocnienia nie przerywa już wtyczki; limit rozmiaru XMP jest sprawdzany przed odczytem; ostrzejsza kontrola rozmiaru miniatur; powtórzona krzywa tonalna DCP nie powoduje wycieku pamięci.
+- Otwieranie i eksport wsadowy kończą się błędem, gdy nie da się zapisać pliku ustawień (zamiast otwierać wszystko z domyślnymi), i nigdy nie nadpisują pliku przy wyłączonym „Nadpisuj”.
+- Obsłużone nazwy presetów będące nazwami urządzeń Windows (`CON`, `NUL`…) i nazwy, które trafiłyby do pliku innego presetu.
+- *Wywołaj ponownie* zachowuje przestrzeń barw i precyzję obrazu i poprawnie je zapisuje.
+- CI: węższe uprawnienia tokenu; zadanie Linux uruchamia `build.sh` przez `sh`.
+
+**Nowości**
+- **Histogram** i **ostrzeżenie o przepaleniach** w podglądzie; podgląd **rośnie razem z oknem**.
+- **Kadrowanie i prostowanie** (zakładka Geometria, narzędzie kadru na podglądzie), także z XMP Lightrooma.
+- **Zastosuj te ustawienia do plików RAW** (Filtry → RAW).
+- **Automatyczny profil aparatu**: DCP dla aparatu z folderu albo z CameraProfiles Adobe.
+- **Eksport HDR** do HEIF/HEIC (HEVC) i AVIF (AV1) z PQ lub HLG, 10/12 bitów.
+- **Bazowa krzywa tonalna** (średni / mocny kontrast).
+- **Migawka** do porównania przed/po.
+- **Zapis do pliku XMP** (czytelny dla Lightrooma, pełne ustawienia dla tej wtyczki).
+- Otwieranie wsadowe zwraca skryptom otwarte obrazy.
+- Szybciej: tablice PQ/HLG, pamięć podręczna pliku profilu, lupa 100% wywołuje raz.
+
 ## 1.0.0 – 2026-11-20
 
 ### English

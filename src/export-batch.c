@@ -105,7 +105,9 @@ export_batch_procedure_new (GimpPlugIn  *plug_in,
   return procedure;
 }
 
-/* <folder>/<name>.<ext>, or <name>-2.<ext>, -3 ... when it exists */
+/* <folder>/<name>.<ext>, or <name>-2.<ext>, -3 ... when it exists;
+ * NULL when no free name is left
+ */
 static GFile *
 output_file (GFile       *folder,
              const gchar *src_path,
@@ -128,9 +130,13 @@ output_file (GFile       *folder,
       out = g_file_get_child (folder, name);
       g_free (name);
 
-      if (overwrite || ! g_file_query_exists (out, NULL) || n > 9999)
+      if (overwrite || ! g_file_query_exists (out, NULL))
         break;
-      g_object_unref (out);
+      g_clear_object (&out);
+
+      /* never overwrite when the user said not to */
+      if (n >= 9999)
+        break;
     }
 
   g_free (base);
@@ -284,7 +290,13 @@ export_run (GimpProcedure       *procedure,
     }
 
   n = g_strv_length (files);
-  raw_batch_session_begin (&s, files);
+  if (! raw_batch_session_begin (&s, files, &error))
+    {
+      g_strfreev (files);
+      g_clear_object (&folder);
+      g_string_free (errors, TRUE);
+      return gimp_procedure_new_return_values (procedure, GIMP_PDB_EXECUTION_ERROR, error);
+    }
 
   for (i = 0; i < n; i++)
     {
@@ -307,13 +319,16 @@ export_run (GimpProcedure       *procedure,
         {
           GFile *out = output_file (folder, files[i], fmt->ext, overwrite);
 
-          if (export_image (image, fmt, &s, quality, out, &err))
+          if (! out)
+            g_string_append_printf (errors, "%s: %s\n", base,
+                                    _("no free output file name"));
+          else if (export_image (image, fmt, &s, quality, out, &err))
             done++;
           else
             g_string_append_printf (errors, "%s: %s\n", base, err ? err : "?");
 
           gimp_image_delete (image);
-          g_object_unref (out);
+          g_clear_object (&out);
         }
       else
         {

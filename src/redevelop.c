@@ -194,6 +194,9 @@ redevelop_run (GimpProcedure        *procedure,
   if (stored.camera_profile[0] && rawheic_path_is_remote (stored.camera_profile) &&
       (run_mode != GIMP_RUN_INTERACTIVE || ! rawheic_confirm_remote (stored.camera_profile)))
     stored.camera_profile[0] = '\0';
+  if (stored.profile_dir[0] && rawheic_path_is_remote (stored.profile_dir) &&
+      (run_mode != GIMP_RUN_INTERACTIVE || ! rawheic_confirm_remote (stored.profile_dir)))
+    stored.profile_dir[0] = '\0';
 
   if (! g_file_test (path, G_FILE_TEST_IS_REGULAR))
     {
@@ -226,6 +229,13 @@ redevelop_run (GimpProcedure        *procedure,
 
   raw_settings_from_config (&s, config);
   mode = gimp_procedure_config_get_choice_id (config, "redevelop-mode");
+
+  /* the pixels go into the existing image, whose profile and precision
+   * stay: record what the image really has
+   */
+  s.color_space = stored.color_space;
+  s.linear      = stored.linear;
+  s.depth       = stored.depth;
 
   gimp_progress_init (_("Developing RAW again"));
   img = raw_develop (path, &s, 0, redevelop_progress, &prog, &error);
@@ -302,6 +312,7 @@ redevelop_run (GimpProcedure        *procedure,
     }
 
   rawheic_mark_layer (layer);
+  rawheic_settings_remember_wb (&s, img);
   rawheic_attach_source (image, &s, path);
 
   gimp_image_undo_group_end (image);

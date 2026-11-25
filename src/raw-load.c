@@ -153,6 +153,7 @@ raw_load_run (GimpProcedure         *procedure,
   GError         *error = NULL;
   gchar          *path;
   gchar          *name;
+  gboolean        dialog_shown = FALSE;
 
   path = rawheic_file_path (file);
   if (! path)
@@ -174,6 +175,8 @@ raw_load_run (GimpProcedure         *procedure,
       if (ask != rawheic_shift_pressed ())
         {
           gchar       *title;
+
+          dialog_shown = TRUE;
           const gchar *xmp_src = NULL;
           gboolean     use_xmp = TRUE;
 
@@ -228,8 +231,10 @@ raw_load_run (GimpProcedure         *procedure,
   if (run_mode == GIMP_RUN_NONINTERACTIVE)
     raw_batch_session_lookup (path, &settings);
 
-  /* a photo's own XMP sidecar wins (interactive: already in the dialog) */
-  if (run_mode != GIMP_RUN_INTERACTIVE)
+  /* a photo's own XMP sidecar wins (when the dialog was shown it already
+   * started from the sidecar and the user had the last word)
+   */
+  if (! dialog_shown)
     {
       gboolean use_xmp = TRUE;
 
@@ -255,6 +260,7 @@ raw_load_run (GimpProcedure         *procedure,
 
   gimp_progress_set_text_printf (_("Creating image from '%s'"), name);
   image = rawheic_image_from_raw (img, &settings, file, &error);
+  rawheic_settings_remember_wb (&settings, img);
   raw_image_free (img);
 
   if (! image)

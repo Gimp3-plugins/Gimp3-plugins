@@ -18,6 +18,8 @@
 #define EXPORT_BATCH_PROC    "plug-in-raw-heic-batch-export"
 #define ADJUST_PROC          "plug-in-raw-heic-quick-adjust"
 #define ABOUT_PROC           "plug-in-raw-heic-about"
+#define SYNC_PROC            "plug-in-raw-heic-sync-settings"
+#define HDR_EXPORT_PROC      "file-raw-heic-hdr-export"
 
 #define SOURCE_PARASITE      "gimp-raw-heic-source"
 #define LAYER_PARASITE       "gimp-raw-heic-layer"
@@ -52,6 +54,13 @@ typedef enum
   CS_REC2020,
   CS_N
 } ColorSpace;
+
+typedef enum
+{
+  TONE_NONE,
+  TONE_MEDIUM,
+  TONE_STRONG
+} ToneCurve;
 
 typedef enum
 {
@@ -92,6 +101,11 @@ typedef struct
   gboolean      lens_tca;
   gchar         camera_profile[1024]; /* .icc/.icm/.dcp path, "" = built-in */
   gboolean      camera_profile_look;  /* DCP: LookTable + tone curve */
+  gint          tone_curve;       /* TONE_* base curve */
+  gboolean      auto_profile;     /* no profile given: find one for the camera */
+  gchar         profile_dir[1024];/* extra folder searched by auto_profile, "" = defaults */
+  gdouble       straighten;       /* degrees, -45 .. 45, positive = counter-clockwise */
+  gdouble       crop[4];          /* x, y, w, h in 0..1 of the straightened image */
 } RawSettings;
 
 #define RAWHEIC_LENS_VIGNETTING (1 << 0)
@@ -121,16 +135,20 @@ typedef struct
   gfloat   *pixels;     /* width * height * 3, or NULL      */
   guint16  *pixels16;   /* width * height * 3, or NULL      */
   gpointer  mem;        /* libraw_processed_image_t owning pixels16 */
+  gboolean  own16;      /* pixels16 is our own g_malloc'ed buffer */
   gchar    *camera;     /* "Make Model" */
   gchar    *lens;       /* lens name from the file, or NULL */
   gboolean  lens_known; /* found in the lensfun database */
   gint      lens_done;  /* RAWHEIC_LENS_* corrections applied */
+  gdouble   used_mul[4];/* white balance multipliers used, green = 1 */
+  gchar    *profile;    /* file name of the camera profile used, or NULL */
 } RawImage;
 
 typedef gboolean (* RawProgressFunc) (gdouble fraction, gpointer data);
 
 /* settings.c */
 void              raw_settings_defaults        (RawSettings          *s);
+void              raw_settings_sanitize        (RawSettings          *s);
 void              raw_settings_from_config     (RawSettings          *s,
                                                 GimpProcedureConfig  *config);
 void              raw_settings_to_config       (const RawSettings    *s,
@@ -142,8 +160,9 @@ gboolean          raw_settings_deserialize     (RawSettings          *s,
                                                 const gchar          *text,
                                                 gchar               **source_path);
 const gchar     * raw_settings_wb_nick         (WbMode                mode);
-void              raw_batch_session_begin      (const RawSettings    *s,
-                                                gchar               **files);
+gboolean          raw_batch_session_begin      (const RawSettings    *s,
+                                                gchar               **files,
+                                                GError              **error);
 void              raw_batch_session_end        (void);
 gboolean          raw_batch_session_lookup     (const gchar          *path,
                                                 RawSettings          *s);
@@ -169,6 +188,13 @@ RawImage        * raw_session_develop          (RawSession           *ses,
                                                 RawProgressFunc       progress,
                                                 gpointer              progress_data,
                                                 GError              **error);
+RawImage        * raw_session_develop_box      (RawSession           *ses,
+                                                const RawSettings    *s,
+                                                gint                  max_w,
+                                                gint                  max_h,
+                                                RawProgressFunc       progress,
+                                                gpointer              progress_data,
+                                                GError              **error);
 RawImage        * raw_session_develop_region   (RawSession           *ses,
                                                 const RawSettings    *s,
                                                 const gdouble         region[4],
@@ -186,6 +212,34 @@ RawImage        * raw_develop                  (const gchar          *path,
                                                 gpointer              progress_data,
                                                 GError              **error);
 void              raw_image_free               (RawImage             *img);
+void              raw_image_release_pixels16   (RawImage             *img);
+
+/* geometry.c */
+gboolean          rawheic_geometry_active      (const RawSettings    *s);
+void              rawheic_geometry_size        (const RawSettings    *s,
+                                                gint                  w,
+                                                gint                  h,
+                                                gint                 *out_w,
+                                                gint                 *out_h);
+gboolean          rawheic_geometry_apply       (RawImage             *img,
+                                                const RawSettings    *s,
+                                                gboolean              uncropped);
+void              rawheic_geometry_to_source   (const RawSettings    *s,
+                                                gint                  w,
+                                                gint                  h,
+                                                gboolean              uncropped,
+                                                gdouble               u,
+                                                gdouble               v,
+                                                gdouble              *su,
+                                                gdouble              *sv);
+void              rawheic_geometry_from_source (const RawSettings    *s,
+                                                gint                  w,
+                                                gint                  h,
+                                                gboolean              uncropped,
+                                                gdouble               su,
+                                                gdouble               sv,
+                                                gdouble              *u,
+                                                gdouble              *v);
 GBytes          * raw_extract_thumbnail        (const gchar          *path,
                                                 gint                 *out_width,
                                                 gint                 *out_height,
@@ -199,6 +253,12 @@ gboolean          raw_probe                    (const gchar          *path,
                                                 gint                 *width,
                                                 gint                 *height,
                                                 GError              **error);
+
+/* tone.c */
+gdouble           rawheic_tone_eval            (gint                  curve,
+                                                gdouble               x);
+void              rawheic_tone_apply           (RawImage             *img,
+                                                gint                  curve);
 
 /* denoise.c */
 gboolean          rawheic_wavelet_denoise      (guint16              *rgb,
@@ -234,6 +294,11 @@ gboolean          rawheic_camprofile_apply     (const gchar          *path,
                                                 gboolean              look,
                                                 GError              **error);
 
+gchar           * rawheic_camprofile_find      (const gchar          *folder,
+                                                const gchar          *make,
+                                                const gchar          *model);
+gchar          ** rawheic_camprofile_dirs      (const gchar          *folder);
+
 /* profiles.c */
 void              rawheic_space_xy             (ColorSpace            cs,
                                                 gdouble               prim[3][2],
@@ -248,6 +313,8 @@ GimpImage       * rawheic_image_from_raw       (RawImage             *img,
                                                 GFile                *file,
                                                 GError              **error);
 void              rawheic_mark_layer           (GimpLayer            *layer);
+void              rawheic_settings_remember_wb (RawSettings          *s,
+                                                const RawImage       *img);
 void              rawheic_attach_source        (GimpImage            *image,
                                                 const RawSettings    *s,
                                                 const gchar          *path);
@@ -272,6 +339,19 @@ GimpProcedure   * batch_procedure_new          (GimpPlugIn           *plug_in,
 gchar          ** rawheic_choose_raw_files     (const gchar          *title);
 GimpProcedure   * export_batch_procedure_new   (GimpPlugIn           *plug_in,
                                                 const gchar          *name);
+
+/* hdr-export.c */
+GimpProcedure   * hdr_export_procedure_new     (GimpPlugIn           *plug_in,
+                                                const gchar          *name);
+gdouble           rawheic_pq_encode            (gdouble               l);
+gdouble           rawheic_hlg_encode           (gdouble               l);
+
+/* sync.c */
+GimpProcedure   * sync_procedure_new           (GimpPlugIn           *plug_in,
+                                                const gchar          *name);
+gboolean          rawheic_settings_for_other_photos (GimpImage       *image,
+                                                gboolean              include_geometry,
+                                                RawSettings          *s);
 
 /* adjust.c */
 GimpProcedure   * adjust_procedure_new         (GimpPlugIn           *plug_in,
@@ -303,6 +383,10 @@ const gchar     * rawheic_xmp_apply_data       (const gchar          *xml,
 const gchar     * rawheic_xmp_apply            (const gchar          *raw_path,
                                                 RawSettings          *s);
 gchar           * rawheic_xmp_find             (const gchar          *raw_path);
+gchar           * rawheic_xmp_target           (const gchar          *raw_path);
+gboolean          rawheic_xmp_write            (const gchar          *raw_path,
+                                                const RawSettings    *s,
+                                                GError              **error);
 
 /* util.c */
 gchar           * rawheic_file_path            (GFile                *file);

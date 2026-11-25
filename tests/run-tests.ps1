@@ -20,6 +20,7 @@ $tests = [ordered]@{
   metadata  = @("test_metadata.py",  "metadata.txt")
   options   = @("test_options.py",   "options.txt")
   regress   = @("test_regressions.py", "regressions.txt")
+  features  = @("test_features.py",  "features.txt")
 }
 foreach ($name in $tests.Keys) {
   if ($Only.Count -and -not ($Only -contains $name)) { continue }

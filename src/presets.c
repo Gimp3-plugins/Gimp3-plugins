@@ -93,6 +93,22 @@ raw_presets_file_name (const gchar *name)
       return NULL;
     }
 
+  /* Windows device names stay devices even with an extension */
+  {
+    static const gchar *reserved[] = { "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3",
+                                       "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+                                       "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6",
+                                       "LPT7", "LPT8", "LPT9", NULL };
+    gint i;
+
+    for (i = 0; reserved[i]; i++)
+      if (! g_ascii_strcasecmp (out->str, reserved[i]))
+        {
+          g_string_prepend_c (out, '_');
+          break;
+        }
+  }
+
   g_string_append (out, ".ini");
 
   return g_string_free (out, FALSE);
@@ -181,23 +197,30 @@ raw_presets_list (void)
   return g_list_concat (list, user);
 }
 
-/* Keeps @s->spot: the neutral point belongs to the photo. */
+/* Keeps @s->spot, the crop and the straightening: they belong to the photo. */
+static void
+keep_photo_geometry (RawSettings       *s,
+                     const RawSettings *photo)
+{
+  memcpy (s->spot, photo->spot, sizeof s->spot);
+  memcpy (s->crop, photo->crop, sizeof s->crop);
+  s->straighten = photo->straighten;
+}
+
 gboolean
 raw_presets_load (const gchar *name,
                   RawSettings *s)
 {
-  gdouble  spot[4];
-  gchar   *path, *data = NULL;
-  gboolean ok = FALSE;
-  gint     i;
-
-  memcpy (spot, s->spot, sizeof spot);
+  RawSettings photo = *s;
+  gchar      *path, *data = NULL;
+  gboolean    ok = FALSE;
+  gint        i;
 
   for (i = 0; i < (gint) G_N_ELEMENTS (builtins); i++)
     if (! g_strcmp0 (name, _(builtins[i].name)) || ! g_strcmp0 (name, builtins[i].name))
       {
         builtins[i].apply (s);
-        memcpy (s->spot, spot, sizeof spot);
+        keep_photo_geometry (s, &photo);
         return TRUE;
       }
 
@@ -205,7 +228,7 @@ raw_presets_load (const gchar *name,
   if (path && g_file_get_contents (path, &data, NULL, NULL))
     {
       ok = raw_settings_deserialize (s, data, NULL);
-      memcpy (s->spot, spot, sizeof spot);
+      keep_photo_geometry (s, &photo);
     }
 
   g_free (data);
@@ -244,6 +267,27 @@ raw_presets_save (const gchar        *name,
       return FALSE;
     }
 
+  /* two names can map to one file ("a/b", "a_b"): never replace another preset */
+  {
+    GKeyFile *old = g_key_file_new ();
+    gchar    *old_name = NULL;
+
+    if (g_key_file_load_from_file (old, path, 0, NULL))
+      old_name = g_key_file_get_string (old, PRESET_GROUP, "name", NULL);
+    g_key_file_free (old);
+
+    if (old_name && g_strcmp0 (old_name, name))
+      {
+        g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_EXIST,
+                     _("'%s' would replace the preset '%s'; choose another name."),
+                     name, old_name);
+        g_free (old_name);
+        g_free (path);
+        return FALSE;
+      }
+    g_free (old_name);
+  }
+
   dir = presets_dir ();
   g_mkdir_with_parents (dir, 0700);
   g_free (dir);
@@ -253,6 +297,8 @@ raw_presets_save (const gchar        *name,
   g_key_file_load_from_data (kf, text, -1, 0, NULL);
   g_key_file_remove_key (kf, "raw", "source", NULL);
   g_key_file_remove_key (kf, "raw", "spot", NULL);
+  g_key_file_remove_key (kf, "raw", "crop", NULL);
+  g_key_file_remove_key (kf, "raw", "straighten", NULL);
   g_key_file_set_string (kf, PRESET_GROUP, "name", name);
   data = g_key_file_to_data (kf, NULL, NULL);
 

@@ -23,6 +23,8 @@
 
 #include <lcms2.h>
 
+#include <glib/gstdio.h>
+
 #include "rawheic.h"
 
 typedef gdouble Mat3[3][3];
@@ -378,7 +380,7 @@ dcp_parse (const guint8 *data,
         {
         case 50778: case 50779:          /* CalibrationIlluminant1/2 */
           if (read_numbers (&t, e, v, 1))
-            dcp->illum[tag - 50778] = (guint) v[0];
+            dcp->illum[tag - 50778] = (guint) CLAMP (v[0], 0.0, 65535.0);
           break;
 
         case 50721: case 50722:          /* ColorMatrix1/2: XYZ -> camera */
@@ -402,7 +404,7 @@ dcp_parse (const guint8 *data,
         case 50937:                      /* ProfileHueSatMapDims */
           if (read_numbers (&t, e, v, 3))
             for (k = 0; k < 3; k++)
-              hsm_dims[k] = (gint) v[k];
+              hsm_dims[k] = (gint) CLAMP (v[k], 0.0, 65535.0);
           break;
         case 50938: hsm_entry[0] = e; break;
         case 50939: hsm_entry[1] = e; break;
@@ -410,7 +412,7 @@ dcp_parse (const guint8 *data,
         case 50981:                      /* ProfileLookTableDims */
           if (read_numbers (&t, e, v, 3))
             for (k = 0; k < 3; k++)
-              look_dims[k] = (gint) v[k];
+              look_dims[k] = (gint) CLAMP (v[k], 0.0, 65535.0);
           break;
         case 50982: look_entry = e; break;
         case 51108:                      /* ProfileLookTableEncoding */
@@ -428,6 +430,7 @@ dcp_parse (const guint8 *data,
 
                 if (read_numbers (&t, e, tc, count))
                   {
+                    g_free (dcp->tone);   /* a repeated tag replaces the curve */
                     dcp->tone   = g_new (gfloat, count);
                     dcp->tone_n = (gint) count / 2;
                     for (k = 0; k < (gint) count; k++)
@@ -852,6 +855,331 @@ apply_icc (const guint8 *data,
   return TRUE;
 }
 
+/* --- file cache ------------------------------------------------------------
+ * The preview develops again on every slider change: keep the last profile
+ * file in memory as long as its size and modification time stay the same.
+ */
+
+#define MAX_PROFILE_SIZE (64 * 1024 * 1024)
+
+static GMutex  cache_lock;
+static gchar  *cache_path;
+static gint64  cache_mtime;
+static goffset cache_size;
+static GBytes *cache_bytes;
+
+static GBytes *
+profile_bytes (const gchar  *path,
+               GError      **error)
+{
+  GStatBuf st;
+  GBytes  *bytes = NULL;
+  gchar   *data  = NULL;
+  gsize    len   = 0;
+
+  if (g_stat (path, &st) != 0)
+    {
+      gchar *name = g_filename_display_name (path);
+
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_NOENT,
+                   _("The camera profile '%s' cannot be read."), name);
+      g_free (name);
+      return NULL;
+    }
+
+  if (st.st_size > MAX_PROFILE_SIZE)
+    {
+      g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_INVAL,
+                           _("The camera profile file is too large."));
+      return NULL;
+    }
+
+  g_mutex_lock (&cache_lock);
+  if (cache_bytes && ! g_strcmp0 (cache_path, path) &&
+      cache_mtime == (gint64) st.st_mtime && cache_size == (goffset) st.st_size)
+    bytes = g_bytes_ref (cache_bytes);
+  g_mutex_unlock (&cache_lock);
+
+  if (bytes)
+    return bytes;
+
+  if (! g_file_get_contents (path, &data, &len, error))
+    return NULL;
+  if (len > MAX_PROFILE_SIZE)
+    {
+      g_free (data);
+      g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_INVAL,
+                           _("The camera profile file is too large."));
+      return NULL;
+    }
+
+  bytes = g_bytes_new_take (data, len);
+
+  g_mutex_lock (&cache_lock);
+  g_clear_pointer (&cache_bytes, g_bytes_unref);
+  g_free (cache_path);
+  cache_path  = g_strdup (path);
+  cache_mtime = (gint64) st.st_mtime;
+  cache_size  = (goffset) st.st_size;
+  cache_bytes = g_bytes_ref (bytes);
+  g_mutex_unlock (&cache_lock);
+
+  return bytes;
+}
+
+/* --- finding a profile for a camera -----------------------------------------
+ * Adobe's DNG Converter / Camera Raw install their profiles as
+ *   <ProgramData>/Adobe/CameraRaw/CameraProfiles/Adobe Standard/<Camera> Adobe Standard.dcp
+ *   <ProgramData>/Adobe/CameraRaw/CameraProfiles/Camera/<Camera>/<Camera> Camera *.dcp
+ * File names are matched first (cheap), then the profile's
+ * UniqueCameraModel tag confirms the camera.
+ */
+
+/* "Canon EOS 6D" -> "canoneos6d" */
+static gchar *
+camera_key (const gchar *text)
+{
+  GString     *out = g_string_new (NULL);
+  const gchar *p;
+
+  for (p = text; p && *p; p++)
+    if (g_ascii_isalnum (*p))
+      g_string_append_c (out, g_ascii_tolower (*p));
+
+  return g_string_free (out, FALSE);
+}
+
+/* UniqueCameraModel (tag 50708) of a DCP, or NULL. */
+static gchar *
+dcp_camera_model (const guint8 *data,
+                  gsize         len)
+{
+  Tiff     t = { data, len, FALSE };
+  guint32  ifd;
+  guint16  n, i;
+
+  if (len < 8 || ! ((data[0] == 'I' && data[1] == 'I' && data[2] == 'R' && data[3] == 'C') ||
+                    (data[0] == 'M' && data[1] == 'M' && data[2] == 'C' && data[3] == 'R')))
+    return NULL;
+
+  t.be = data[0] == 'M';
+  ifd  = t32 (&t, 4);
+  if (ifd > len || len - ifd < 2)
+    return NULL;
+  n = t16 (&t, ifd);
+  if ((gsize) ifd + 2 + (gsize) n * 12 > len)
+    return NULL;
+
+  for (i = 0; i < n; i++)
+    {
+      gsize   e     = ifd + 2 + (gsize) i * 12;
+      guint32 count = t32 (&t, e + 4);
+      gsize   off;
+
+      if (t16 (&t, e) != 50708 || t16 (&t, e + 2) != 2 || count == 0 || count > 256)
+        continue;
+      off = count <= 4 ? e + 8 : t32 (&t, e + 8);
+      if (off > len || count > len - off)
+        return NULL;
+      return g_strndup ((const gchar *) data + off, count);
+    }
+
+  return NULL;
+}
+
+/* Folders searched for profiles: @folder first, then the usual places. */
+gchar **
+rawheic_camprofile_dirs (const gchar *folder)
+{
+  GPtrArray *dirs = g_ptr_array_new ();
+
+  if (folder && *folder)
+    g_ptr_array_add (dirs, g_strdup (folder));
+
+  g_ptr_array_add (dirs, g_build_filename (gimp_directory (), "gimp-raw-heic", "profiles", NULL));
+#ifdef G_OS_WIN32
+  {
+    const gchar *pd = g_getenv ("PROGRAMDATA");
+    const gchar *ad = g_getenv ("APPDATA");
+
+    if (pd)
+      g_ptr_array_add (dirs, g_build_filename (pd, "Adobe", "CameraRaw", "CameraProfiles", NULL));
+    if (ad)
+      g_ptr_array_add (dirs, g_build_filename (ad, "Adobe", "CameraRaw", "CameraProfiles", NULL));
+  }
+#else
+  g_ptr_array_add (dirs, g_build_filename (g_get_user_data_dir (), "gimp-raw-heic", "profiles", NULL));
+#endif
+  g_ptr_array_add (dirs, NULL);
+
+  return (gchar **) g_ptr_array_free (dirs, FALSE);
+}
+
+/* Collect .dcp files whose name contains @key, at most 3 levels deep. */
+static void
+scan_dir (const gchar *dir,
+          const gchar *key,
+          gint         depth,
+          GPtrArray   *found)
+{
+  GDir        *d = g_dir_open (dir, 0, NULL);
+  const gchar *name;
+  gint         entries = 0;
+
+  if (! d)
+    return;
+
+  while ((name = g_dir_read_name (d)) && entries++ < 20000)
+    {
+      gchar *path = g_build_filename (dir, name, NULL);
+
+      if (g_file_test (path, G_FILE_TEST_IS_DIR))
+        {
+          if (depth < 3)
+            scan_dir (path, key, depth + 1, found);
+        }
+      else
+        {
+          gchar *lower = g_ascii_strdown (name, -1);
+
+          if (g_str_has_suffix (lower, ".dcp"))
+            {
+              gchar *k = camera_key (name);
+
+              if (strstr (k, key))
+                {
+                  g_ptr_array_add (found, path);
+                  path = NULL;
+                }
+              g_free (k);
+            }
+          g_free (lower);
+        }
+      g_free (path);
+    }
+
+  g_dir_close (d);
+}
+
+/* Lower is better: Adobe Standard, then a "Camera Standard", then others. */
+static gint
+profile_rank (const gchar *path)
+{
+  gchar *k    = camera_key (path);
+  gint   rank = strstr (k, "adobestandard")  ? 0 :
+                strstr (k, "camerastandard") ? 1 :
+                strstr (k, "standard")       ? 2 : 3;
+
+  g_free (k);
+  return rank;
+}
+
+static gint
+compare_profiles (gconstpointer a,
+                  gconstpointer b)
+{
+  const gchar *pa = *(const gchar * const *) a;
+  const gchar *pb = *(const gchar * const *) b;
+  gint         d  = profile_rank (pa) - profile_rank (pb);
+
+  return d ? d : g_utf8_collate (pa, pb);
+}
+
+static gchar *
+find_uncached (const gchar *folder,
+               const gchar *key)
+{
+  gchar    **dirs = rawheic_camprofile_dirs (folder);
+  GPtrArray *found = g_ptr_array_new_with_free_func (g_free);
+  gchar     *result = NULL;
+  guint      i;
+
+  for (i = 0; dirs[i] && found->len == 0; i++)
+    scan_dir (dirs[i], key, 0, found);
+  g_strfreev (dirs);
+
+  g_ptr_array_sort (found, compare_profiles);
+
+  /* the file name may name a related camera ("EOS 6D" in "EOS 6D Mark II"):
+   * the tag inside decides
+   */
+  for (i = 0; i < found->len && ! result; i++)
+    {
+      gchar *data = NULL;
+      gsize  len  = 0;
+
+      if (g_file_get_contents (found->pdata[i], &data, &len, NULL) && len <= MAX_PROFILE_SIZE)
+        {
+          gchar *model = dcp_camera_model ((const guint8 *) data, len);
+          gchar *k     = model ? camera_key (model) : NULL;
+
+          if (k && ! strcmp (k, key))
+            result = g_strdup (found->pdata[i]);
+          g_free (k);
+          g_free (model);
+        }
+      g_free (data);
+    }
+
+  g_ptr_array_free (found, TRUE);
+
+  return result;
+}
+
+static GMutex      find_lock;
+static GHashTable *find_cache;   /* "folder\nkey" -> path or "" */
+
+/* A camera profile for "@make @model", or NULL.  Results are cached for
+ * the plug-in's lifetime (one preview dialog asks many times).
+ */
+gchar *
+rawheic_camprofile_find (const gchar *folder,
+                         const gchar *make,
+                         const gchar *model)
+{
+  gchar *name, *key, *ckey, *result;
+  const gchar *cached;
+
+  if (! model || ! *model)
+    return NULL;
+
+  /* LibRaw gives "Canon" + "EOS 6D"; Adobe writes "Canon EOS 6D" */
+  name = g_strdup_printf ("%s %s", make ? make : "", model);
+  key  = camera_key (name);
+  g_free (name);
+  if (! *key)
+    {
+      g_free (key);
+      return NULL;
+    }
+
+  ckey = g_strdup_printf ("%s\n%s", folder ? folder : "", key);
+
+  g_mutex_lock (&find_lock);
+  if (! find_cache)
+    find_cache = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+  cached = g_hash_table_lookup (find_cache, ckey);
+  result = cached ? g_strdup (cached) : NULL;
+  g_mutex_unlock (&find_lock);
+
+  if (! cached)
+    {
+      result = find_uncached (folder, key);
+
+      g_mutex_lock (&find_lock);
+      g_hash_table_replace (find_cache, g_strdup (ckey), g_strdup (result ? result : ""));
+      g_mutex_unlock (&find_lock);
+    }
+
+  g_free (ckey);
+  g_free (key);
+
+  if (result && ! *result)
+    g_clear_pointer (&result, g_free);
+
+  return result;
+}
+
 /* --- public ------------------------------------------------------------- */
 
 /* Convert camera RGB (white balanced, linear) in place to linear RGB of
@@ -866,20 +1194,14 @@ rawheic_camprofile_apply (const gchar  *path,
                           gboolean      look,
                           GError      **error)
 {
-  gchar   *data = NULL;
-  gsize    len  = 0;
-  gboolean ok;
+  GBytes      *bytes = profile_bytes (path, error);
+  const gchar *data;
+  gsize        len  = 0;
+  gboolean     ok;
 
-  if (! g_file_get_contents (path, &data, &len, error))
+  if (! bytes)
     return FALSE;
-
-  if (len > 64 * 1024 * 1024)
-    {
-      g_free (data);
-      g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_INVAL,
-                           _("The camera profile file is too large."));
-      return FALSE;
-    }
+  data = g_bytes_get_data (bytes, &len);
 
   if (len >= 4 && ((data[0] == 'I' && data[1] == 'I' && data[2] == 'R' && data[3] == 'C') ||
                    (data[0] == 'M' && data[1] == 'M' && data[2] == 'C' && data[3] == 'R')))
@@ -897,7 +1219,7 @@ rawheic_camprofile_apply (const gchar  *path,
       ok = apply_icc ((const guint8 *) data, len, rgb, n, cs, error);
     }
 
-  g_free (data);
+  g_bytes_unref (bytes);
 
   return ok;
 }

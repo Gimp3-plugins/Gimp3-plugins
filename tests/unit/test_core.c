@@ -67,6 +67,30 @@ test_settings_clamp_and_garbage (void)
   g_assert_cmpfloat (s.spot[0], ==, 1.0);
   g_free (path);
 
+  /* GKeyFile accepts nan/inf and CLAMP lets NaN through: defaults instead */
+  g_assert_true (raw_settings_deserialize (&s,
+    "[raw]\nexposure=nan\nwb-temperature=nan\nwb-tint=-nan\nbrightness=nan\n"
+    "exposure-preserve=nan\ndenoise=nan\nca-red=nan\nca-blue=inf\n"
+    "spot=nan;nan;inf;-inf\nwb-mul=nan;1;inf;1\n", NULL));
+  g_assert_cmpfloat (s.exposure, ==, 0.0);
+  g_assert_cmpfloat (s.wb_temperature, ==, 5500.0);
+  g_assert_cmpfloat (s.wb_tint, ==, 0.0);
+  g_assert_cmpfloat (s.brightness, ==, 1.0);
+  g_assert_cmpfloat (s.exposure_preserve, ==, 0.0);
+  g_assert_cmpfloat (s.denoise, ==, 0.0);
+  g_assert_cmpfloat (s.ca_red, ==, 1.0);
+  g_assert_cmpfloat (s.ca_blue, ==, 1.0);
+  g_assert_cmpfloat (s.wb_mul[0], ==, 1.0);
+  g_assert_cmpfloat (s.wb_mul[2], ==, 1.0);
+  {
+    gint k;
+
+    for (k = 0; k < 4; k++)
+      g_assert_true (isfinite (s.spot[k]) && s.spot[k] >= 0.0 && s.spot[k] <= 1.0);
+    g_assert_cmpfloat (s.spot[0] + s.spot[2], <=, 1.0);
+    g_assert_cmpfloat (s.spot[1] + s.spot[3], <=, 1.0);
+  }
+
   g_assert_false (raw_settings_deserialize (&s, "not a key file \x01\x02", NULL));
   g_assert_false (raw_settings_deserialize (&s, "[other]\na=1\n", NULL));
   g_assert_false (raw_settings_deserialize (&s, NULL, NULL));
@@ -232,6 +256,16 @@ test_presets (void)
   g_free (fn);
   g_assert_null (raw_presets_file_name ("..."));
   g_assert_null (raw_presets_file_name (""));
+  /* Windows device names */
+  fn = raw_presets_file_name ("con");
+  g_assert_cmpstr (fn, ==, "_con.ini");
+  g_free (fn);
+  fn = raw_presets_file_name ("LPT1");
+  g_assert_cmpstr (fn, ==, "_LPT1.ini");
+  g_free (fn);
+  fn = raw_presets_file_name ("console");
+  g_assert_cmpstr (fn, ==, "console.ini");
+  g_free (fn);
 
   raw_settings_defaults (&s);
   s.exposure    = 1.25;
@@ -265,6 +299,14 @@ test_presets (void)
   g_assert_false (raw_presets_delete ("Default"));
   g_assert_false (raw_presets_save ("", &s, &error));
   g_clear_error (&error);
+
+  /* "a/b" and "a_b" share a file: the second must not replace the first */
+  g_assert_true (raw_presets_save ("a/b", &s, &error));
+  g_assert_false (raw_presets_save ("a_b", &s, &error));
+  g_assert_error (error, G_FILE_ERROR, G_FILE_ERROR_EXIST);
+  g_clear_error (&error);
+  g_assert_true (raw_presets_save ("a/b", &s, &error));   /* same name: update */
+  g_assert_true (raw_presets_delete ("a/b"));
 
   g_assert_true (raw_presets_delete ("Ślub – plener"));
   g_assert_false (raw_presets_load ("Ślub – plener", &t));
@@ -334,6 +376,303 @@ region_vs_full (const gchar *file,
   raw_image_free (part);
   raw_session_free (ses);
   g_free (path);
+}
+
+/* --- straighten / crop ---------------------------------------------------- */
+
+static void
+test_geometry (void)
+{
+  RawSettings s;
+  RawImage    img = { 0 };
+  gdouble     u, v, su, sv;
+  gint        w = 300, h = 200, x, y, ow, oh;
+
+  raw_settings_defaults (&s);
+  g_assert_false (rawheic_geometry_active (&s));
+
+  /* mapping there and back */
+  s.straighten = 7.5;
+  s.crop[0] = 0.1; s.crop[1] = 0.2; s.crop[2] = 0.5; s.crop[3] = 0.6;
+  g_assert_true (rawheic_geometry_active (&s));
+  for (u = 0.0; u <= 1.0; u += 0.25)
+    for (v = 0.0; v <= 1.0; v += 0.25)
+      {
+        gdouble bu, bv;
+
+        rawheic_geometry_to_source (&s, w, h, FALSE, u, v, &su, &sv);
+        /* rotated + enlarged: every result pixel comes from inside */
+        g_assert_cmpfloat (su, >=, -1e-9);
+        g_assert_cmpfloat (su, <=, 1 + 1e-9);
+        g_assert_cmpfloat (sv, >=, -1e-9);
+        g_assert_cmpfloat (sv, <=, 1 + 1e-9);
+        rawheic_geometry_from_source (&s, w, h, FALSE, su, sv, &bu, &bv);
+        g_assert_cmpfloat (fabs (bu - u), <, 1e-9);
+        g_assert_cmpfloat (fabs (bv - v), <, 1e-9);
+      }
+
+  /* even the corners of a whole straightened canvas stay inside */
+  rawheic_geometry_to_source (&s, w, h, TRUE, 0.0, 0.0, &su, &sv);
+  g_assert_cmpfloat (su, >=, -1e-9);
+  g_assert_cmpfloat (sv, >=, -1e-9);
+  rawheic_geometry_to_source (&s, w, h, TRUE, 1.0, 1.0, &su, &sv);
+  g_assert_cmpfloat (su, <=, 1 + 1e-9);
+  g_assert_cmpfloat (sv, <=, 1 + 1e-9);
+
+  /* crop only: a plain cut-out, exact pixel values */
+  s.straighten = 0.0;
+  s.crop[0] = 0.5; s.crop[1] = 0.25; s.crop[2] = 0.25; s.crop[3] = 0.5;
+  img.width  = w;
+  img.height = h;
+  img.pixels = g_new (gfloat, w * h * 3);
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++)
+      {
+        img.pixels[(y * w + x) * 3 + 0] = x;
+        img.pixels[(y * w + x) * 3 + 1] = y;
+        img.pixels[(y * w + x) * 3 + 2] = 1;
+      }
+  rawheic_geometry_size (&s, w, h, &ow, &oh);
+  g_assert_cmpint (ow, ==, 75);
+  g_assert_cmpint (oh, ==, 100);
+  g_assert_true (rawheic_geometry_apply (&img, &s, FALSE));
+  g_assert_cmpint (img.width, ==, 75);
+  g_assert_cmpint (img.height, ==, 100);
+  g_assert_cmpfloat (fabs (img.pixels[0] - 150), <, 1e-4);
+  g_assert_cmpfloat (fabs (img.pixels[1] - 50), <, 1e-4);
+  g_free (img.pixels);
+
+  /* 16-bit: the result is our own buffer */
+  memset (&img, 0, sizeof img);
+  img.width    = w;
+  img.height   = h;
+  img.pixels16 = g_new0 (guint16, w * h * 3);
+  img.own16    = TRUE;
+  s.straighten = -3.0;
+  g_assert_true (rawheic_geometry_apply (&img, &s, FALSE));
+  g_assert_true (img.own16);
+  g_assert_cmpint (img.width, ==, 75);
+  raw_image_release_pixels16 (&img);
+  g_assert_null (img.pixels16);
+}
+
+/* --- tone curve, HDR transfer functions ----------------------------------- */
+
+static void
+test_tone_and_transfer (void)
+{
+  gint    c;
+  gdouble x, prev;
+
+  for (c = TONE_NONE; c <= TONE_STRONG; c++)
+    {
+      g_assert_cmpfloat (rawheic_tone_eval (c, 0.0), ==, 0.0);
+      g_assert_cmpfloat (fabs (rawheic_tone_eval (c, 1.0) - 1.0), <, 1e-9);
+      g_assert_cmpfloat (rawheic_tone_eval (c, 2.5), ==, 2.5);      /* HDR kept */
+      /* middle grey of the perceptual domain stays */
+      g_assert_cmpfloat (fabs (rawheic_tone_eval (c, pow (0.5, 2.2)) - pow (0.5, 2.2)), <, 1e-9);
+
+      for (prev = -1, x = 0.0; x <= 1.0; x += 0.001)
+        {
+          gdouble y = rawheic_tone_eval (c, x);
+
+          g_assert_cmpfloat (y, >=, prev);                           /* monotonic */
+          prev = y;
+        }
+    }
+  /* an S curve: darker shadows, brighter upper tones */
+  g_assert_cmpfloat (rawheic_tone_eval (TONE_STRONG, 0.05), <, 0.05);
+  g_assert_cmpfloat (rawheic_tone_eval (TONE_STRONG, 0.5), >, 0.5);
+
+  /* reference white: PQ 203 cd/m2 = 0.5807, HLG 75 % */
+  g_assert_cmpfloat (fabs (rawheic_pq_encode (1.0) - 0.5807), <, 0.001);
+  g_assert_cmpfloat (fabs (rawheic_hlg_encode (1.0) - 0.75), <, 1e-6);
+  g_assert_cmpfloat (rawheic_pq_encode (0.0), <, 1e-6);
+  g_assert_cmpfloat (fabs (rawheic_pq_encode (10000.0 / 203.0) - 1.0), <, 1e-6);
+  g_assert_cmpfloat (rawheic_pq_encode (4.0), >, rawheic_pq_encode (1.0));
+}
+
+/* --- finding a DCP for a camera -------------------------------------------- */
+
+static void
+write_fake_dcp (const gchar *dir,
+                const gchar *file,
+                const gchar *model)
+{
+  gsize   n   = strlen (model) + 1;
+  gsize   len = 8 + 2 + 12 + 4 + n;
+  guint8 *d   = g_malloc0 (len);
+  gchar  *path = g_build_filename (dir, file, NULL);
+
+  memcpy (d, "IIRC", 4);
+  d[4] = 8;                                        /* IFD at 8 */
+  d[8] = 1;                                        /* one entry */
+  d[10] = 50708 & 0xff; d[11] = 50708 >> 8;        /* UniqueCameraModel */
+  d[12] = 2;                                       /* ASCII */
+  d[14] = (guint8) n;
+  d[18] = 8 + 2 + 12 + 4;                          /* value offset */
+  memcpy (d + 26, model, n);
+  g_assert_true (g_file_set_contents (path, (const gchar *) d, len, NULL));
+  g_free (d);
+  g_free (path);
+}
+
+static void
+test_profile_find (void)
+{
+  gchar *dir = g_dir_make_tmp ("rawheic-dcp-XXXXXX", NULL);
+  gchar *sub = g_build_filename (dir, "Canon EOS 6D", NULL);
+  gchar *found;
+
+  g_mkdir (sub, 0700);
+  write_fake_dcp (dir, "Canon EOS 6D Mark II Adobe Standard.dcp", "Canon EOS 6D Mark II");
+  write_fake_dcp (sub, "Canon EOS 6D Camera Faithful.dcp", "Canon EOS 6D");
+  write_fake_dcp (dir, "Canon EOS 6D Adobe Standard.dcp", "Canon EOS 6D");
+
+  /* Adobe Standard first, and never the Mark II profile */
+  found = rawheic_camprofile_find (dir, "Canon", "EOS 6D");
+  g_assert_nonnull (found);
+  g_assert_true (g_str_has_suffix (found, "Canon EOS 6D Adobe Standard.dcp"));
+  g_free (found);
+
+  found = rawheic_camprofile_find (dir, "Canon", "EOS 6D Mark II");
+  g_assert_nonnull (found);
+  g_assert_nonnull (strstr (found, "Mark II"));
+  g_free (found);
+
+  /* not in the test folder (Adobe's folders on this machine may have it) */
+  found = rawheic_camprofile_find (dir, "Nikon", "D750");
+  if (found)
+    g_test_message ("system profile for the D750: %s", found);
+  g_assert_true (! found || ! g_str_has_prefix (found, dir));
+  g_free (found);
+  g_assert_null (rawheic_camprofile_find (dir, "Canon", ""));
+
+  g_free (sub);
+  g_free (dir);
+}
+
+/* --- XMP sidecars written by the plug-in --------------------------------- */
+
+static void
+test_xmp_write (void)
+{
+  gchar      *dir = g_dir_make_tmp ("rawheic-xmp-XXXXXX", NULL);
+  gchar      *raw = g_build_filename (dir, "IMG_1.CR3", NULL);
+  gchar      *target = rawheic_xmp_target (raw);
+  RawSettings a, b;
+  GError     *error = NULL;
+
+  raw_settings_defaults (&a);
+  a.wb_mode        = WB_MANUAL;
+  a.wb_temperature = 4100;
+  a.exposure       = 0.7;
+  a.tone_curve     = TONE_MEDIUM;
+  a.straighten     = 2.5;
+  a.crop[0] = 0.1; a.crop[1] = 0.1; a.crop[2] = 0.7; a.crop[3] = 0.6;
+
+  g_assert_true (rawheic_xmp_write (raw, &a, &error));
+  g_assert_no_error (error);
+  g_assert_true (g_str_has_suffix (target, "IMG_1.xmp"));
+
+  /* read back exactly */
+  raw_settings_defaults (&b);
+  g_assert_cmpstr (rawheic_xmp_apply (raw, &b), ==, "gimp-raw-heic");
+  g_assert_cmpint (memcmp (&a, &b, sizeof a), ==, 0);
+
+  /* own file: may be replaced */
+  a.exposure = -1.0;
+  g_assert_true (rawheic_xmp_write (raw, &a, &error));
+
+  /* someone else's sidecar is kept */
+  g_assert_true (g_file_set_contents (target, "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"/>", -1, NULL));
+  g_assert_false (rawheic_xmp_write (raw, &a, &error));
+  g_assert_error (error, G_FILE_ERROR, G_FILE_ERROR_EXIST);
+  g_clear_error (&error);
+
+  /* a sidecar must not point at other machines */
+  {
+    RawSettings h;
+    gchar      *text, *b64, *xml;
+
+    raw_settings_defaults (&h);
+    g_strlcpy (h.camera_profile, "\\\\evil.example\\share\\x.dcp", sizeof h.camera_profile);
+    g_strlcpy (h.profile_dir, "//evil.example/share", sizeof h.profile_dir);
+    text = raw_settings_serialize (&h, "");
+    b64  = g_base64_encode ((const guchar *) text, strlen (text));
+    xml  = g_strdup_printf ("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF><rdf:Description "
+                            "rawheic:settings=\"%s\"/></rdf:RDF></x:xmpmeta>", b64);
+    raw_settings_defaults (&b);
+    g_assert_nonnull (rawheic_xmp_apply_data (xml, strlen (xml), &b));
+    g_assert_cmpstr (b.camera_profile, ==, "");
+    g_assert_cmpstr (b.profile_dir, ==, "");
+    g_free (xml);
+    g_free (b64);
+    g_free (text);
+  }
+
+  /* Lightroom crop import */
+  {
+    const gchar *lr = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF><rdf:Description "
+                      "crs:HasCrop=\"True\" crs:CropLeft=\"0.2\" crs:CropTop=\"0.1\" "
+                      "crs:CropRight=\"0.9\" crs:CropBottom=\"0.8\" crs:CropAngle=\"-1.5\"/>"
+                      "</rdf:RDF></x:xmpmeta>";
+
+    raw_settings_defaults (&b);
+    g_assert_nonnull (rawheic_xmp_apply_data (lr, strlen (lr), &b));
+    g_assert_cmpfloat (fabs (b.crop[0] - 0.2), <, 1e-9);
+    g_assert_cmpfloat (fabs (b.crop[2] - 0.7), <, 1e-9);
+    g_assert_cmpfloat (fabs (b.straighten - 1.5), <, 1e-9);
+  }
+
+  g_remove (target);
+  g_free (target);
+  g_free (raw);
+  g_free (dir);
+}
+
+/* previews must fit both sides of the preview box (portrait images too) */
+static void
+test_preview_box (void)
+{
+  const gchar *files[] = { "Apple-iPhone_12_Pro.dng", "Nikon-D750.nef" };
+  gint         i, ran = 0;
+
+  for (i = 0; i < (gint) G_N_ELEMENTS (files); i++)
+    {
+      gchar      *path = g_build_filename (samples_dir, files[i], NULL);
+      RawSettings s;
+      RawSession *ses;
+      RawImage   *img;
+      GError     *error = NULL;
+
+      if (g_file_test (path, G_FILE_TEST_EXISTS))
+        {
+          raw_settings_defaults (&s);
+          ses = raw_session_open (path, &error);
+          g_assert_no_error (error);
+
+          img = raw_session_develop_box (ses, &s, 640, 480, NULL, NULL, &error);
+          g_assert_no_error (error);
+          g_assert_cmpint (img->width, <=, 640);
+          g_assert_cmpint (img->height, <=, 480);
+          g_assert_cmpint (MAX (img->width, img->height), >=, 200);
+          raw_image_free (img);
+
+          img = raw_session_develop_box (ses, &s, 200, 600, NULL, NULL, &error);
+          g_assert_no_error (error);
+          g_assert_cmpint (img->width, <=, 200);
+          g_assert_cmpint (img->height, <=, 600);
+          raw_image_free (img);
+
+          raw_session_free (ses);
+          ran++;
+        }
+      g_free (path);
+    }
+
+  if (! ran)
+    g_test_skip ("samples missing");
 }
 
 static void
@@ -974,7 +1313,7 @@ test_batch_session (void)
   raw_settings_defaults (&s);
   s.exposure  = 2.0;
   s.half_size = TRUE;
-  raw_batch_session_begin (&s, files);
+  g_assert_true (raw_batch_session_begin (&s, files, NULL));
 
   g_assert_true (raw_batch_session_lookup ("C:\\Photos\\A.NEF", &out));
   g_assert_cmpfloat (out.exposure, ==, 2.0);
@@ -1092,6 +1431,11 @@ main (int argc, char **argv)
   g_test_add_func ("/util/remote-paths",        test_remote_paths);
   g_test_add_func ("/develop/errors",           test_develop_errors);
   g_test_add_func ("/develop/sample",           test_develop_sample);
+  g_test_add_func ("/preview/fits-box",         test_preview_box);
+  g_test_add_func ("/geometry/straighten-crop", test_geometry);
+  g_test_add_func ("/tone/curve-pq-hlg",        test_tone_and_transfer);
+  g_test_add_func ("/camprofile/find",          test_profile_find);
+  g_test_add_func ("/xmp/write-read",           test_xmp_write);
   g_test_add_func ("/loupe/region-nef",         test_region_nef);
   g_test_add_func ("/loupe/region-rotated-auto", test_region_rotated_auto_wb);
   g_test_add_func ("/lens/lensfun",             test_lens);

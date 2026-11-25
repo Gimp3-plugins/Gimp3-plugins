@@ -145,13 +145,10 @@ temperature_to_xy (gdouble  T,
     }
   else
     {
-      /* Planckian locus, Kim et al. cubic spline */
+      /* Planckian locus, Kim et al. cubic spline (1667 K .. 4000 K) */
       gdouble t = 1.0 / T;
 
-      if (T <= 4000.0)
-        *x = -0.2661239e9 * t * t * t - 0.2343589e6 * t * t + 0.8776956e3 * t + 0.179910;
-      else
-        *x = -3.0258469e9 * t * t * t + 2.1070379e6 * t * t + 0.2226347e3 * t + 0.240390;
+      *x = -0.2661239e9 * t * t * t - 0.2343589e6 * t * t + 0.8776956e3 * t + 0.179910;
 
       if (T <= 2222.0)
         *y = -1.1063814 * pow (*x, 3) - 1.34811020 * *x * *x + 2.18555832 * *x - 0.20219683;
@@ -334,8 +331,9 @@ apply_settings (libraw_data_t     *lr,
   p->threshold      = 0.0f;   /* crashes in LibRaw 0.22.2: see denoise.c */
   p->fbdd_noiserd   = s->fbdd;
   p->med_passes     = preview ? 0 : s->median_passes;
-  p->aber[0]        = 1.0 / s->ca_red;
-  p->aber[2]        = 1.0 / s->ca_blue;
+  /* never hand LibRaw a non-finite or zero scale */
+  p->aber[0]        = (isfinite (s->ca_red)  && s->ca_red  > 0.5) ? 1.0 / s->ca_red  : 1.0;
+  p->aber[2]        = (isfinite (s->ca_blue) && s->ca_blue > 0.5) ? 1.0 / s->ca_blue : 1.0;
 
   switch (s->highlight)
     {
@@ -406,7 +404,8 @@ apply_settings (libraw_data_t     *lr,
 
 static gfloat *
 to_float_scaled (const libraw_processed_image_t *mem,
-                 gint                            max_size,
+                 gint                            max_w,
+                 gint                            max_h,
                  gint                           *out_w,
                  gint                           *out_h)
 {
@@ -415,8 +414,9 @@ to_float_scaled (const libraw_processed_image_t *mem,
   gint           f = 1, ow, oh, x, y;
   gfloat        *dst;
 
-  if (max_size > 0)
-    while (MAX (w, h) / f > max_size)
+  /* fit into max_w x max_h (portrait images must fit the height too) */
+  if (max_w > 0 && max_h > 0)
+    while (w / f > max_w || h / f > max_h)
       f++;
 
   ow = w / f;
@@ -615,7 +615,8 @@ lens_flags (const RawSettings *s)
 static RawImage *
 session_develop (RawSession         *ses,
                  const RawSettings  *s,
-                 gint                max_size,
+                 gint                max_w,
+                 gint                max_h,
                  const gdouble      *region,
                  RawProgressFunc     progress,
                  gpointer            progress_data,
@@ -626,6 +627,15 @@ session_develop (RawSession         *ses,
   RawImage                 *img;
   gdouble                   gain;
   gint                      ret;
+  g_autofree gchar         *profile = NULL;   /* camera profile in use */
+  gboolean                  use_profile;
+
+  /* an explicit camera profile, or one found for this camera */
+  if (s->camera_profile[0])
+    profile = g_strdup (s->camera_profile);
+  else if (s->auto_profile)
+    profile = rawheic_camprofile_find (s->profile_dir, lr->idata.make, lr->idata.model);
+  use_profile = profile && lr->idata.colors == 3;
 
   ses->ctx.func      = progress;
   ses->ctx.data      = progress_data;
@@ -648,10 +658,10 @@ session_develop (RawSession         *ses,
       ses->hot_done = FALSE;
     }
 
-  apply_settings (lr, s, ! region && max_size > 0 && max_size <= 2048);
+  apply_settings (lr, s, ! region && max_w > 0 && MAX (max_w, max_h) <= 2048);
 
   /* a camera profile works on LibRaw's camera RGB */
-  if (s->camera_profile[0] && lr->idata.colors == 3)
+  if (use_profile)
     lr->params.output_color = 0;
 
   if (region)
@@ -724,11 +734,20 @@ session_develop (RawSession         *ses,
   img = g_new0 (RawImage, 1);
   img->camera = g_strdup (raw_session_camera (ses));
 
+  /* the multipliers LibRaw really used (measured ones for auto/spot WB) */
+  {
+    gdouble g = lr->color.pre_mul[1] > 1e-6 ? lr->color.pre_mul[1] : 1.0;
+    gint    c;
+
+    for (c = 0; c < 4; c++)
+      img->used_mul[c] = lr->color.pre_mul[c] > 1e-6 ? lr->color.pre_mul[c] / g : 1.0;
+  }
+
   /* full size, integer output: hand LibRaw's buffer over (compensation is
    * rolled off softly); float output keeps compensated values above 1.0
    */
-  if (max_size <= 0 && mem->colors == 3 && ! lens_flags (s) &&
-      ! (s->camera_profile[0] && lr->idata.colors == 3) &&
+  if (max_w <= 0 && mem->colors == 3 && ! lens_flags (s) &&
+      ! use_profile &&
       ! (gain > 1.0 && s->depth == DEPTH_FLOAT))
     {
       if (gain > 1.0)
@@ -739,16 +758,20 @@ session_develop (RawSession         *ses,
       img->pixels16 = (guint16 *) mem->data;
       img->width    = mem->width;
       img->height   = mem->height;
+      rawheic_tone_apply (img, s->tone_curve);
       return img;
     }
 
-  img->pixels = to_float_scaled (mem, max_size, &img->width, &img->height);
+  img->pixels = to_float_scaled (mem, max_w, max_h, &img->width, &img->height);
   libraw_dcraw_clear_mem (mem);
 
   if (img->pixels && gain > 1.0)
     compensate_float (img->pixels, (gsize) img->width * img->height * 3, gain);
 
-  if (img->pixels && s->camera_profile[0] && lr->idata.colors == 3)
+  if (use_profile)
+    img->profile = g_path_get_basename (profile);
+
+  if (img->pixels && use_profile)
     {
       gfloat mul[4];
       gint   c;
@@ -756,7 +779,7 @@ session_develop (RawSession         *ses,
       for (c = 0; c < 4; c++)
         mul[c] = lr->color.pre_mul[c];
 
-      if (! rawheic_camprofile_apply (s->camera_profile, img->pixels,
+      if (! rawheic_camprofile_apply (profile, img->pixels,
                                       (gsize) img->width * img->height, mul,
                                       s->color_space, s->camera_profile_look, error))
         {
@@ -794,7 +817,10 @@ session_develop (RawSession         *ses,
     }
 
   if (img->pixels)
-    return img;
+    {
+      rawheic_tone_apply (img, s->tone_curve);
+      return img;
+    }
 
   raw_image_free (img);
   ret = LIBRAW_UNSUFFICIENT_MEMORY;
@@ -815,7 +841,21 @@ raw_session_develop (RawSession         *ses,
                      gpointer            progress_data,
                      GError            **error)
 {
-  return session_develop (ses, s, max_size, NULL, progress, progress_data, error);
+  return session_develop (ses, s, max_size, max_size, NULL, progress, progress_data, error);
+}
+
+/* Developed image that fits into @max_w x @max_h (previews). */
+RawImage *
+raw_session_develop_box (RawSession         *ses,
+                         const RawSettings  *s,
+                         gint                max_w,
+                         gint                max_h,
+                         RawProgressFunc     progress,
+                         gpointer            progress_data,
+                         GError            **error)
+{
+  return session_develop (ses, s, MAX (1, max_w), MAX (1, max_h), NULL,
+                          progress, progress_data, error);
 }
 
 /* Full-resolution develop of a part of the image, float pixels. */
@@ -825,7 +865,7 @@ raw_session_develop_region (RawSession         *ses,
                             const gdouble       region[4],
                             GError            **error)
 {
-  return session_develop (ses, s, G_MAXINT, region, NULL, NULL, error);
+  return session_develop (ses, s, G_MAXINT, G_MAXINT, region, NULL, NULL, error);
 }
 
 /* Size of the developed image at full resolution: after the camera crop
@@ -879,7 +919,28 @@ raw_develop (const gchar        *path,
   img = raw_session_develop (ses, s, max_size, progress, progress_data, error);
   raw_session_free (ses);   /* releases LibRaw's internal image before GIMP copies */
 
+  if (img && ! rawheic_geometry_apply (img, s, FALSE))
+    {
+      raw_image_free (img);
+      g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_NOMEM,
+                           _("Not enough memory to straighten or crop the image."));
+      return NULL;
+    }
+
   return img;
+}
+
+/* Drop the 16-bit buffer (LibRaw's or our own). */
+void
+raw_image_release_pixels16 (RawImage *img)
+{
+  if (img->own16)
+    g_free (img->pixels16);
+  if (img->mem)
+    libraw_dcraw_clear_mem (img->mem);
+  img->pixels16 = NULL;
+  img->mem      = NULL;
+  img->own16    = FALSE;
 }
 
 void
@@ -888,10 +949,10 @@ raw_image_free (RawImage *img)
   if (img)
     {
       g_free (img->pixels);
-      if (img->mem)
-        libraw_dcraw_clear_mem (img->mem);
+      raw_image_release_pixels16 (img);
       g_free (img->camera);
       g_free (img->lens);
+      g_free (img->profile);
       g_free (img);
     }
 }
@@ -976,7 +1037,8 @@ raw_extract_thumbnail (const gchar  *path,
                 }
               else if (mem->type == LIBRAW_IMAGE_BITMAP && mem->bits == 8 &&
                        mem->colors == 3 && mem->width > 0 && mem->height > 0 &&
-                       mem->data_size >= (guint) mem->width * mem->height * 3)
+                       mem->width <= MAX_DIMENSION && mem->height <= MAX_DIMENSION &&
+                       (gsize) mem->data_size >= (gsize) mem->width * mem->height * 3)
                 {
                   *is_jpeg = FALSE;
                   *bmp_w   = mem->width;

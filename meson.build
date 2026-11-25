@@ -1,5 +1,5 @@
 project('gimp-raw-heic', 'c', 'cpp',
-  version : '1.0.0',
+  version : '1.1.0',
   license : 'GPL-3.0-or-later',
   default_options : ['c_std=c11', 'cpp_std=c++17', 'buildtype=release',
                      'warning_level=2'])
@@ -13,16 +13,19 @@ heif_dep   = dependency('libheif', version : '>=1.17')
 lcms_dep   = dependency('lcms2')
 gexiv2_dep = dependency('gexiv2')
 lensfun_dep = dependency('lensfun')
-lensfun_db = lensfun_dep.get_variable(pkgconfig : 'datadir', default_value : '') / 'lensfun' / 'version_1'
+omp_dep    = dependency('openmp')
+lensfun_db = lensfun_dep.get_variable(pkgconfig : 'datadir', default_value : '/usr/share') / 'lensfun' / 'version_1'
 cygpath = find_program('cygpath', required : false)
 if host_machine.system() == 'windows' and cygpath.found()
   # pkg-config reports an MSYS path (/clang64/...); native code needs C:/...
   lensfun_db = run_command(cygpath, '-m', lensfun_db, check : true).stdout().strip()
 endif
 
-# LibRaw is linked statically so the plug-in folder needs no extra DLL;
-# its own dependencies (zlib, libjpeg, lcms2, libomp, libc++) ship with GIMP.
-libraw_dep = dependency('libraw_r', static : get_option('static_libraw'))
+# Windows: LibRaw is linked statically so the plug-in folder needs no extra
+# DLL; its own dependencies (zlib, libjpeg, lcms2, libomp, libc++) ship with
+# GIMP.  Linux: the distribution's shared libraw is used.
+is_windows = host_machine.system() == 'windows'
+libraw_dep = dependency('libraw_r', static : get_option('static_libraw') and is_windows)
 extra_deps = []
 if host_machine.system() == 'windows'
   # static LibRaw uses ntohs()/htonl() for byte swapping (no networking)
@@ -54,6 +57,10 @@ sources = files(
   'src/export-batch.c',
   'src/camprofile.c',
   'src/xmp.c',
+  'src/geometry.c',
+  'src/sync.c',
+  'src/hdr-export.c',
+  'src/tone.c',
 )
 
 link_args = []
@@ -63,8 +70,8 @@ endif
 
 executable('gimp-raw-heic', sources,
   dependencies : [gimp_dep, gimpui_dep, gegl_dep, heif_dep, lcms_dep,
-                  gexiv2_dep, libraw_dep, lensfun_dep] + extra_deps,
-  c_args : ['-DLIBRAW_NODLL', '-D_USE_MATH_DEFINES', '-fopenmp', '-Wno-unused-parameter'],
+                  gexiv2_dep, libraw_dep, lensfun_dep, omp_dep] + extra_deps,
+  c_args : ['-DLIBRAW_NODLL', '-D_USE_MATH_DEFINES', '-Wno-unused-parameter'],
   link_args : link_args,
   # LibRaw is C++: link with the C++ driver
   link_language : 'cpp',
@@ -76,10 +83,11 @@ subdir('po')
 unit_tests = executable('unit-tests',
   files('tests/unit/test_core.c', 'src/settings.c', 'src/denoise.c', 'src/util.c',
         'src/presets.c', 'src/lens.c', 'src/heif-load.c', 'src/profiles.c',
-        'src/camprofile.c', 'src/xmp.c'),
+        'src/camprofile.c', 'src/xmp.c', 'src/geometry.c', 'src/hdr-export.c',
+        'src/tone.c'),
   dependencies : [gimp_dep, gimpui_dep, gegl_dep, heif_dep, lcms_dep,
-                  gexiv2_dep, libraw_dep, lensfun_dep] + extra_deps,
-  c_args : ['-DLIBRAW_NODLL', '-D_USE_MATH_DEFINES', '-fopenmp',
+                  gexiv2_dep, libraw_dep, lensfun_dep, omp_dep] + extra_deps,
+  c_args : ['-DLIBRAW_NODLL', '-D_USE_MATH_DEFINES',
             '-Wno-unused-parameter',
             '-DSAMPLES_DIR="' + meson.current_source_dir() / 'samples' + '"',
             '-DLENSFUN_DB_DIR="' + lensfun_db + '"'],
