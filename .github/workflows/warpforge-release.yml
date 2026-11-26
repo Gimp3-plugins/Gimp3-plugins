@@ -1,0 +1,81 @@
+# WarpForge release: push a tag warpforge-v<version> (e.g. warpforge-v1.0.0rc1).
+# Tests, builds the Linux and Windows ZIPs and publishes a GitHub release with
+# them; versions containing "rc", "a" or "b" are marked as pre-releases.
+name: WarpForge release
+
+on:
+  push:
+    tags: ["warpforge-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        # 22.04: an older glibc, so the Linux library loads on more distributions.
+        os: [ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: warpforge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: cargo test --release --manifest-path src/warpforge/native/Cargo.toml
+      - run: cargo build --release --manifest-path src/warpforge/native/Cargo.toml
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: mypy
+      - run: pytest
+      - name: Tag matches the package version
+        shell: python
+        run: |
+          import os, sys
+          sys.path.insert(0, "tools")
+          import layout
+          tag = os.environ["GITHUB_REF_NAME"].removeprefix("warpforge-v")
+          if tag != layout.version():
+              sys.exit(f"tag {tag} != package version {layout.version()}")
+      - run: python tools/package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zip-${{ matrix.os }}
+          path: warpforge/dist/*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes from CHANGELOG.md
+        id: notes
+        shell: python
+        run: |
+          import os, re
+          version = os.environ["GITHUB_REF_NAME"].removeprefix("warpforge-v")
+          text = open("warpforge/CHANGELOG.md", encoding="utf-8").read()
+          match = re.search(rf"^## {re.escape(version)}\b.*?$(.*?)(?=^## |\Z)", text, re.S | re.M)
+          body = match.group(1).strip() if match else "See warpforge/CHANGELOG.md."
+          body += ("\n\n**Install:** unpack the ZIP for your system and run `install.ps1` "
+                   "(Windows) or `./install.sh` (Linux/macOS, `--flatpak` for Flatpak GIMP). "
+                   "Details: [warpforge/README.md](https://github.com/Gimp3-plugins/Gimp3-plugins/tree/main/warpforge)"
+                   " · [Polski](https://github.com/Gimp3-plugins/Gimp3-plugins/blob/main/warpforge/README.pl.md)")
+          open("notes.md", "w", encoding="utf-8").write(body)
+          pre = any(k in version for k in ("rc", "a", "b"))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"version={version}\nprerelease={'true' if pre else 'false'}\n")
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: WarpForge ${{ steps.notes.outputs.version }} — Puppet Warp & Mesh Warp
+          body_path: notes.md
+          prerelease: ${{ steps.notes.outputs.prerelease }}
+          make_latest: false
+          files: dist/*.zip

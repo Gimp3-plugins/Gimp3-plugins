@@ -1,0 +1,20 @@
+[package]
+name = "warpforge-native"
+version = "1.0.0-rc.1"
+edition = "2021"
+rust-version = "1.88"  # slice::as_chunks, usize::is_multiple_of
+license = "GPL-3.0-or-later"
+description = "Native warp kernels for WarpForge"
+publish = false
+
+[lib]
+name = "warpforge_native"
+# A plain C ABI library loaded with ctypes. PyO3 is deliberately not used:
+# GIMP's bundled Python on Windows is an MSYS2/UCRT build whose extension ABI
+# differs from python.org CPython, while a C ABI works with any interpreter.
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

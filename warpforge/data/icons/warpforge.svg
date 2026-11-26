@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- WarpForge icon: a grid bent by three pins. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="#2b3440"/>
+  <g fill="none" stroke="#9fd4ff" stroke-width="2.2" stroke-linecap="round">
+    <path d="M10 14 C 24 10, 40 18, 54 14"/>
+    <path d="M10 26 C 22 22, 42 34, 54 26"/>
+    <path d="M10 38 C 22 34, 40 48, 54 38"/>
+    <path d="M10 50 C 24 46, 40 54, 54 50"/>
+    <path d="M14 10 C 10 24, 18 40, 14 54"/>
+    <path d="M26 10 C 22 24, 34 40, 26 54"/>
+    <path d="M38 10 C 34 24, 46 38, 38 54"/>
+    <path d="M50 10 C 46 24, 54 40, 50 54"/>
+  </g>
+  <g stroke="#1b1f24" stroke-width="2">
+    <circle cx="30" cy="31" r="5" fill="#ffc21a"/>
+    <circle cx="44" cy="43" r="4" fill="#ffffff"/>
+    <circle cx="19" cy="20" r="4" fill="#ffffff"/>
+  </g>
+</svg>

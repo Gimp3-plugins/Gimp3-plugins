@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:warpforge:preset:v1",
+  "title": "WarpForge preset, schema version 1",
+  "description": "Parameters of a Puppet Warp or Mesh Warp. Coordinates are layer pixels; no pixel data is stored. image_width/image_height are the dimensions of the layer the coordinates refer to.",
+  "type": "object",
+  "required": ["schema_version", "plugin", "warp_type", "image_width", "image_height", "stiffness"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plugin": {"const": "warpforge"},
+    "name": {"type": "string", "maxLength": 200},
+    "warp_type": {"enum": ["puppet", "mesh"]},
+    "image_width": {"type": "integer", "minimum": 1},
+    "image_height": {"type": "integer", "minimum": 1},
+    "layer_id": {"type": ["integer", "null"]},
+    "selection_bounds": {
+      "description": "x, y, width, height of the selection within the layer when the preset was made.",
+      "oneOf": [
+        {"type": "null"},
+        {"type": "array", "items": {"type": "integer"}, "minItems": 4, "maxItems": 4}
+      ]
+    },
+    "stiffness": {"type": "number", "minimum": 0, "maximum": 1},
+    "mesh": {
+      "type": "object",
+      "required": ["columns", "rows", "vertices"],
+      "properties": {
+        "columns": {"type": "integer", "minimum": 0, "maximum": 32},
+        "rows": {"type": "integer", "minimum": 0, "maximum": 32},
+        "vertices": {"type": "array", "items": {"$ref": "#/$defs/point"}}
+      },
+      "additionalProperties": false
+    },
+    "pins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "source", "target", "radius"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "source": {"$ref": "#/$defs/point"},
+          "target": {"$ref": "#/$defs/point"},
+          "radius": {"type": "number", "exclusiveMinimum": 0},
+          "weight": {"type": "number", "minimum": 0.1, "maximum": 10},
+          "pinned_rotation": {"type": "boolean"},
+          "pinned_scale": {"type": "boolean"},
+          "group": {
+            "description": "Rigid group: pins with the same group move together.",
+            "type": ["string", "null"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "mask": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "source": {"enum": ["selection"]}
+      },
+      "additionalProperties": false
+    },
+    "effect": {
+      "description": "Present only in the copy stored with a layer (parasite 'warpforge-effect'), not in exported presets.",
+      "type": "object",
+      "required": ["output"],
+      "properties": {
+        "output": {"enum": ["new_layer", "in_place"]},
+        "source_layer": {
+          "description": "Tag of the untouched original layer (its 'warpforge-source' parasite).",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"warp_type": {"const": "mesh"}}},
+      "then": {
+        "required": ["mesh"],
+        "properties": {
+          "mesh": {"properties": {"columns": {"minimum": 2}, "rows": {"minimum": 2}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"warp_type": {"const": "puppet"}}},
+      "then": {"required": ["pins"]}
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "point": {
+      "type": "array",
+      "items": {"type": "number"},
+      "minItems": 2,
+      "maxItems": 2
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "plugin": "warpforge",
+  "warp_type": "puppet",
+  "image_width": 1920,
+  "image_height": 1080,
+  "layer_id": 12,
+  "selection_bounds": [
+    0,
+    0,
+    1920,
+    1080
+  ],
+  "stiffness": 0.55,
+  "mesh": {
+    "columns": 0,
+    "rows": 0,
+    "vertices": []
+  },
+  "pins": [
+    {
+      "id": "pin-1",
+      "source": [
+        512.0,
+        384.0
+      ],
+      "target": [
+        542.0,
+        371.0
+      ],
+      "radius": 180.0,
+      "weight": 1.0,
+      "pinned_rotation": false,
+      "pinned_scale": false
+    }
+  ],
+  "mask": {
+    "enabled": false,
+    "source": "selection"
+  }
+}

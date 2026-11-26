@@ -1,0 +1,2 @@
+option('gimp_plugin_dir', type: 'string', value: '',
+       description: 'GIMP plug-ins directory (default: from gimp-3.0.pc)')

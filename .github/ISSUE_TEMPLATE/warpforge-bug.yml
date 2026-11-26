@@ -1,0 +1,38 @@
+name: "WarpForge: bug report"
+description: Something in the WarpForge plug-in (Puppet/Mesh Warp) does not work as expected
+labels: [bug, warpforge]
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: WarpForge version, GIMP version, operating system
+      placeholder: WarpForge 1.0.0rc1, GIMP 3.2.6, Windows 11
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is GIMP installed?
+      options: [Windows installer, Linux distribution package, Flatpak, Snap, AppImage, macOS, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you do, what did you expect, what happened?
+      description: Include the image precision (Image › Precision), the layer size and the mode (Puppet or Mesh).
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Start GIMP with WARPFORGE_LOG_FILE and WARPFORGE_LOG_LEVEL=DEBUG set (see README › Reporting bugs) and paste the log.
+      render: text
+  - type: textarea
+    id: preset
+    attributes:
+      label: Preset (optional)
+      description: A preset saved with "Save preset…" that reproduces the problem.
+      render: json
