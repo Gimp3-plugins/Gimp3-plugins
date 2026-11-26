@@ -281,7 +281,10 @@ def run_procedure():
     """Call the installed plug-in through the PDB (needs tools/install.py first)."""
     proc = Gimp.get_pdb().lookup_procedure(gb.PROC_MAIN)
     if proc is None:
-        log.warning("SKIP procedure checks: WarpForge is not installed in this GIMP profile")
+        if os.environ.get("WARPFORGE_EXPECT_INSTALLED"):
+            check("plug-in installed in this GIMP profile", False)
+        else:
+            log.warning("SKIP procedure checks: WarpForge is not installed in this GIMP profile")
         return
     image, layer = make_image(200, 100, Gimp.Precision.U8_NON_LINEAR)
     # A PDB lookup does not expose the icon; GIMP's own registry does.

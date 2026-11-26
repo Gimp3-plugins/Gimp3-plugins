@@ -98,7 +98,8 @@ picks a specific profile. Restart GIMP afterwards.
    you get `plug-ins/warpforge/warpforge.py`:
    - Windows: `%APPDATA%\GIMP\3.2\plug-ins\`
    - Linux: `~/.config/GIMP/3.2/plug-ins/`
-   - Linux Flatpak: `~/.var/app/org.gimp.GIMP/config/GIMP/3.2/plug-ins/`
+   - Linux Flatpak (Flathub GIMP 3.2): also `~/.config/GIMP/3.2/plug-ins/`; older
+     Flatpak builds used `~/.var/app/org.gimp.GIMP/config/GIMP/3.x/plug-ins/`
    - macOS: `~/Library/Application Support/GIMP/3.2/plug-ins/`
 
    (Use your GIMP version, e.g. `3.0` instead of `3.2`.)

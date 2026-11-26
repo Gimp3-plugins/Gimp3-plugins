@@ -2,8 +2,11 @@
 
 ## User install (simplest, works today)
 
-Flatpak GIMP reads user plug-ins from
-`~/.var/app/org.gimp.GIMP/config/GIMP/3.x/plug-ins/`. From the Linux ZIP:
+Flathub's GIMP 3.2 keeps its profile in the host's `~/.config/GIMP/3.2/`
+(verified in CI with GIMP 3.2.8); older Flatpak builds used
+`~/.var/app/org.gimp.GIMP/config/GIMP/3.x/`. `--flatpak` looks in both and
+picks the newest profile, so start GIMP once before installing. From the
+Linux ZIP:
 
 ```sh
 ./install.sh --flatpak

@@ -29,13 +29,15 @@ log = logging.getLogger("install")
 
 def gimp_config_bases(flatpak: bool) -> list[Path]:
     home = Path.home()
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
     if flatpak:
-        return [home / ".var/app/org.gimp.GIMP/config/GIMP"]
+        # Flathub's GIMP 3.2 uses the host's ~/.config/GIMP (verified in CI with
+        # 3.2.8); older Flatpak builds kept their profile inside ~/.var/app.
+        return [xdg / "GIMP", home / ".var/app/org.gimp.GIMP/config/GIMP"]
     if sys.platform == "win32":
         return [Path(os.environ.get("APPDATA", home / "AppData/Roaming")) / "GIMP"]
     if sys.platform == "darwin":
         return [home / "Library/Application Support/GIMP"]
-    xdg = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
     return [xdg / "GIMP"]
 
 

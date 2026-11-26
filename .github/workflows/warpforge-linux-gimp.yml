@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  SMOKE_ARGS: --env=WARPFORGE_SRC=${{ github.workspace }}/warpforge/src
+  SMOKE_ARGS: --env=WARPFORGE_SRC=${{ github.workspace }}/warpforge/src --env=WARPFORGE_EXPECT_INSTALLED=1
 
 jobs:
   user-install:
@@ -46,7 +46,7 @@ jobs:
           mkdir -p dist/unpacked
           unzip -q dist/warpforge-*-linux-x86_64.zip -d dist/unpacked
           dist/unpacked/install.sh --flatpak
-          find ~/.var/app/org.gimp.GIMP -path '*plug-ins/warpforge/warpforge.py'
+          find ~/.config/GIMP ~/.var/app/org.gimp.GIMP -path "*plug-ins/warpforge/warpforge.py" 2>/dev/null
       - name: Smoke test inside Flatpak GIMP
         run: >
           python tools/run_gimp_smoke.py --gimp-command

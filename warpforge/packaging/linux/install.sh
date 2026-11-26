@@ -19,17 +19,28 @@ for arg in "$@"; do
     esac
 done
 
+config="${XDG_CONFIG_HOME:-$HOME/.config}/GIMP"
 if [ "$flatpak" -eq 1 ]; then
-    base="$HOME/.var/app/org.gimp.GIMP/config/GIMP"
+    # Flathub's GIMP 3.2 uses the host's ~/.config/GIMP; older Flatpak builds
+    # kept their profile inside ~/.var/app. Look in both.
+    bases="$config
+$HOME/.var/app/org.gimp.GIMP/config/GIMP"
 elif [ "$(uname)" = "Darwin" ]; then
-    base="$HOME/Library/Application Support/GIMP"
+    bases="$HOME/Library/Application Support/GIMP"
 else
-    base="${XDG_CONFIG_HOME:-$HOME/.config}/GIMP"
+    bases="$config"
 fi
 
-# newest 3.x profile; default to 3.0 if GIMP has not created one yet
-profile=$(ls -d "$base"/3.* 2>/dev/null | sort -V | tail -n 1 || true)
-[ -n "$profile" ] || profile="$base/3.0"
+# the newest existing 3.x profile (sorted by version, then by path)
+profile=$(printf '%s\n' "$bases" | while IFS= read -r base; do
+    for dir in "$base"/3.*; do
+        [ -d "$dir" ] && printf '%s\t%s\n' "${dir##*/}" "$dir"
+    done
+done | sort -t "$(printf '\t')" -k1,1V | tail -n 1 | cut -f2-)
+if [ -z "$profile" ]; then
+    echo "No GIMP 3 profile found. Start GIMP 3 once (then close it) and run this again." >&2
+    exit 1
+fi
 target="$profile/plug-ins/warpforge"
 
 rm -rf "$target"
