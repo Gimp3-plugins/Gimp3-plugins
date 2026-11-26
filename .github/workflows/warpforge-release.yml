@@ -21,8 +21,8 @@ jobs:
       run:
         working-directory: warpforge
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: cargo test --release --manifest-path src/warpforge/native/Cargo.toml
@@ -41,7 +41,7 @@ jobs:
           if tag != layout.version():
               sys.exit(f"tag {tag} != package version {layout.version()}")
       - run: python tools/package.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: zip-${{ matrix.os }}
           path: warpforge/dist/*.zip
@@ -50,8 +50,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -72,7 +72,7 @@ jobs:
           pre = any(k in version for k in ("rc", "a", "b"))
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"version={version}\nprerelease={'true' if pre else 'false'}\n")
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           name: WarpForge ${{ steps.notes.outputs.version }} — Puppet Warp & Mesh Warp
           body_path: notes.md

@@ -15,7 +15,7 @@ jobs:
       run:
         working-directory: warpforge/src/warpforge/native
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: cargo test
       - run: cargo clippy --all-targets -- -D warnings
 
@@ -29,8 +29,8 @@ jobs:
       run:
         working-directory: warpforge
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # The native library is loaded by the tests (backend parity, speed, leaks).
@@ -40,7 +40,7 @@ jobs:
       - run: mypy
       - run: pytest
       - run: python tools/package.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: warpforge-${{ matrix.os }}
           path: warpforge/dist/*.zip

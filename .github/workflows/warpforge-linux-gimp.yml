@@ -1,0 +1,91 @@
+# WarpForge inside a real GIMP 3 on Linux: the Flathub build of GIMP, run
+# headless. Checks the user install (install.sh --flatpak from the release
+# ZIP) and the Flatpak extension built from the manifest.
+name: WarpForge in Flatpak GIMP
+on:
+  workflow_dispatch:
+  push:
+    paths: ['warpforge/**', '.github/workflows/warpforge-linux-gimp.yml']
+permissions:
+  contents: read
+
+env:
+  SMOKE_ARGS: --env=WARPFORGE_SRC=${{ github.workspace }}/warpforge/src
+
+jobs:
+  user-install:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: warpforge
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Flatpak and GIMP from Flathub
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q flatpak dbus
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.gimp.GIMP
+          flatpak info --user org.gimp.GIMP | head -12
+      - name: Find gimp-console in the Flatpak
+        run: |
+          bin=$(flatpak run --command=sh org.gimp.GIMP -c 'cd /app/bin && ls gimp-console* | sort | tail -n 1')
+          echo "gimp-console: $bin"
+          echo "GIMP_CONSOLE=$bin" >> "$GITHUB_ENV"
+      - run: cargo build --release --manifest-path src/warpforge/native/Cargo.toml
+      - run: python tools/package.py
+      - name: First start creates the GIMP profile
+        run: |
+          dbus-run-session -- flatpak run --command="$GIMP_CONSOLE" org.gimp.GIMP -i --no-splash --quit || true
+          find ~/.var/app/org.gimp.GIMP ~/.config/GIMP -maxdepth 4 -type d 2>/dev/null | head -20
+      - name: Install with the release ZIP's installer
+        run: |
+          mkdir -p dist/unpacked
+          unzip -q dist/warpforge-*-linux-x86_64.zip -d dist/unpacked
+          dist/unpacked/install.sh --flatpak
+          find ~/.var/app/org.gimp.GIMP -path '*plug-ins/warpforge/warpforge.py'
+      - name: Smoke test inside Flatpak GIMP
+        run: >
+          python tools/run_gimp_smoke.py --gimp-command
+          "dbus-run-session -- flatpak run $SMOKE_ARGS --command=$GIMP_CONSOLE org.gimp.GIMP"
+          || python tools/run_gimp_smoke.py --verbose --gimp-command
+          "dbus-run-session -- flatpak run $SMOKE_ARGS --command=$GIMP_CONSOLE org.gimp.GIMP"
+      - name: Non-destructive filter probe (informational)
+        continue-on-error: true
+        run: >
+          python tools/run_gimp_smoke.py --script tests/gimp/nde_probe.py --gimp-command
+          "dbus-run-session -- flatpak run $SMOKE_ARGS --command=$GIMP_CONSOLE org.gimp.GIMP"
+
+  extension:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Flatpak, flatpak-builder and GIMP
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q flatpak flatpak-builder dbus
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.gimp.GIMP
+      - name: Build and install the extension from the manifest
+        run: >
+          flatpak-builder --user --install --force-clean --install-deps-from=flathub
+          --disable-rofiles-fuse build-dir
+          warpforge/packaging/flatpak/org.gimp.GIMP.Plugin.WarpForge.json
+      - name: Extension installed
+        run: |
+          flatpak list --user | grep -i warpforge
+          bin=$(flatpak run --command=sh org.gimp.GIMP -c 'cd /app/bin && ls gimp-console* | sort | tail -n 1')
+          echo "GIMP_CONSOLE=$bin" >> "$GITHUB_ENV"
+          flatpak run --command=sh org.gimp.GIMP -c 'ls -R /app/extensions | head -40'
+      - name: Native library for the in-process checks
+        run: cargo build --release --manifest-path warpforge/src/warpforge/native/Cargo.toml
+      - name: Smoke test with the extension (no user install)
+        working-directory: warpforge
+        run: >
+          python3 tools/run_gimp_smoke.py --gimp-command
+          "dbus-run-session -- flatpak run $SMOKE_ARGS --command=$GIMP_CONSOLE org.gimp.GIMP"
+          || python3 tools/run_gimp_smoke.py --verbose --gimp-command
+          "dbus-run-session -- flatpak run $SMOKE_ARGS --command=$GIMP_CONSOLE org.gimp.GIMP"

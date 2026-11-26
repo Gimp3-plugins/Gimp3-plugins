@@ -2,11 +2,12 @@
   "id": "org.gimp.GIMP.Plugin.WarpForge",
   "runtime": "org.gimp.GIMP",
   "runtime-version": "stable",
-  "sdk": "org.gnome.Sdk//48",
+  "sdk": "org.gnome.Sdk//51",
   "sdk-extensions": [
     "org.freedesktop.Sdk.Extension.rust-stable"
   ],
   "build-extension": true,
+  "branch": "3",
   "separate-locales": false,
   "appstream-compose": false,
   "build-options": {
@@ -22,7 +23,7 @@
       "buildsystem": "simple",
       "build-commands": [
         "cargo build --release --offline --manifest-path src/warpforge/native/Cargo.toml",
-        "python3 tools/install.py --target ${FLATPAK_DEST}/lib/gimp/3.0/plug-ins",
+        "python3 tools/install.py --target ${FLATPAK_DEST}/plug-ins",
         "install -Dm644 packaging/flatpak/org.gimp.GIMP.Plugin.WarpForge.metainfo.xml ${FLATPAK_DEST}/share/metainfo/org.gimp.GIMP.Plugin.WarpForge.metainfo.xml"
       ],
       "sources": [

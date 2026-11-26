@@ -3,6 +3,7 @@
 """Run tests/gimp/smoke_bridge.py inside headless GIMP 3 (gimp-console).
 
     python tools/run_gimp_smoke.py [--gimp PATH_TO_gimp-console] [--script FILE]
+    python tools/run_gimp_smoke.py --gimp-command "flatpak run --command=gimp-console org.gimp.GIMP"
 
 ``--script tests/gimp/nde_probe.py`` re-checks whether GIMP lets a plug-in
 attach a warp as a non-destructive filter.
@@ -15,6 +16,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -45,21 +47,25 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser()
     parser.add_argument("--gimp", help="path to gimp-console")
+    parser.add_argument("--gimp-command",
+                        help="full command that starts gimp-console, e.g. through flatpak run")
+    parser.add_argument("--verbose", action="store_true", help="print GIMP's whole output")
     parser.add_argument("--script", default="tests/gimp/smoke_bridge.py",
                         help="script to run inside GIMP (relative to the repository)")
     args = parser.parse_args()
-    gimp = args.gimp or find_gimp()
+    prefix = shlex.split(args.gimp_command) if args.gimp_command else [args.gimp or find_gimp()]
     script = (ROOT / args.script).as_posix()
     env = dict(os.environ, WARPFORGE_SRC=str(ROOT / "src"))
     code = f"exec(open({script!r}, encoding='utf-8').read())"
-    cmd = [gimp, "-i", "-n", "--no-splash", "--batch-interpreter=python-fu-eval",
+    cmd = [*prefix, "-i", "-n", "--no-splash", "--batch-interpreter=python-fu-eval",
            "-b", code, "--quit"]
-    log.info("Running %s", gimp)
+    log.info("Running %s", " ".join(prefix))
     proc = subprocess.run(cmd, env=env, capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=300)
     output = proc.stdout + proc.stderr
-    lines = [line for line in output.splitlines() if "SMOKE" in line or "Error" in line
-             or "Traceback" in line or line.startswith("  ")]
+    lines = output.splitlines() if args.verbose else [
+        line for line in output.splitlines() if "SMOKE" in line or "Error" in line
+        or "Traceback" in line or line.startswith("  ")]
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")  # GIMP's output is not always ASCII
     sys.stdout.write("\n".join(lines) + "\n")
