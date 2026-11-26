@@ -4,9 +4,10 @@ Puppet Warp and Mesh Warp for **GIMP 3**: deform a layer with control pins or a
 mesh, with a live preview. · [Polski](README.pl.md) ·
 [Download](https://github.com/Gimp3-plugins/Gimp3-plugins/releases) (`warpforge-v*` releases)
 
-> **Version 1.0.0rc1 – release candidate.** All MVP features are in and the
-> automated tests pass on Windows (including a headless GIMP 3.2.6). Not yet
-> confirmed by hand in GIMP's interface, on Linux or in Flatpak – see
+> **Version 1.0.0rc2 – release candidate.** All MVP features are in. The
+> automated tests pass on Windows (with a headless GIMP 3.2.6) and on Linux
+> inside Flathub's GIMP 3.2.8 (installed by the ZIP's installer and as a
+> Flatpak extension). Not yet confirmed by hand in GIMP's interface – see
 > [Testing status](#testing-status). The effect is re-editable but **not** a
 > native GIMP non-destructive filter: GIMP 3.2 does not allow that for a warp
 > from a plug-in – see [Non-destructive editing](#non-destructive-editing).
@@ -202,7 +203,8 @@ tools/make_samples.py --large` also writes 4000 and 8000 px grids to
 | Headless GIMP 3.2.6 (`tools/run_gimp_smoke.py`): reading, preview, commit in 8-bit and 16-bit float, selection, mask, effects, XCF round trip, PDB procedures | Pass (Windows) |
 | Dialog builds and renders with GIMP's own Python/GTK (`tools/render_dialog_screenshot.py`) | Pass (Windows) |
 | Interactive use in GIMP's UI ([manual test list](tests/gimp/MANUAL_TESTS.md)) | **Not done yet** |
-| Linux native, Flatpak (user install and the draft extension) | **Not tested yet** |
+| Linux, headless GIMP 3.2.8 from Flathub, in CI (`.github/workflows/warpforge-linux-gimp.yml`): the same smoke test with the plug-in installed by `install.sh --flatpak` from the release ZIP, and again as a Flatpak extension built from the manifest | Pass |
+| Linux distribution packages of GIMP 3 (not Flatpak) | Not tested (same code and `.so`; expected to work) |
 | macOS | Not built or tested |
 
 ## Reporting bugs

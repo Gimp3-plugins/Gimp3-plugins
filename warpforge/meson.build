@@ -7,7 +7,7 @@
 #
 # Without the option the directory is taken from gimp-3.0.pc.
 
-project('warpforge', version: '1.0.0rc1', license: 'GPL-3.0-or-later',
+project('warpforge', version: '1.0.0rc2', license: 'GPL-3.0-or-later',
         meson_version: '>=0.60')
 
 plugin_root = get_option('gimp_plugin_dir')

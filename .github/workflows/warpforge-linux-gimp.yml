@@ -53,11 +53,11 @@ jobs:
           "dbus-run-session -- flatpak run $SMOKE_ARGS --command=$GIMP_CONSOLE org.gimp.GIMP"
           || python tools/run_gimp_smoke.py --verbose --gimp-command
           "dbus-run-session -- flatpak run $SMOKE_ARGS --command=$GIMP_CONSOLE org.gimp.GIMP"
-      - name: Non-destructive filter probe (informational)
-        continue-on-error: true
+      - name: Non-destructive filter probe (informational, see NOTES.md)
         run: >
           python tools/run_gimp_smoke.py --script tests/gimp/nde_probe.py --gimp-command
           "dbus-run-session -- flatpak run $SMOKE_ARGS --command=$GIMP_CONSOLE org.gimp.GIMP"
+          || echo "No way to attach a warp as a GIMP filter yet (expected)."
 
   extension:
     runs-on: ubuntu-24.04

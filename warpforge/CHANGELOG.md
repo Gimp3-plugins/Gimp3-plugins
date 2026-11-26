@@ -2,6 +2,22 @@
 
 All notable changes to WarpForge. Versions follow [PEP 440](https://peps.python.org/pep-0440/).
 
+## 1.0.0rc2 – 2026-11-26
+
+### Fixed
+- `install.sh --flatpak` and `tools/install.py --flatpak` installed into
+  `~/.var/app/org.gimp.GIMP/config/GIMP`, but Flathub's GIMP 3.2 uses the
+  host's `~/.config/GIMP/3.2`, so the plug-in did not appear. Both now look in
+  both places and pick the newest profile.
+- `install.sh` no longer falls back to a `3.0` folder when GIMP has never
+  been started; it asks to start GIMP once instead.
+- The Flatpak extension manifest now targets GIMP's real extension point
+  (branch `3`, `plug-ins/`, GNOME SDK 51); it builds and loads.
+
+### Added
+- CI runs the headless GIMP test on Linux inside Flathub's GIMP 3.2.8, with
+  the release ZIP's installer and as a Flatpak extension.
+
 ## 1.0.0rc1 – 2026-11-26
 
 First release candidate: the complete MVP from the project brief.

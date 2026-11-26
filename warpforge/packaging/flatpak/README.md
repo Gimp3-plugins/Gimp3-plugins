@@ -18,7 +18,7 @@ The Linux ZIP's native library is built on Ubuntu 22.04 (glibc 2.35). The
 GIMP Flatpak runtime is newer, so it loads; if it ever does not, WarpForge
 falls back to its Python renderer and says so in the status line.
 
-## As a Flatpak extension (draft, not yet built)
+## As a Flatpak extension
 
 `org.gimp.GIMP.Plugin.WarpForge.json` builds the native library with the Rust
 SDK extension (the crate has no dependencies, so `--offline` works) and
@@ -28,11 +28,14 @@ installs the plug-in plus AppStream metadata into the extension prefix:
 flatpak-builder --user --install build-dir packaging/flatpak/org.gimp.GIMP.Plugin.WarpForge.json
 ```
 
-**Unverified:** this manifest was written on Windows and has not been run
-through `flatpak-builder`. Before using or submitting it to Flathub, check:
+CI (`.github/workflows/warpforge-linux-gimp.yml`, job `extension`) builds and
+installs it with `flatpak-builder` against Flathub's GIMP 3.2.8 and runs the
+headless smoke test with only the extension installed – the procedures,
+the icon and the native library all load.
 
-- `sdk` must match the runtime of the installed GIMP
-  (`flatpak info --show-runtime org.gimp.GIMP` → use the same GNOME version);
-- the plug-in path inside the extension (`lib/gimp/3.0/plug-ins`) against the
-  `org.gimp.GIMP.Plugin` extension point of the current GIMP Flatpak;
-- Flathub additionally needs screenshots in the metainfo.
+The manifest follows GIMP's `org.gimp.GIMP.Plugin` extension point (version
+`3`, `plug-ins` merged from every extension, see Flathub's `org.gimp.GIMP.json`):
+branch `3`, prefix `/app/extensions/WarpForge`, files in `plug-ins/warpforge/`.
+`sdk` must follow GIMP's runtime (GNOME 51 for GIMP 3.2.8:
+`flatpak info --show-runtime org.gimp.GIMP`). For a Flathub submission the
+metainfo still needs screenshots.

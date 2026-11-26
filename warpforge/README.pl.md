@@ -4,10 +4,11 @@ Puppet Warp i Mesh Warp dla **GIMP-a 3**: deformowanie warstwy pinami albo
 siatką, z podglądem na żywo. · [English](README.md) ·
 [Pobierz](https://github.com/Gimp3-plugins/Gimp3-plugins/releases) (wydania `warpforge-v*`)
 
-> **Wersja 1.0.0rc1 – wydanie kandydujące.** Wszystkie funkcje są gotowe, a
-> testy automatyczne przechodzą na Windowsie (także w GIMP-ie 3.2.6 bez okna).
-> Obsługa w interfejsie GIMP-a, Linux i Flatpak nie zostały jeszcze
-> sprawdzone ręcznie. Efekt można ponownie edytować, ale **nie** jest to
+> **Wersja 1.0.0rc2 – wydanie kandydujące.** Wszystkie funkcje są gotowe.
+> Testy automatyczne przechodzą na Windowsie (w GIMP-ie 3.2.6 bez okna) i na
+> Linuksie w GIMP-ie 3.2.8 z Flathuba (instalacja z ZIP-a i rozszerzenie
+> Flatpak). Obsługa w interfejsie GIMP-a nie została jeszcze sprawdzona
+> ręcznie. Efekt można ponownie edytować, ale **nie** jest to
 > natywny filtr nieniszczący GIMP-a – GIMP 3.2 na to nie pozwala (szczegóły
 > niżej).
 

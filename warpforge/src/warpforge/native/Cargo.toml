@@ -1,6 +1,6 @@
 [package]
 name = "warpforge-native"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 edition = "2021"
 rust-version = "1.88"  # slice::as_chunks, usize::is_multiple_of
 license = "GPL-3.0-or-later"
