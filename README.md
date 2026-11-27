@@ -16,6 +16,8 @@ Plug-ins for **GIMP 3** (Windows). · Wtyczki do **GIMP-a 3** (Windows).
 | **[Filtry Instagram](gimp-instagram-filtry/)** (PL) | 22 filtry w stylu Instagrama (1977, Lofi, Toaster, X-Pro II…) i wtyczka *Obramowanie tekstu*, przeniesione z GIMP 2 na GIMP 3 - Python, bez zewnętrznych bibliotek. | [Wydanie](../../releases/tag/migrated/gimp-instagram-filtry/v1.0.0) | [Polski](gimp-instagram-filtry/README.pl.md) |
 | **[WarpForge](warpforge/)** | **Puppet Warp and Mesh Warp**: deform a layer with pins (rigid segments, stiffness) or a 2–32 mesh, live preview, one undo step, re-editable effect, JSON presets. Windows and Linux x64. Release candidate. | [Releases](../../releases) (`warpforge-v*`) | [English](warpforge/README.md) · [Polski](warpforge/README.pl.md) |
 | **[WarpForge](warpforge/)** (PL) | **Puppet Warp i Mesh Warp**: deformacja warstwy pinami (sztywne segmenty, sztywność) albo siatką 2–32, podgląd na żywo, jeden krok cofania, efekt do ponownej edycji, presety JSON. Windows i Linux x64. Wydanie kandydujące. | [Wydania](../../releases) (`warpforge-v*`) | [Polski](warpforge/README.pl.md) |
+| **[Profile Backup](profile-backup/)** | Back up and restore the **GIMP 3 user profile** (settings, plug-ins, brushes, presets…) to a ZIP, split into parts for large profiles; verified restore applied after GIMP exits, with a safety copy. Windows and Linux. PL/EN. | [Release](../../releases/tag/profile-backup-v1.0.0) | [English](profile-backup/README.en.md) · [Polski](profile-backup/README.md) |
+| **[Kopia profilu](profile-backup/)** (PL) | Kopia zapasowa i przywracanie **profilu GIMP-a 3** (ustawienia, wtyczki, pędzle, presety…) do ZIP-a, w częściach dla dużych profili; sprawdzone przywracanie po zamknięciu GIMP-a, z kopią bezpieczeństwa. Windows i Linux. | [Wydanie](../../releases/tag/profile-backup-v1.0.0) | [Polski](profile-backup/README.md) |
 | **[RAW / HEIC / HDR](gimp-raw-heic/)** | Import RAW (LibRaw) and HDR HEIC/HEIF/AVIF directly into GIMP 3.2. Windows x64. / Import zdjęć RAW i HEIC z HDR. | [0.9.0](../../releases/tag/migrated/gimp-raw-heic/v0.9.0) | [Polski](gimp-raw-heic/README.md) |
 
 **PSHost demo video / Film demonstracyjny PSHost:** [pshost/docs/PSHost-demo.mp4](pshost/docs/PSHost-demo.mp4) (3:55)
@@ -23,14 +25,14 @@ Plug-ins for **GIMP 3** (Windows). · Wtyczki do **GIMP-a 3** (Windows).
 Each plug-in lives in its own folder with its own README, tests and installer; releases are tagged `<plug-in>-vX.Y.Z`
 (for example `pshost-v0.8.0`). The Python plug-ins (LUT, meme maker, signature) share one folder,
 [`gimp-wtyczki/`](gimp-wtyczki/), with a common installer (`install.ps1`) and tests. Every plug-in here is free software
-under the **GNU GPL v3 or later** (see [LICENSE](LICENSE)), except *Podpis na zdjęciu*, which is under the MIT license
-([gimp-wtyczki/LICENSE](gimp-wtyczki/LICENSE)).
+under the **GNU GPL v3 or later** (see [LICENSE](LICENSE)), except *Podpis na zdjęciu* and *Profile Backup*, which are under the MIT license
+([gimp-wtyczki/LICENSE](gimp-wtyczki/LICENSE), [profile-backup/LICENSE](profile-backup/LICENSE)).
 **BIMP 3** and its original GIMP 2 sources are under **GNU GPL v2 or later**, as stated in [bimp3/bimp3/LICENSE](bimp3/bimp3/LICENSE); GPL v3 is included as an applicable option.
 
 Każda wtyczka ma własny katalog z README, testami i instalatorem; wydania mają znaczniki `<wtyczka>-vX.Y.Z`. Wtyczki
 w Pythonie (LUT-y, Kreator memów, Podpis) mają wspólny folder [`gimp-wtyczki/`](gimp-wtyczki/) z jednym instalatorem
 (`install.ps1`) i testami. Całość jest wolnym oprogramowaniem na licencji **GNU GPL v3 lub nowszej** (zob.
-[LICENSE](LICENSE)), z wyjątkiem *Podpisu na zdjęciu*, który ma licencję MIT ([gimp-wtyczki/LICENSE](gimp-wtyczki/LICENSE)).
+[LICENSE](LICENSE)), z wyjątkiem *Podpisu na zdjęciu* i *Kopii profilu*, które mają licencję MIT ([gimp-wtyczki/LICENSE](gimp-wtyczki/LICENSE), [profile-backup/LICENSE](profile-backup/LICENSE)).
 **BIMP 3** i jego oryginalne źródła GIMP 2 są dostępne na licencji **GPL v2 lub nowszej**, zgodnie z [bimp3/bimp3/LICENSE](bimp3/bimp3/LICENSE).
 
 ## Consolidated repositories / Połączone repozytoria

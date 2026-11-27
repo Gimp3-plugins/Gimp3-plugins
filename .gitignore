@@ -11,3 +11,4 @@ bimp3/tests/profile/
 bimp3/tests/*result.json
 bimp3/.ruff_cache/
 bimp3/bimp3-gimp3.zip
+profile-backup/dist/
