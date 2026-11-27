@@ -1,3 +1,5 @@
+import json
+import os
 import sys
 import tempfile
 import unittest
@@ -6,6 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bimp3"))
+# Messages are asserted in Polish; the interface language is chosen per user otherwise.
+os.environ.setdefault("BIMP_LANG", "pl")
 from bimp_model import new_step, plan_outputs, read_curves, atomic_json
 from bimp_lut import read_cube
 from bimp_jobs import Job
@@ -36,6 +40,100 @@ class RegressionTests(unittest.TestCase):
                 worker.start()
             self.assertFalse(worker.lock.exists())
 
+    def test_final_refresh_keeps_collected_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sources = [root / "a.png", root / "b.png"]
+            for source in sources:
+                source.write_bytes(b"x")
+            plans = [(s, root / "out" / s.name) for s in sources]
+            job = Job.create(root / "job", plans, [], {"output_directory": str(root / "out")})
+            job.emit({"kind": "entry", "index": 0, "result": {"status": "success"}})
+            job.refresh()
+            job.emit({"kind": "entry", "index": 1, "result": {"status": "error"}})
+            job.refresh(reset=False)  # what Worker.poll does after the process exits
+            self.assertEqual(job.changed, {0, 1})
+            job.refresh()
+            self.assertEqual(job.changed, set())
+
+    def test_stale_lock_after_crash_is_replaced(self):
+        import os
+        import subprocess
+        from bimp_jobs import Worker, process_identity
+
+        finished = subprocess.Popen([sys.executable, "-c", "pass"])
+        finished.wait()
+        self.assertIsNone(process_identity(finished.pid))
+        self.assertIsNone(process_identity(2**31 - 7))
+        self.assertIsNotNone(process_identity(os.getpid()))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "in.png"
+            source.write_bytes(b"input")
+            job = Job.create(
+                root / "job", [(source, root / "out/result.png")], [], {"output_directory": str(root / "out")}
+            )
+            for stale in (
+                {"pid": finished.pid, "token": "old"},
+                {"pid": 2**31 - 7, "token": "old"},
+                # Same PID as a live process, but a different creation time: PID reuse.
+                {"pid": os.getpid(), "token": "old", "started": -1},
+                "{incomplete",
+            ):
+                lock = job.directory / ".worker.lock"
+                lock.write_text(stale if isinstance(stale, str) else json.dumps(stale), encoding="utf-8")
+                worker = Worker(job, executable=root / "gimp.exe")
+                with patch.object(Worker, "_launch") as launch:
+                    worker.start()
+                launch.assert_called_once()
+                self.assertEqual(json.loads(lock.read_text(encoding="utf-8"))["token"], worker.token)
+                worker.release_lock()
+                self.assertFalse(lock.exists())
+            live = {"pid": os.getpid(), "token": "other", "started": process_identity(os.getpid())}
+            (job.directory / ".worker.lock").write_text(json.dumps(live), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "już działa"):
+                Worker(job, executable=root / "gimp.exe").start()
+
+    def test_fast_cube_parser_rejects_late_invalid_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for i, rows in enumerate(("0 0 0\nnan 1 1\n", "0 0 0\n1 1\n", "0 0 0\n1 1 1\n1 1 1\n", "0 0 0\ninf 1 1\n")):
+                path = Path(tmp) / f"late-{i}.cube"
+                path.write_text("LUT_1D_SIZE 2\n" + rows)
+                with self.assertRaises(ValueError):
+                    read_cube(path)
+            path = Path(tmp) / "comments.cube"
+            path.write_text("# c\nLUT_1D_SIZE 2\n0 0 0 # first\n\n  1 1 1\n")
+            self.assertEqual(list(read_cube(path).table), [0, 0, 0, 1, 1, 1])
+            with self.assertRaisesRegex(ValueError, "Nie znaleziono"):
+                read_cube(Path(tmp) / "missing.cube")
+
+    def test_native_library_requires_matching_checksum(self):
+        import shutil
+        import bimp_lut
+
+        with tempfile.TemporaryDirectory() as tmp:
+            library = Path(tmp) / bimp_lut.native_library_path().name
+            shutil.copy(bimp_lut.native_library_path(), library)
+            self.assertIn("sumy kontrolnej", bimp_lut.verify_native(library))
+            shutil.copy(bimp_lut.native_library_path().with_name(library.name + ".sha256"), Path(tmp))
+            self.assertIsNone(bimp_lut.verify_native(library))
+            library.write_bytes(library.read_bytes() + b"tampered")
+            self.assertIn("nie zgadza", bimp_lut.verify_native(library))
+
+    def test_missing_dependencies_and_relative_arguments(self):
+        from bimp_model import dependency_paths
+
+        lut = new_step("lut")
+        lut["settings"]["file"] = "Z:/brak/nie-ma.cube"
+        with self.assertRaisesRegex(ValueError, "Nie znaleziono pliku LUT"):
+            dependency_paths([lut])
+        self.assertEqual(dependency_paths([lut], strict=False), [])
+        user = new_step("userdef")
+        user["settings"].update(procedure="gimp-image-flip", arguments={"flip-type": "test_model.py"})
+        self.assertEqual(dependency_paths([user]), [])
+        with self.assertRaisesRegex(ValueError, "wejściowego"):
+            plan_outputs(["Z:/brak/zdjecie.png"], "Z:/out", [])
+
     def test_names_and_dependencies(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -61,7 +159,9 @@ class RegressionTests(unittest.TestCase):
                 with self.assertRaises(OSError):
                     atomic_json(target, {"new": True})
             self.assertEqual(target.read_text(), "old")
-            self.assertEqual(list(Path(tmp).iterdir()), [target])
+            # Compare names: Python 3.14 (bundled with GIMP 3.2) keeps the raw
+            # separator spelling of iterdir() results in Path equality.
+            self.assertEqual([p.name for p in Path(tmp).iterdir()], [target.name])
 
     def test_curves_reject_odd_and_unsorted(self):
         with tempfile.TemporaryDirectory() as tmp:

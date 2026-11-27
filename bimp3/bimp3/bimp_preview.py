@@ -4,21 +4,39 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 import copy
 import threading
-import uuid
+import time
 from pathlib import Path
 import gi
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib, GdkPixbuf
-from bimp_jobs import Job, Worker, new_job_directory
+from bimp_jobs import preview_server, remove_tree
+from bimp_i18n import _
+
+STALE_REQUEST_SECONDS = 600
+
+
+def prune_preview_requests(queue, older_than=STALE_REQUEST_SECONDS):
+    """Remove request folders nobody collected (e.g. after a crash); recent ones may still be in use."""
+    queue = Path(queue)
+    if not queue.is_dir():
+        return
+    limit = time.time() - older_than
+    for folder in queue.iterdir():
+        try:
+            if folder.is_dir() and folder.stat().st_mtime < limit:
+                remove_tree(folder)
+        except OSError:
+            pass
 
 
 class PreviewPane(Gtk.Box):
     def __init__(self, home):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.home = Path(home)
-        self.profile_directory = self.home / "previews" / ("profile-" + uuid.uuid4().hex[:10])
-        self.worker = None
+        self.server = preview_server(self.home)
+        prune_preview_requests(self.server.queue)
+        self.worker = None  # Job of the request currently rendered by the preview process.
         self.pending = None
         self.timer = None
         self.disposed = False
@@ -27,19 +45,19 @@ class PreviewPane(Gtk.Box):
         self.loaded_source = None
         self.images = [Gtk.Image(), Gtk.Image()]
         row = Gtk.Box(spacing=10, homogeneous=True)
-        for title, image in zip(("PRZED", "PO"), self.images):
+        for title, image in zip((_("PRZED"), _("PO")), self.images):
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
             box.pack_start(Gtk.Label(label=title), False, False, 0)
             box.pack_start(image, True, True, 0)
             row.pack_start(box, True, True, 0)
         self.pack_start(row, True, True, 0)
-        self.status = Gtk.Label(label="Wybierz zdjęcie i odśwież podgląd.", xalign=0)
+        self.status = Gtk.Label(label=_("Wybierz zdjęcie i odśwież podgląd."), xalign=0)
         self.status.set_line_wrap(True)
         self.pack_start(self.status, False, False, 0)
         self.connect("destroy", self.close)
 
-    def request(self, source, steps):
-        requested = (str(source), copy.deepcopy(steps))
+    def request(self, source, steps, options=None):
+        requested = (str(source), copy.deepcopy(steps), dict(options or {}))
         if self.worker and self.active_request == requested and self.pending is None:
             return
         self.pending = requested
@@ -47,10 +65,10 @@ class PreviewPane(Gtk.Box):
         if self.timer:
             GLib.source_remove(self.timer)
         self.timer = GLib.timeout_add(400, self.launch)
-        self.status.set_text("Przygotowywanie podglądu…")
+        self.status.set_text(_("Przygotowywanie podglądu…"))
 
     def show_source(self, source):
-        """Display common image types immediately, while GIMP starts in the background."""
+        """Display common image types immediately, while GIMP renders in the background."""
         filename = str(source)
         if filename == self.loaded_source:
             return
@@ -83,20 +101,19 @@ class PreviewPane(Gtk.Box):
         if self.disposed or not self.pending:
             return GLib.SOURCE_REMOVE
         if self.worker:
-            if self.worker.poll() is None:
-                self.worker.cancel()
-                return GLib.SOURCE_REMOVE
-            # Let the existing poll callback reap the process and schedule
-            # the pending request. Replacing it here races the old callback.
+            # Ask the preview process to stop the outdated render; the poll
+            # callback starts the pending request once the old one has ended.
+            (self.worker.directory / "cancel").touch()
             return GLib.SOURCE_REMOVE
-        source, steps = self.pending
+        source, steps, options = self.pending
         self.pending = None
         try:
-            job = Job.create(new_job_directory(self.home / "previews"), [], steps, {}, mode="preview", source=source)
-            self.worker = Worker(job, profile_directory=self.profile_directory)
-            self.active_request = (source, steps)
-            self.worker.start()
-            GLib.timeout_add(150, self.poll)
+            first_start = not self.server.running()
+            self.worker = self.server.submit(source, steps, options)
+            self.active_request = (source, steps, options)
+            if first_start:
+                self.status.set_text(_("Uruchamianie procesu podglądu GIMP (tylko za pierwszym razem)…"))
+            GLib.timeout_add(100, self.poll)
         except Exception as exc:
             self.worker = None
             self.active_request = None
@@ -104,41 +121,54 @@ class PreviewPane(Gtk.Box):
         return GLib.SOURCE_REMOVE
 
     def poll(self):
-        if not self.worker:
+        job = self.worker
+        if not job:
             return GLib.SOURCE_REMOVE
-        exit_code = self.worker.poll()
-        if exit_code is None:
-            return GLib.SOURCE_CONTINUE
-        job = self.worker.job
+        job.refresh()
+        finished = job.finished
+        if finished is None:
+            if self.server.running():
+                return GLib.SOURCE_CONTINUE
+            job.refresh()
+            finished = job.finished or {
+                "status": "error",
+                "error": _("Proces podglądu GIMP zakończył się nieoczekiwanie."),
+            }
         self.worker = None
         self.active_request = None
-        if self.disposed:
-            return GLib.SOURCE_REMOVE
-        if self.pending:
-            if self.timer:
-                GLib.source_remove(self.timer)
-                self.timer = None
-            self.launch()
-            return GLib.SOURCE_REMOVE
-        if exit_code == 0 and job.finished and job.finished["status"] == "done":
-            try:
-                for image, filename in zip(self.images, ("before.png", "after.png")):
-                    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(job.directory / filename), 460, 350, True)
-                    image.set_from_pixbuf(pixbuf)
-                self.status.set_text(
-                    "Podgląd gotowy. Operacje wykonano na pełnej rozdzielczości; widok jest pomniejszony."
-                )
-            except Exception as exc:
-                self.status.set_text(str(exc))
-        else:
-            message = (job.finished or {}).get("error", "Podgląd przerwany lub proces nie zakończył renderowania.")
-            self.status.set_text(message + f" Log: {job.directory / 'worker.log'}")
+        try:
+            if self.disposed:
+                return GLib.SOURCE_REMOVE
+            if self.pending:
+                if self.timer:
+                    GLib.source_remove(self.timer)
+                    self.timer = None
+                self.launch()
+                return GLib.SOURCE_REMOVE
+            if finished.get("status") == "done":
+                try:
+                    for image, filename in zip(self.images, ("before.png", "after.png")):
+                        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                            str(job.directory / filename), 460, 350, True
+                        )
+                        image.set_from_pixbuf(pixbuf)
+                    self.status.set_text(
+                        _("Podgląd gotowy. Operacje wykonano na pełnej rozdzielczości; widok jest pomniejszony.")
+                    )
+                except Exception as exc:
+                    self.status.set_text(str(exc))
+            else:
+                message = finished.get("error") or _("Podgląd przerwany lub proces nie zakończył renderowania.")
+                self.status.set_text(message + " " + _("Log:") + " " + str(self.server.queue.parent / "preview-server.log"))
+        finally:
+            # Pixbufs are in memory now; the request folder is no longer needed.
+            remove_tree(job.directory)
         return GLib.SOURCE_REMOVE
 
-    def close(self, *_):
+    def close(self, *_args):
         self.disposed = True
         if self.timer:
             GLib.source_remove(self.timer)
             self.timer = None
         if self.worker:
-            self.worker.cancel()
+            (self.worker.directory / "cancel").touch()

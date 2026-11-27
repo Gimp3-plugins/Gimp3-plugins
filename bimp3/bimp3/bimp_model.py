@@ -14,6 +14,8 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from bimp_naming import needs_facts, pattern_tokens, read_image_facts, render_name
+
 
 FORMATS = ["bmp", "gif", "ico", "jpg", "png", "tga", "tiff", "heif", "webp", "avif", "exr", "xcf"]
 RATIOS = [(1, 1), (3, 2), (4, 3), (16, 9), (16, 10), (7, 9), (2, 3), (40, 71), (3, 4)]
@@ -43,6 +45,7 @@ SCHEMAS = {
             "padding_color": ("Kolor tła", "#000000"),
             "padding_color_alpha": ("Krycie tła (0–65535)", 65535, (0, 65535)),
             "interpolation": ("Interpolacja", 2, ["Brak", "Liniowa", "Sześcienna", "NoHalo", "LoHalo"]),
+            "no_upscale": ("Tylko pomniejszaj (nie powiększaj mniejszych zdjęć)", False),
             "change_res": ("Zmień rozdzielczość druku", False),
             "new_res_x": ("Rozdzielczość X (ppi)", 72.0, (0.01, 100000)),
             "new_res_y": ("Rozdzielczość Y (ppi)", 72.0, (0.01, 100000)),
@@ -58,6 +61,7 @@ SCHEMAS = {
             "custom_ratio1": ("Własne proporcje: szerokość", 1.0, (0.001, 10000)),
             "custom_ratio2": ("Własne proporcje: wysokość", 1.0, (0.001, 10000)),
             "start_pos": ("Położenie", 0, ["Środek", "Lewy górny", "Prawy górny", "Lewy dolny", "Prawy dolny"]),
+            "match_orientation": ("Odwróć proporcje dla zdjęć pionowych / poziomych", False),
         },
     ),
     "fliprotate": (
@@ -108,9 +112,29 @@ SCHEMAS = {
         "Format i kompresja",
         {
             "format": ("Format", 3, FORMATS),
+            "max_kb": ("Maksymalny rozmiar pliku w KB (0 = bez limitu; JPEG, WebP, HEIF, AVIF)", 0, (0, 10000000)),
         },
     ),
-    "rename": ("Zmiana nazwy", {"pattern": ("Wzorzec: $$ nazwa, ## numer, @@ data", "$$")}),
+    "rename": (
+        "Zmiana nazwy",
+        {
+            "pattern": (
+                "Wzorzec: $$ lub {name}, ## lub {n:03}, @@ lub {date:%Y%m%d}, {exif:%Y-%m-%d}, {mtime}, {w}x{h}, "
+                "{ext}, {folder}",
+                "$$",
+            ),
+            "start": ("Numer początkowy dla ## / {n}", 1, (0, 1000000000)),
+        },
+    ),
+    "variant": (
+        "Dodatkowa wersja wyniku (np. miniatura)",
+        {
+            "suffix": ("Przyrostek nazwy pliku", "_min"),
+            "format": ("Format", 0, ["Jak wynik główny", *FORMATS]),
+            "max_edge": ("Najdłuższy bok w px (0 = bez zmiany)", 400, (0, 524288)),
+            "max_kb": ("Maksymalny rozmiar pliku w KB (0 = bez limitu)", 0, (0, 10000000)),
+        },
+    ),
     "userdef": ("Inna procedura GIMP 3", {"procedure": ("Nazwa procedury", "")}),
     "lut": (
         "Kolory z LUT (.cube)",
@@ -122,9 +146,12 @@ SCHEMAS = {
 }
 
 
+ARGUMENT_KINDS = ("changeformat", "userdef", "variant")
+
+
 def new_step(kind):
     result = {"type": kind, "settings": {k: copy.deepcopy(v[1]) for k, v in SCHEMAS[kind][1].items()}}
-    if kind in ("changeformat", "userdef"):
+    if kind in ARGUMENT_KINDS:
         result["settings"]["arguments"] = {}
     return result
 
@@ -133,6 +160,7 @@ def validate_steps(steps):
     if not isinstance(steps, list):
         raise ValueError("Lista operacji musi być tablicą.")
     counts = {}
+    variant_suffixes = set()
     for step in steps:
         if not isinstance(step, dict) or step.get("type") not in SCHEMAS:
             raise ValueError("Nieznany typ operacji.")
@@ -143,7 +171,7 @@ def validate_steps(steps):
         values = step.get("settings")
         if not isinstance(values, dict):
             raise ValueError("Nieprawidłowe ustawienia operacji.")
-        allowed = set(SCHEMAS[kind][1]) | ({"arguments"} if kind in ("changeformat", "userdef") else set())
+        allowed = set(SCHEMAS[kind][1]) | ({"arguments"} if kind in ARGUMENT_KINDS else set())
         if set(values) - allowed:
             raise ValueError(f"Nieznane ustawienia: {set(values) - allowed}")
         for key, field in SCHEMAS[kind][1].items():
@@ -171,7 +199,15 @@ def validate_steps(steps):
         if "arguments" in allowed and not isinstance(values.setdefault("arguments", {}), dict):
             raise ValueError("Argumenty procedury muszą być obiektem JSON.")
         if kind == "rename":
-            safe_name(values["pattern"])
+            pattern_tokens(values["pattern"])
+            # Check the literal parts with a neutral sample value for every token.
+            safe_name(re.sub(r"\{[^{}]*\}|\$\$|##|@@", "x", values["pattern"]))
+        if kind == "variant":
+            suffix = values["suffix"]
+            if not suffix or suffix in variant_suffixes:
+                raise ValueError("Każda dodatkowa wersja wymaga innego, niepustego przyrostka nazwy.")
+            safe_name("x" + suffix)
+            variant_suffixes.add(suffix)
         if kind == "watermark" and not values["mode"] and not values["image_file"]:
             raise ValueError("Wybierz plik obrazu znaku wodnego.")
         if kind == "userdef" and not values["procedure"]:
@@ -203,24 +239,37 @@ def resize_geometry(width, height, s):
     ]
     if modes == (2, 2):
         return width, height, width, height
+
+    def limit(factor):
+        # "Only shrink": smaller photos keep their size (a padded canvas still gets the target size).
+        return min(factor, 1.0) if s.get("no_upscale") else factor
+
     canvas = [max(1, round(width * factors[0])), max(1, round(height * factors[1]))]
     if s["stretch_mode"]:
-        factor = min(f for f, mode in zip(factors, modes) if mode != 2)
+        factor = limit(min(f for f, mode in zip(factors, modes) if mode != 2))
         scaled = [max(1, round(width * factor)), max(1, round(height * factor))]
         if s["stretch_mode"] == 1:
             canvas = scaled[:]
         else:
             canvas = [scaled[i] if modes[i] == 2 else canvas[i] for i in range(2)]
     else:
-        scaled = canvas[:]
+        scaled = [max(1, round(width * limit(factors[0]))), max(1, round(height * limit(factors[1])))]
+        canvas = scaled[:]
     return (*scaled, *canvas)
 
 
 def crop_geometry(width, height, s):
+    # Portrait photos get a portrait crop (e.g. 3:2 becomes 2:3) when requested.
+    turn = s.get("match_orientation") and width != height
     if s["manual"]:
-        w, h = min(width, s["new_w"]), min(height, s["new_h"])
+        new_w, new_h = s["new_w"], s["new_h"]
+        if turn and (width > height) != (new_w > new_h) and new_w != new_h:
+            new_w, new_h = new_h, new_w
+        w, h = min(width, new_w), min(height, new_h)
     else:
         a, b = RATIOS[s["ratio"]] if s["ratio"] < len(RATIOS) else (s["custom_ratio1"], s["custom_ratio2"])
+        if turn and (width > height) != (a > b) and a != b:
+            a, b = b, a
         w, h = (
             (max(1, round(height * a / b)), height) if width / height > a / b else (width, max(1, round(width * b / a)))
         )
@@ -235,20 +284,33 @@ def watermark_xy(w, h, ww, wh, position, edge):
     return ([edge, (w - ww) // 2, w - ww - edge][col], [edge, (h - wh) // 2, h - wh - edge][row])
 
 
-def dependency_paths(steps):
+DEPENDENCY_LABELS = {"watermark": "obrazu znaku wodnego", "color": "krzywych", "lut": "LUT"}
+
+
+def dependency_paths(steps, strict=True):
+    """Files read by the steps. strict=False skips missing files instead of failing."""
     paths = []
+
+    def add(value, kind):
+        try:
+            paths.append(Path(value).resolve(strict=True))
+        except OSError:
+            if strict:
+                raise ValueError(f"Nie znaleziono pliku {DEPENDENCY_LABELS[kind]}: {value}") from None
+
     for step in steps:
         s = step["settings"]
         if step["type"] == "watermark" and not s["mode"]:
-            paths.append(Path(s["image_file"]).resolve(strict=True))
+            add(s["image_file"], "watermark")
         elif step["type"] == "color" and s["curve_file"]:
-            paths.append(Path(s["curve_file"]).resolve(strict=True))
+            add(s["curve_file"], "color")
         elif step["type"] == "lut" and s.get("file"):
-            paths.append(Path(s["file"]).resolve(strict=True))
+            add(s["file"], "lut")
         elif step["type"] == "userdef":
-            # File arguments supplied to approved procedures are dependencies too.
+            # Absolute file arguments of approved procedures are dependencies too.
+            # Relative strings are option values (e.g. "lzw"), not files in the CWD.
             for value in s.get("arguments", {}).values():
-                if isinstance(value, str) and Path(value).is_file():
+                if isinstance(value, str) and Path(value).is_absolute() and Path(value).is_file():
                     paths.append(Path(value).resolve(strict=True))
     return paths
 
@@ -263,7 +325,7 @@ def hierarchy_parts(paths):
     for path in paths:
         groups.setdefault(path.anchor.casefold(), []).append(path)
     result = {}
-    for anchor, group in groups.items():
+    for group in groups.values():
         common = Path(os.path.commonpath([str(p.parent) for p in group]))
         prefix = Path()
         if len(groups) > 1:
@@ -274,23 +336,48 @@ def hierarchy_parts(paths):
     return result
 
 
+def resolve_inputs(inputs):
+    paths = []
+    for value in inputs:
+        try:
+            paths.append(Path(value).resolve(strict=True))
+        except OSError:
+            raise ValueError(f"Nie znaleziono pliku wejściowego: {value}") from None
+    return paths
+
+
+def variant_targets(target, steps):
+    """Extra outputs next to the main result: <name><suffix>.<format>."""
+    target = Path(target)
+    result = []
+    for step in steps:
+        if step["type"] == "variant":
+            s = step["settings"]
+            suffix = target.suffix if s["format"] == 0 else "." + FORMATS[s["format"] - 1]
+            result.append(target.with_name(target.stem + s["suffix"] + suffix))
+    return result
+
+
 def plan_outputs(inputs, folder, steps, hierarchy=False, timestamp=None, collision="error"):
-    paths = [Path(p).resolve(strict=True) for p in inputs]
+    paths = resolve_inputs(inputs)
     if not paths or any(not p.is_file() for p in paths):
         raise ValueError("Wybierz istniejące pliki wejściowe.")
     if len(set(paths)) != len(paths):
         raise ValueError("Lista wejściowa zawiera duplikaty.")
     root = Path(folder).resolve()
     subfolders = hierarchy_parts(paths) if hierarchy else {}
-    pattern = next((s["settings"]["pattern"] for s in steps if s["type"] == "rename"), "$$")
+    rename = next((s["settings"] for s in steps if s["type"] == "rename"), {"pattern": "$$", "start": 1})
+    pattern, start = rename["pattern"], rename.get("start", 1)
     fmt = next((FORMATS[s["settings"]["format"]] for s in steps if s["type"] == "changeformat"), None)
-    timestamp = timestamp or datetime.now().strftime("%Y-%m-%d_%H-%M")
+    now = datetime.now()
+    timestamp = timestamp or now.strftime("%Y-%m-%d_%H-%M")
+    read_facts = needs_facts(pattern)
     outputs = []
     input_keys = {path_key(p) for p in paths + dependency_paths(steps)}
     output_keys = set()
-    for index, path in enumerate(paths, 1):
-        substitutions = {"$$": path.stem, "##": str(index), "@@": timestamp}
-        name = safe_name(re.sub(r"\$\$|##|@@", lambda m: substitutions[m[0]], pattern))
+    for index, path in enumerate(paths, start):
+        facts = read_image_facts(path) if read_facts else None
+        name = safe_name(render_name(pattern, path, index, now, facts, stamp=timestamp))
         suffix = "." + fmt if fmt else path.suffix.lower()
         if not suffix:
             raise ValueError(f"Plik {path.name} nie ma rozszerzenia. Dodaj zmianę formatu.")
@@ -299,20 +386,26 @@ def plan_outputs(inputs, folder, steps, hierarchy=False, timestamp=None, collisi
         if not target.is_relative_to(root):
             raise ValueError("Plik wynikowy musi znajdować się w katalogu wyjściowym.")
         key = os.path.normcase(str(target))
-        if key in input_keys:
+        if key in input_keys or any(path_key(v) in input_keys for v in variant_targets(target, steps)):
             raise ValueError(f"Plik wynikowy nadpisałby plik wejściowy lub zależność: {target}")
         if collision == "suffix":
             original = target
             number = 2
-            while path_key(target) in output_keys or target.exists():
+            while output_taken(target, steps, output_keys | input_keys):
                 target = original.with_name(f"{original.stem}_{number}{original.suffix}")
                 number += 1
             key = path_key(target)
-        if key in output_keys:
+        group = [key, *(path_key(v) for v in variant_targets(target, steps))]
+        if any(k in output_keys for k in group) or len(set(group)) != len(group):
             raise ValueError(f"Dwie pozycje mają tę samą nazwę wynikową: {target}")
-        output_keys.add(key)
+        output_keys.update(group)
         outputs.append((path, target))
     return outputs
+
+
+def output_taken(target, steps, keys):
+    """True if the main result or one of its variants already exists or is planned."""
+    return any(path_key(p) in keys or p.exists() for p in (Path(target), *variant_targets(target, steps)))
 
 
 def atomic_json(path, data):
@@ -459,7 +552,10 @@ def legacy_export_args(fmt, args):
 
 
 def read_curves(path):
-    text = Path(path).read_text(encoding="utf-8-sig")
+    try:
+        text = Path(path).read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        raise ValueError(f"Nie znaleziono pliku krzywych: {path}") from None
     if not text.startswith("# GIMP"):
         raise ValueError("To nie jest plik krzywych GIMP.")
     result = {}

@@ -1,7 +1,6 @@
 """GTK 3 interface for BIMP. SPDX-License-Identifier: GPL-2.0-or-later."""
 
 import copy
-import json
 from pathlib import Path
 
 import gi
@@ -9,9 +8,9 @@ import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("GimpUi", "3.0")
-from gi.repository import Gtk, Gdk, GimpUi, GLib, GObject, Gimp
+from gi.repository import Gtk, Gdk, GimpUi, GObject, Gimp
 
-from bimp_model import SCHEMAS, FORMATS, new_step, validate_steps, plan_outputs, save_settings, load_settings
+from bimp_model import SCHEMAS, FORMATS
 from bimp_engine import (
     AUTOMATIC,
     EXPORTERS,
@@ -21,6 +20,7 @@ from bimp_engine import (
     validate_runtime,
     watermark_font,
 )
+from bimp_i18n import _, translate_message
 
 
 def error(parent, text):
@@ -29,15 +29,17 @@ def error(parent, text):
         modal=True,
         message_type=Gtk.MessageType.ERROR,
         buttons=Gtk.ButtonsType.CLOSE,
-        text=str(text),
+        text=translate_message(str(text)),
     )
     dialog.run()
     dialog.destroy()
 
 
-def button(label, callback):
+def button(label, callback, tooltip=None):
     widget = Gtk.Button(label=label)
     widget.connect("clicked", lambda _button: callback())
+    if tooltip:
+        widget.set_tooltip_text(tooltip)
     return widget
 
 
@@ -51,7 +53,7 @@ def scroll(child, height=260):
 
 def choose(parent, title, action=Gtk.FileChooserAction.OPEN, multiple=False, name=None, initial=None, patterns=None):
     dialog = Gtk.FileChooserDialog(title=title, transient_for=parent, action=action)
-    dialog.add_buttons("Anuluj", Gtk.ResponseType.CANCEL, "Wybierz", Gtk.ResponseType.OK)
+    dialog.add_buttons(_("Anuluj"), Gtk.ResponseType.CANCEL, _("Wybierz"), Gtk.ResponseType.OK)
     dialog.set_select_multiple(multiple)
     if patterns:
         file_filter = Gtk.FileFilter()
@@ -80,12 +82,12 @@ class Form:
 
     def add(self, key, label, value, limits=None, tooltip=None, choices=None):
         row = len(self.getters)
-        caption = Gtk.Label(label=label, xalign=0)
+        caption = Gtk.Label(label=_(label), xalign=0)
         caption.set_max_width_chars(42)
         caption.set_line_wrap(True)
         if isinstance(limits, list) or choices:
             widget = Gtk.ComboBoxText()
-            items = choices or [(str(i), text) for i, text in enumerate(limits)]
+            items = choices or [(str(i), _(text)) for i, text in enumerate(limits)]
             for nick, text in items:
                 widget.append(str(nick), text)
             widget.set_active_id(str(value))
@@ -110,7 +112,11 @@ class Form:
             if not rgba.parse(value):
                 raise ValueError(f"Nieprawidłowy kolor: {value}")
             widget = Gtk.ColorButton.new_with_rgba(rgba)
-            getter = lambda: widget.get_rgba().to_string()
+
+            def get_color():
+                return widget.get_rgba().to_string()
+
+            getter = get_color
         elif key == "font":
             from gi.repository import Pango
 
@@ -120,7 +126,7 @@ class Form:
             except ValueError:
                 selected_font = Gimp.context_get_font()
             widget = Gtk.Box(spacing=6)
-            chooser = GimpUi.FontChooser.new("Wybierz czcionkę GIMP", None, selected_font)
+            chooser = GimpUi.FontChooser.new(_("Wybierz czcionkę GIMP"), None, selected_font)
             size = Gtk.SpinButton.new_with_range(1, 2048, 1)
             size.set_digits(1)
             size.set_value(description.get_size() / Pango.SCALE or 16)
@@ -146,7 +152,7 @@ class Form:
 
             def select():
                 filename = choose(
-                    self.grid.get_toplevel(), label, patterns=["*.cube", "*.CUBE"] if key == "file" else None
+                    self.grid.get_toplevel(), _(label), patterns=["*.cube", "*.CUBE"] if key == "file" else None
                 )
                 if filename:
                     entry.set_text(filename)
@@ -203,11 +209,20 @@ def procedure_form(proc, arguments):
     return form
 
 
-def edit_step(parent, step, preview_source=None, prefix_steps=None, home=None):
+def exporter_name(kind, settings):
+    """PDB procedure whose parameters the step edits; None when it has none."""
+    if kind == "changeformat":
+        return EXPORTERS[FORMATS[settings["format"]]]
+    if kind == "variant":
+        return EXPORTERS[FORMATS[settings["format"] - 1]] if settings["format"] else None
+    return settings["procedure"]
+
+
+def edit_step(parent, step, preview_source=None, prefix_steps=None, home=None, options=None):
     step = copy.deepcopy(step)
     kind = step["type"]
-    dialog = Gtk.Dialog(title=SCHEMAS[kind][0], transient_for=parent, modal=True)
-    dialog.add_buttons("Anuluj", Gtk.ResponseType.CANCEL, "Zapisz", Gtk.ResponseType.OK)
+    dialog = Gtk.Dialog(title=_(SCHEMAS[kind][0]), transient_for=parent, modal=True)
+    dialog.add_buttons(_("Anuluj"), Gtk.ResponseType.CANCEL, _("Zapisz"), Gtk.ResponseType.OK)
     dialog.set_default_size(640, 600)
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
     form = Form()
@@ -220,24 +235,27 @@ def edit_step(parent, step, preview_source=None, prefix_steps=None, home=None):
         preview = PreviewPane(home or Path(Gimp.directory()) / "bimp3-data")
         source = [preview_source]
         box.pack_start(
-            Gtk.Label(label="LUT w kodowaniu sRGB. Siła 0% zachowuje oryginalne kolory.", xalign=0), False, False, 0
+            Gtk.Label(label=_("LUT w kodowaniu sRGB. Siła 0% zachowuje oryginalne kolory."), xalign=0),
+            False,
+            False,
+            0,
         )
 
-        def update_preview(*_):
+        def update_preview(*_args):
             values = form.values()
             if source[0] and Path(values["file"]).is_file():
-                preview.request(source[0], list(prefix_steps or []) + [{"type": "lut", "settings": values}])
+                preview.request(source[0], list(prefix_steps or []) + [{"type": "lut", "settings": values}], options)
 
         def pick_source():
-            selected = choose(dialog, "Zdjęcie do podglądu LUT")
+            selected = choose(dialog, _("Zdjęcie do podglądu LUT"))
             if selected:
                 source[0] = selected
                 preview.show_source(selected)
                 if not Path(form.values()["file"]).is_file():
-                    preview.status.set_text("Zdjęcie wczytane. Wybierz plik LUT .cube, aby zobaczyć efekt.")
+                    preview.status.set_text(_("Zdjęcie wczytane. Wybierz plik LUT .cube, aby zobaczyć efekt."))
                 update_preview()
 
-        box.pack_start(button("Wybierz zdjęcie do podglądu…", pick_source), False, False, 0)
+        box.pack_start(button(_("Wybierz zdjęcie do podglądu…"), pick_source), False, False, 0)
         box.pack_start(preview, True, True, 0)
         form.widgets["strength"].connect("value-changed", update_preview)
         form.widgets["file"].get_children()[0].connect("changed", update_preview)
@@ -245,19 +263,18 @@ def edit_step(parent, step, preview_source=None, prefix_steps=None, home=None):
         update_preview()
     advanced = [None]
     advanced_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-    if kind in ("changeformat", "userdef"):
+    if kind in ("changeformat", "userdef", "variant"):
 
         def load_arguments(initial=False):
             try:
-                name = (
-                    EXPORTERS[FORMATS[form.values()["format"]]]
-                    if kind == "changeformat"
-                    else form.values()["procedure"]
-                )
-                args = step["settings"].get("arguments", {}) if initial else {}
-                new_form = procedure_form(procedure(name), args)
+                name = exporter_name(kind, form.values())
                 for child in advanced_box.get_children():
                     advanced_box.remove(child)
+                if name is None:
+                    advanced[0] = (None, None)
+                    return
+                args = step["settings"].get("arguments", {}) if initial else {}
+                new_form = procedure_form(procedure(name), args)
                 advanced_box.pack_start(new_form.grid, False, False, 0)
                 advanced[0] = (name, new_form)
                 advanced_box.show_all()
@@ -265,12 +282,12 @@ def edit_step(parent, step, preview_source=None, prefix_steps=None, home=None):
                 advanced[0] = None
                 error(dialog, exc)
 
-        box.pack_start(button("Wczytaj parametry procedury", load_arguments), False, False, 0)
+        box.pack_start(button(_("Wczytaj parametry procedury"), load_arguments), False, False, 0)
         if kind == "userdef":
 
             def pick_procedure():
-                picker = Gtk.Dialog(title="Procedury GIMP 3", transient_for=dialog, modal=True)
-                picker.add_buttons("Anuluj", Gtk.ResponseType.CANCEL, "Wybierz", Gtk.ResponseType.OK)
+                picker = Gtk.Dialog(title=_("Procedury GIMP 3"), transient_for=dialog, modal=True)
+                picker.add_buttons(_("Anuluj"), Gtk.ResponseType.CANCEL, _("Wybierz"), Gtk.ResponseType.OK)
                 picker.set_default_size(580, 500)
                 store = Gtk.ListStore(str)
                 names = [n for n in SAFE_USER_PROCEDURES if Gimp.get_pdb().lookup_procedure(n)]
@@ -281,7 +298,9 @@ def edit_step(parent, step, preview_source=None, prefix_steps=None, home=None):
                     if any(p.name in ("image", "drawable", "drawables") for p in proc.get_arguments()):
                         store.append([name])
                 view = Gtk.TreeView(model=store)
-                view.append_column(Gtk.TreeViewColumn("Nazwa (pisz, aby wyszukać)", Gtk.CellRendererText(), text=0))
+                view.append_column(
+                    Gtk.TreeViewColumn(_("Nazwa (pisz, aby wyszukać)"), Gtk.CellRendererText(), text=0)
+                )
                 view.set_search_column(0)
                 picker.get_content_area().pack_start(scroll(view), True, True, 0)
                 picker.show_all()
@@ -293,11 +312,11 @@ def edit_step(parent, step, preview_source=None, prefix_steps=None, home=None):
                 if form.values()["procedure"]:
                     load_arguments()
 
-            box.pack_start(button("Przeglądaj procedury GIMP…", pick_procedure), False, False, 0)
+            box.pack_start(button(_("Przeglądaj procedury GIMP…"), pick_procedure), False, False, 0)
         box.pack_start(advanced_box, False, False, 0)
-        if kind == "changeformat" or step["settings"].get("procedure"):
+        if kind in ("changeformat", "variant") or step["settings"].get("procedure"):
             load_arguments(True)
-        if kind == "changeformat":
+        if kind in ("changeformat", "variant"):
             form.widgets["format"].connect("changed", lambda _widget: load_arguments())
     dialog.get_content_area().pack_start(scroll(box), True, True, 0)
     dialog.show_all()
@@ -305,11 +324,11 @@ def edit_step(parent, step, preview_source=None, prefix_steps=None, home=None):
     while dialog.run() == Gtk.ResponseType.OK:
         try:
             settings = form.values()
-            if kind in ("changeformat", "userdef"):
-                name = EXPORTERS[FORMATS[settings["format"]]] if kind == "changeformat" else settings["procedure"]
+            if kind in ("changeformat", "userdef", "variant"):
+                name = exporter_name(kind, settings)
                 if advanced[0] is None or advanced[0][0] != name:
                     raise ValueError("Wczytaj parametry wybranego formatu lub procedury przed zapisaniem.")
-                settings["arguments"] = advanced[0][1].values()
+                settings["arguments"] = advanced[0][1].values() if advanced[0][1] else {}
             step["settings"] = settings
             validate_runtime([step])
             result = step

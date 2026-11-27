@@ -4,8 +4,8 @@ Plug-ins for **GIMP 3** (Windows). · Wtyczki do **GIMP-a 3** (Windows).
 
 | Plug-in | What it does | Latest release | Docs |
 |---|---|---|---|
-| **[BIMP 3](bimp3/)** | Batch image processing for GIMP 3: resize, crop, watermark, `.cube` LUTs, before/after preview and resumable jobs. Windows x64. | [Release](../../releases/tag/bimp3-v1.0.1) | [Polski](bimp3/README.md) · [English](bimp3/README.en.md) |
-| **[BIMP 3](bimp3/)** (PL) | Wsadowa obróbka zdjęć: rozmiar, kadrowanie, znak wodny, LUT `.cube`, podgląd przed/po i wznawianie zadań. Windows x64. | [Wydanie](../../releases/tag/bimp3-v1.0.1) | [Polski](bimp3/README.md) |
+| **[BIMP 3](bimp3/)** | Batch image processing for GIMP 3: resize, crop, watermark, `.cube` LUTs, before/after preview and resumable jobs. Windows x64. | [Release](../../releases/tag/bimp3-v1.1.0) | [Polski](bimp3/README.md) · [English](bimp3/README.en.md) |
+| **[BIMP 3](bimp3/)** (PL) | Wsadowa obróbka zdjęć: rozmiar, kadrowanie, znak wodny, LUT `.cube`, podgląd przed/po i wznawianie zadań. Windows x64. | [Wydanie](../../releases/tag/bimp3-v1.1.0) | [Polski](bimp3/README.md) |
 | **[PSHost](pshost/)** | Use **64-bit Photoshop (`.8bf`) filter plug-ins** in GIMP 3: tests each plug-in, lists which ones will be used (and why not), adds them to *Filters → Photoshop*. PL/EN. | [Releases](../../releases) (`pshost-v*`) | [English](pshost/README.md) · [Polski](pshost/README.pl.md) |
 | **[PSHost](pshost/)** (PL) | Używaj **64-bitowych filtrów Photoshop (`.8bf`)** w GIMP-ie 3: sprawdza każdą wtyczkę, mówi które zostaną użyte (a które nie i dlaczego), dodaje je do *Filtry → Photoshop*. | [Wydania](../../releases) (`pshost-v*`) | [Polski](pshost/README.pl.md) |
 | **[LUT-y (.cube)](gimp-wtyczki/lut-cube/)** | Apply **color LUTs** (`.cube`, `.3dl`, Hald CLUT) with a library, before/after preview, strength, presets, batch mode and *save your own look as .cube*. | [Releases](../../releases) (`lut-cube-v*`) | [English](gimp-wtyczki/lut-cube/README.en.md) · [Polski](gimp-wtyczki/lut-cube/README.md) |

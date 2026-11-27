@@ -4,4 +4,6 @@ line-length = 120
 extend-exclude = ["build", "tests/profile", "tests/output"]
 
 [tool.ruff.lint]
-select = ["E9", "F63", "F7", "F82"]
+# Syntax errors, all Pyflakes checks (unused imports/variables, undefined names)
+# and flake8-bugbear (late-binding closures, unused loop variables, raise-from).
+select = ["E9", "F", "B"]

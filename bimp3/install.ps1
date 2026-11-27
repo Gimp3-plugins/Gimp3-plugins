@@ -18,7 +18,8 @@ if (-not $GimpExe -or -not (Test-Path -LiteralPath $GimpExe)) {
 }
 $GimpExe = (Resolve-Path -LiteralPath $GimpExe).Path
 $versionText = (& $GimpExe --version) -join ' '
-if ($LASTEXITCODE -ne 0 -or $versionText -notmatch 'version (3)\.(\d+)\.(\d+)') {
+# GIMP translates "version" (e.g. Polish: "w wersji"), so match only the number.
+if ($LASTEXITCODE -ne 0 -or $versionText -notmatch '(?<![\d.])(3)\.(\d+)\.(\d+)(?![\d.])') {
     throw "Nie można potwierdzić GIMP 3: $versionText"
 }
 $profileVersion = "$($Matches[1]).$($Matches[2])"
@@ -34,8 +35,8 @@ if (-not $PluginDirectory) {
 }
 $target = [IO.Path]::GetFullPath((Join-Path $PluginDirectory 'bimp3'))
 $source = Join-Path $PSScriptRoot 'bimp3'
-$files = @(Get-ChildItem -LiteralPath $source -File | Where-Object { $_.Extension -in @('.py', '.dll', '.c') -or $_.Name -eq 'LICENSE' } | Select-Object -ExpandProperty Name)
-foreach ($required in @('bimp3.py', 'bimp_engine.py', 'bimp_model.py', 'bimp_ui.py', 'bimp_window.py', 'bimp_jobs.py', 'bimp_worker.py', 'bimp_preview.py', 'bimp_lut.py', 'bimp_lut_native.dll', 'bimp_presets.py', 'LICENSE')) {
+$files = @(Get-ChildItem -LiteralPath $source -File | Where-Object { $_.Extension -in @('.py', '.dll', '.c', '.sha256') -or $_.Name -eq 'LICENSE' } | Select-Object -ExpandProperty Name)
+foreach ($required in @('bimp3.py', 'bimp_engine.py', 'bimp_model.py', 'bimp_ui.py', 'bimp_window.py', 'bimp_jobs.py', 'bimp_worker.py', 'bimp_preview.py', 'bimp_lut.py', 'bimp_lut_native.dll', 'bimp_lut_native.dll.sha256', 'bimp_presets.py', 'bimp_i18n.py', 'bimp_history.py', 'bimp_naming.py', 'LICENSE')) {
     if ($required -notin $files) { throw "Brak wymaganego pliku: $required" }
 }
 foreach ($file in $files) {
@@ -56,7 +57,7 @@ if ($PSCmdlet.ShouldProcess($target, 'Zainstaluj BIMP 3; zachowaj kopię wcześn
             throw "Weryfikacja kopii nie powiodła się: $file"
         }
     }
-    & $pythonExe -c "import sys; sys.path.insert(0,sys.argv[1]); import bimp_window,bimp_worker,bimp_lut; assert bimp_lut.native_module() is not None; print('Komplet modułów i akcelerator LUT: OK')" $stage
+    & $pythonExe -c "import sys; sys.path.insert(0,sys.argv[1]); import bimp_window,bimp_worker,bimp_lut,bimp_history,bimp_naming; assert bimp_lut.native_module() is not None, bimp_lut.native_problem; print('Komplet modułów i akcelerator LUT: OK')" $stage
     if ($LASTEXITCODE -ne 0) { throw "Weryfikacja wersji nie powiodła się. Zachowano poprzednią instalację. Staging: $stage" }
     $backup = $null
     try {

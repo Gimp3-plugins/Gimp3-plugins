@@ -1,6 +1,5 @@
 """Execute INSIDE GIMP via python-fu-eval. Writes integration-result.json."""
 
-import importlib.util
 import json
 import os
 import sys
@@ -8,13 +7,15 @@ import traceback
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[1]
+# Messages are asserted in Polish; the interface language is chosen per user otherwise.
+os.environ.setdefault("BIMP_LANG", "pl")
 sys.path.insert(0, str(BASE / "bimp3"))
 import gi
 
 gi.require_version("Gimp", "3.0")
 gi.require_version("Gegl", "0.4")
 from gi.repository import Gimp, Gegl, Gio
-from bimp_model import new_step, save_settings, load_settings, plan_outputs
+from bimp_model import new_step, save_settings, plan_outputs
 from bimp_engine import EXPORTERS, process_one, validate_runtime, config_for, procedure, set_argument
 
 Gegl.init(None)
@@ -320,7 +321,7 @@ def filesystem_publication():
                 target.unlink()
                 export = bimp_engine.export_image
 
-                def concurrent_target(image, temporary, arguments):
+                def concurrent_target(image, temporary, arguments, export=export, target=target):
                     export(image, temporary, arguments)
                     target.write_bytes(b"concurrent output")
 
@@ -602,7 +603,7 @@ def watermark_fonts():
         image = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(str(source)))
         try:
             step = new_step("watermark")
-            step["settings"].update(text="Example watermark", font=chosen, color="#ffffff")
+            step["settings"].update(text="BIMP Test", font=chosen, color="#ffffff")
             validate_runtime([step])
             apply_step(image, step)
             layer = image.get_layers()[0]
@@ -617,7 +618,7 @@ def watermark_fonts():
             dict(
                 type="watermark",
                 settings=dict(
-                    new_step("watermark")["settings"], text="Example watermark", font="Arial Rounded MT Bold Italic 16px"
+                    new_step("watermark")["settings"], text="BIMP Test", font="Arial Rounded MT Bold Italic 16px"
                 ),
             )
         ],
@@ -679,8 +680,267 @@ def repeated_photo_preview():
 
 
 check("repeated photo preview requests with LUT", repeated_photo_preview)
+def write_orientation_jpeg(destination, orientation):
+    """Copy the fixture as JPEG with a minimal EXIF APP1 Orientation tag."""
+    import struct
+
+    image = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(str(source)))
+    plain = destination.with_name(destination.stem + "-plain.jpg")
+    try:
+        assert Gimp.file_save(Gimp.RunMode.NONINTERACTIVE, image, Gio.File.new_for_path(str(plain)), None)
+    finally:
+        image.delete()
+    data = plain.read_bytes()
+    # Drop GIMP's own EXIF segments so that only the tested Orientation exists.
+    position, kept = 2, [data[:2]]
+    while data[position] == 0xFF and data[position + 1] != 0xDA:
+        length = struct.unpack(">H", data[position + 2 : position + 4])[0]
+        if data[position + 1] != 0xE1:
+            kept.append(data[position : position + 2 + length])
+        position += 2 + length
+    data = b"".join(kept) + data[position:]
+    ifd =b"II*\x00" + struct.pack("<IH", 8, 1) + struct.pack("<HHIHH", 0x0112, 3, 1, orientation, 0)
+    ifd += struct.pack("<I", 0)
+    app1 = b"Exif\x00\x00" + ifd
+    destination.write_bytes(data[:2] + b"\xff\xe1" + struct.pack(">H", len(app1) + 2) + app1 + data[2:])
+    return destination
+
+
+def exif_orientation_is_applied():
+    from bimp_engine import exif_orientation
+
+    rotated = write_orientation_jpeg(work / "orientation-6.jpg", 6)
+    probe = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(str(rotated)))
+    try:
+        assert exif_orientation(probe) == 6, exif_orientation(probe)
+    finally:
+        probe.delete()
+    target = work / "orientation-6.png"
+    assert process_one(rotated, target, [], overwrite=True)["status"] == "success"
+    image = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(str(target)))
+    try:
+        assert (image.get_width(), image.get_height()) == (40, 80), (image.get_width(), image.get_height())
+        layer = image.get_layers()[0]
+        top, bottom = layer.get_pixel(20, 10).get_rgba(), layer.get_pixel(20, 70).get_rgba()
+        # The red left half of the landscape fixture becomes the top after a 90° turn.
+        assert top[0] > top[2] and bottom[2] > bottom[0], (top, bottom)
+        assert exif_orientation(image) == 1
+    finally:
+        image.delete()
+    unrotated = work / "orientation-off.png"
+    options = {"auto_orient": False}
+    assert process_one(rotated, unrotated, [], overwrite=True, options=options)["status"] == "success"
+    image = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(str(unrotated)))
+    try:
+        assert (image.get_width(), image.get_height()) == (80, 40)
+    finally:
+        image.delete()
+
+
+check("EXIF orientation applied before operations and optional", exif_orientation_is_applied)
+
+
+def userdef_after_inserted_layers():
+    from bimp_engine import apply_step
+
+    image = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(str(source)))
+    try:
+        photo = image.get_layers()[0]
+        before = photo.get_pixel(70, 30).get_rgba()
+        wm = new_step("watermark")
+        wm["settings"].update(text="X", font="Sans-serif 6px", color="#ffffff", position=0)
+        invert = new_step("userdef")
+        invert["settings"]["procedure"] = "gimp-drawable-invert"
+        validate_runtime([wm, invert])
+        apply_step(image, wm)
+        apply_step(image, invert)
+        after = photo.get_pixel(70, 30).get_rgba()
+        assert abs(after[0] - before[0]) > 0.3 and abs(after[2] - before[2]) > 0.3, (before, after)
+    finally:
+        image.delete()
+
+
+check("drawable procedure after watermark changes the photo layer, not only the watermark", userdef_after_inserted_layers)
+
+
+def textual_location_removed():
+    from bimp_engine import prepare_metadata
+
+    image = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(str(source)))
+    try:
+        metadata = Gimp.Metadata.new()
+        assert metadata.try_set_tag_string("Exif.Image.Artist", "BIMP test")
+        for tag, value in (
+            ("Iptc.Application2.City", "Krakow"),
+            ("Iptc.Application2.CountryName", "Polska"),
+            ("Xmp.photoshop.City", "Krakow"),
+            ("Xmp.photoshop.State", "Malopolska"),
+            ("Xmp.iptc.Location", "Rynek"),
+        ):
+            assert metadata.try_set_tag_string(tag, value), tag
+        assert image.set_metadata(metadata)
+        prepare_metadata(image, "strip-gps")
+        clean = image.get_metadata()
+        tags = list(clean.get_exif_tags() or []) + list(clean.get_iptc_tags() or []) + list(clean.get_xmp_tags() or [])
+        assert "Exif.Image.Artist" in tags
+        leftovers = [t for t in tags if any(k in t.casefold() for k in ("city", "country", "state", "location"))]
+        assert not leftovers, leftovers
+    finally:
+        image.delete()
+
+
+check("strip-gps also removes textual city, region, country and location", textual_location_removed)
+
+
+def crash_loop_entry_becomes_error():
+    import time
+    from bimp_jobs import Job, Worker, new_job_directory
+
+    home = work / "crash-loop"
+    options = {"output_directory": str(home / "out"), "overwrite": True}
+    job = Job.create(new_job_directory(home), [(source, home / "out/result.png")], [], options)
+    job.emit({"kind": "entry", "index": 0, "result": {"status": "running", "attempts": 2}})
+    worker = Worker(Job(job.path))
+    worker.start()
+    deadline = time.monotonic() + 120
+    while worker.poll() is None:
+        assert time.monotonic() < deadline, "worker timeout"
+        time.sleep(0.05)
+    entry = worker.job.entries[0]
+    assert entry["status"] == "error" and "przerwał" in entry["error"], entry
+    assert not (home / "out/result.png").exists()
+
+
+check("file that crashed the worker twice is reported instead of retried forever", crash_loop_entry_becomes_error)
+
+def noisy_photo(path, width=900, height=600):
+    image = Gimp.Image.new(width, height, Gimp.ImageBaseType.RGB)
+    layer = Gimp.Layer.new(image, "noise", width, height, Gimp.ImageType.RGB_IMAGE, 100, Gimp.LayerMode.NORMAL)
+    assert image.insert_layer(layer, None, 0)
+    effect = Gimp.DrawableFilter.new(layer, "gegl:noise-rgb", "test")
+    effect.update()
+    layer.merge_filter(effect)
+    try:
+        assert Gimp.file_save(Gimp.RunMode.NONINTERACTIVE, image, Gio.File.new_for_path(str(path)), None)
+    finally:
+        image.delete()
+    return path
+
+
+def variants_and_file_size_limit():
+    from bimp_model import FORMATS, variant_targets
+
+    photo = noisy_photo(work / "noise-source.png")
+    fmt = new_step("changeformat")
+    fmt["settings"].update(format=FORMATS.index("jpg"), max_kb=60)
+    thumb = new_step("variant")
+    thumb["settings"].update(suffix="_min", format=0, max_edge=120)
+    web = new_step("variant")
+    web["settings"].update(suffix="_web", format=FORMATS.index("webp") + 1, max_edge=0, max_kb=40)
+    steps = [thumb, web, fmt]
+    validate_runtime(steps)
+    out = work / "variants"
+    target = plan_outputs([photo], out, steps)[0][1]
+    for old in (target, *variant_targets(target, steps)):
+        old.unlink(missing_ok=True)
+    result = process_one(photo, target, steps)
+    assert result["status"] == "success", result
+    assert [v["status"] for v in result["variants"]] == ["success", "success"], result
+    assert target.stat().st_size <= 60 * 1024, target.stat().st_size
+    small, webp = variant_targets(target, steps)
+    assert webp.suffix == ".webp" and webp.stat().st_size <= 40 * 1024
+    image = Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(str(small)))
+    try:
+        assert max(image.get_width(), image.get_height()) == 120 and small.suffix == ".jpg"
+    finally:
+        image.delete()
+    assert not list(out.glob(".bimp-*"))
+    impossible = new_step("changeformat")
+    impossible["settings"].update(format=FORMATS.index("jpg"), max_kb=1)
+    try:
+        process_one(photo, out / "impossible.jpg", [impossible], overwrite=True)
+    except ValueError as exc:
+        assert "KB" in str(exc)
+    else:
+        raise AssertionError("1 KB limit for noise should fail")
+    assert not (out / "impossible.jpg").exists() and not list(out.glob(".bimp-*"))
+
+
+check("extra output variants and target file size", variants_and_file_size_limit)
+
+
+def window_queue_features():
+    import shutil
+    import time
+    from bimp_window import BatchWindow, FILE_PATH, FILE_THUMB
+    from gi.repository import GLib, Gtk
+
+    home = work / "window-features"
+    shutil.rmtree(home, ignore_errors=True)
+    folder = home / "photos"
+    (folder / "sub").mkdir(parents=True)
+    shutil.copy(source, folder / "a.png")
+    shutil.copy(source, folder / "sub" / "b.png")
+    (folder / "notes.txt").write_text("not an image")
+    loose = home / "loose.png"
+    shutil.copy(source, loose)
+    window = BatchWindow(home=home, restore=False)
+    context = GLib.MainContext.default()
+    deadline = time.monotonic() + 60
+    try:
+        window.recursive.set_active(True)
+        assert window.add_uris([folder.as_uri(), loose.as_uri(), (folder / "notes.txt").as_uri(), "https://x/y.png"])
+        while window.scanning:
+            context.iteration(True)
+            assert time.monotonic() < deadline, "scan timeout"
+        names = sorted(Path(row[FILE_PATH]).name for row in window.file_store)
+        assert names == ["a.png", "b.png", "loose.png"], names
+        while any(row[FILE_THUMB] is None for row in window.file_store):
+            context.iteration(False)
+            assert time.monotonic() < deadline, "thumbnails not loaded"
+        window.filter_entry.set_text("sub")
+        window.file_filter.refilter()
+        assert len(window.file_filter) == 1 and window.selected_source().endswith("b.png")
+        window.file_view.get_selection().select_all()
+        window.remove_files()
+        window.filter_entry.set_text("")
+        window.file_filter.refilter()
+        assert sorted(Path(p).name for p in window.inputs()) == ["a.png", "loose.png"]
+        window.auto_orient.set_active(False)
+        window.language_combo.set_active_id("en")
+        window.persist()
+        saved = json.loads((home / "preferences.json").read_text(encoding="utf-8"))
+        assert saved["options"]["auto_orient"] is False and saved["language"] == "en", saved
+
+        def close_history():
+            for toplevel in Gtk.Window.list_toplevels():
+                if toplevel.get_title() == "Historia zadań i dane BIMP":
+                    toplevel.response(Gtk.ResponseType.CLOSE)
+                    return GLib.SOURCE_REMOVE
+            return GLib.SOURCE_CONTINUE
+
+        GLib.timeout_add(200, close_history)
+        window.show_history()
+    finally:
+        window.dialog.destroy()
+    restored = BatchWindow(home=home)
+    try:
+        assert restored.auto_orient.get_active() is False and restored.language == "en"
+    finally:
+        restored.dialog.destroy()
+
+
+check("window: dropped files and folders, thumbnails, filter, history, language and EXIF options", window_queue_features)
+
+
 results["passed"] = len(results["checks"])
 results["failed"] = len(results["failures"])
+# A filtered development run must never be mistaken for a full regression.
+results["filter"] = os.environ.get("BIMP_TEST_FILTER", "")
+results["python"] = sys.version.split()[0]
+from datetime import datetime, timezone
+
+results["finished_utc"] = datetime.now(timezone.utc).isoformat()
 (BASE / "tests" / "integration-result.json").write_text(
     json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
 )

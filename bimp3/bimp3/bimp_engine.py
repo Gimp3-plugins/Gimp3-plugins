@@ -21,6 +21,7 @@ from bimp_model import (
     validate_steps,
     dependency_paths,
     path_key,
+    variant_targets,
 )
 from bimp_lut import read_cube
 
@@ -64,6 +65,115 @@ SAFE_USER_PROCEDURES = {
 }
 
 
+# Coordinates and also textual places (IPTC/XMP city, region, country, sublocation).
+LOCATION_TAG_KEYS = (
+    "gps",
+    "latitude",
+    "longitude",
+    "geolocation",
+    "location",
+    "city",
+    "country",
+    "province",
+    "state",
+    "sublocation",
+)
+
+# EXIF orientation -> transformations which bring the pixels upright.
+ORIENTATION_FIXES = {
+    2: ("flip-h",),
+    3: ("rotate-180",),
+    4: ("flip-v",),
+    5: ("rotate-90", "flip-h"),
+    6: ("rotate-90",),
+    7: ("rotate-90", "flip-v"),
+    8: ("rotate-270",),
+}
+
+
+def exif_orientation(image):
+    metadata = image.get_metadata()
+    if not metadata:
+        return 1
+    for tag in ("Exif.Image.Orientation", "Xmp.tiff.Orientation"):
+        try:
+            value = metadata.try_get_tag_string(tag)
+        except Exception:
+            value = None
+        if value and value.strip().isdigit():
+            return int(value)
+    return 1
+
+
+def auto_orient(image):
+    """GIMP does not apply EXIF orientation when loading non-interactively."""
+    orientation = exif_orientation(image)
+    actions = ORIENTATION_FIXES.get(orientation, ())
+    for action in actions:
+        if action == "flip-h":
+            require(image.flip(Gimp.OrientationType.HORIZONTAL), "orientacja EXIF")
+        elif action == "flip-v":
+            require(image.flip(Gimp.OrientationType.VERTICAL), "orientacja EXIF")
+        else:
+            rotation = {
+                "rotate-90": Gimp.RotationType.DEGREES90,
+                "rotate-180": Gimp.RotationType.DEGREES180,
+                "rotate-270": Gimp.RotationType.DEGREES270,
+            }[action]
+            require(image.rotate(rotation), "orientacja EXIF")
+    if orientation != 1:
+        metadata = image.get_metadata()
+        for tag in ("Exif.Image.Orientation", "Xmp.tiff.Orientation"):
+            try:
+                if metadata.try_get_tag_string(tag) is not None:
+                    metadata.try_set_tag_string(tag, "1")
+            except Exception:
+                pass
+        require(image.set_metadata(metadata), "orientacja EXIF")
+    return orientation
+
+
+# GIMP names fonts "<family> <style>" with the style localized by fontconfig
+# (e.g. Polish "Arial Pogrubiony"). Presets must work in every GIMP language.
+LOCALIZED_STYLES = {
+    "pogrubiona kursywa": "bold italic",
+    "pogrubiony kursywa": "bold italic",
+    "pogrubiony": "bold",
+    "pogrubiona": "bold",
+    "kursywa": "italic",
+    "normalny": "regular",
+    "normalna": "regular",
+    "fett kursiv": "bold italic",
+    "kursiv": "italic",
+    "fett": "bold",
+    "standard": "regular",
+    "gras italique": "bold italic",
+    "italique": "italic",
+    "gras": "bold",
+    "negrita cursiva": "bold italic",
+    "cursiva": "italic",
+    "negrita": "bold",
+    "grassetto corsivo": "bold italic",
+    "corsivo": "italic",
+    "grassetto": "bold",
+    "normal": "regular",
+    "book": "regular",
+    "roman": "regular",
+}
+
+
+def canonical_font_name(name):
+    """Lower-case name with an English style suffix and without "regular"."""
+    name = re.sub(r"[^\w]+", " ", name.casefold()).strip()
+    for localized in sorted(LOCALIZED_STYLES, key=len, reverse=True):
+        if name.endswith(" " + localized):
+            name = name[: -len(localized)] + LOCALIZED_STYLES[localized]
+            break
+    if name.endswith(" regular"):
+        name = name[: -len(" regular")]
+    return name
+
+
 def watermark_font(description):
     # GIMP resource names are not Pango descriptions. Pango can reinterpret
     # words such as Bold in a family name, and GTK can invent missing styles.
@@ -76,22 +186,19 @@ def watermark_font(description):
     font = Gimp.Font.get_by_name(desc.to_string())
     if font is not None:
         return font
-    normalize = lambda name: re.sub(r"[^\w]+", " ", name.casefold()).strip()
-    requested = normalize(resource_name)
-    candidates = Gimp.fonts_get_list(None)
-    # Prefer exact names, including GIMP's explicit "Regular" suffix.
-    for candidate in candidates:
-        name = normalize(candidate.get_name())
-        if name == requested or name == requested + " regular":
+    requested = canonical_font_name(resource_name)
+    candidates = [(canonical_font_name(c.get_name()), c) for c in Gimp.fonts_get_list(None)]
+    # Prefer exact names, regardless of GIMP's localized style words.
+    for name, candidate in candidates:
+        if name == requested:
             return candidate
     # Existing GTK presets may request a synthetic italic/oblique style. Use
     # the actual family present in GIMP, without matching unrelated families.
     for suffix in (" italic", " oblique"):
         if requested.endswith(suffix):
             base = requested[: -len(suffix)]
-            for candidate in candidates:
-                name = normalize(candidate.get_name())
-                if name in (base, base + " regular"):
+            for name, candidate in candidates:
+                if name == base:
                     return candidate
     raise ValueError(f"Czcionka „{resource_name}” nie jest dostępna w GIMP. Wybierz czcionkę z listy GIMP.")
 
@@ -167,14 +274,14 @@ def set_argument(config, key, value):
         raise ValueError(f"GIMP odrzucił wartość parametru {key}: {value}")
 
 
-def config_for(proc, image=None, file=None, arguments=None):
+def config_for(proc, image=None, file=None, arguments=None, drawables=None):
     config = proc.create_config()
     if config.find_property("run-mode"):
         config.set_property("run-mode", Gimp.RunMode.NONINTERACTIVE)
     if image is not None:
         if config.find_property("image"):
             config.set_property("image", image)
-        layers = image.get_selected_layers() or image.get_layers()
+        layers = drawables or image.get_selected_layers() or image.get_layers()
         if config.find_property("drawables"):
             config.set_core_object_array("drawables", layers)
         if config.find_property("drawable"):
@@ -191,7 +298,20 @@ def validate_runtime(steps):
     for step in steps:
         kind, s = step["type"], step["settings"]
         if kind == "changeformat":
-            config_for(procedure(EXPORTERS[FORMATS[s["format"]]]), arguments=s["arguments"])
+            proc = procedure(EXPORTERS[FORMATS[s["format"]]])
+            config_for(proc, arguments=s["arguments"])
+            if s.get("max_kb") and proc.create_config().find_property("quality") is None:
+                raise ValueError(f"Limit rozmiaru pliku nie działa dla formatu {FORMATS[s['format']].upper()}.")
+        elif kind == "variant":
+            if s["format"]:
+                proc = procedure(EXPORTERS[FORMATS[s["format"] - 1]])
+                config_for(proc, arguments=s.get("arguments", {}))
+                if s["max_kb"] and proc.create_config().find_property("quality") is None:
+                    raise ValueError(
+                        f"Limit rozmiaru pliku nie działa dla formatu {FORMATS[s['format'] - 1].upper()}."
+                    )
+            elif s.get("arguments"):
+                raise ValueError("Parametry eksportu wersji wymagają wybrania formatu.")
         elif kind == "userdef":
             name = s["procedure"]
             if name not in SAFE_USER_PROCEDURES:
@@ -206,7 +326,6 @@ def validate_runtime(steps):
             read_cube(s["file"])
         elif kind == "watermark":
             if s["mode"]:
-                desc = Pango.FontDescription.from_string(s["font"])
                 watermark_font(s["font"])
             elif not Path(s["image_file"]).is_file():
                 raise ValueError(f"Brak obrazu znaku wodnego: {s['image_file']}")
@@ -384,11 +503,21 @@ def apply_step(image, step, checkpoint=lambda: None):
         apply_watermark(image, s)
     elif kind == "lut":
         apply_lut(image, s, checkpoint)
+    elif kind in ("variant", "rename", "changeformat"):
+        pass  # Output-only steps; handled when exporting.
     elif kind == "userdef":
         if s["procedure"] not in SAFE_USER_PROCEDURES:
             raise ValueError("Niedozwolona procedura użytkownika.")
         proc = procedure(s["procedure"])
-        run_checked(proc, config_for(proc, image=image, arguments=s["arguments"]))
+        # Inserting a watermark or padding layer selects it in GIMP. Like the
+        # built-in operations, drawable procedures act on every leaf layer.
+        layers = leaf_layers(image)
+        if any(p.name == "drawable" for p in proc.get_arguments()):
+            for layer in layers:
+                checkpoint()
+                run_checked(proc, config_for(proc, image=image, arguments=s["arguments"], drawables=[layer]))
+        else:
+            run_checked(proc, config_for(proc, image=image, arguments=s["arguments"], drawables=layers))
 
 
 def prepare_metadata(image, policy):
@@ -404,17 +533,54 @@ def prepare_metadata(image, policy):
                 + list(metadata.get_xmp_tags() or [])
                 + list(metadata.get_iptc_tags() or [])
             ):
-                if any(
-                    key in tag.casefold()
-                    for key in ("gps", "latitude", "longitude", "geolocation", "locationcreated", "locationshown")
-                ):
+                if any(key in tag.casefold() for key in LOCATION_TAG_KEYS):
                     metadata.try_clear_tag(tag)
             require(image.set_metadata(metadata), "usunięcie GPS")
     elif policy != "preserve":
         raise ValueError("Nieznana polityka metadanych.")
 
 
-def export_image(image, target, arguments, options=None):
+def fit_quality(proc, image, target, arguments, max_bytes):
+    """Highest exporter quality whose file fits in max_bytes (binary search, at most ~10 exports)."""
+    config = proc.create_config()
+    spec = config.find_property("quality")
+    if spec is None:
+        raise ValueError(f"{proc.get_name()}: limit rozmiaru działa tylko dla formatów z parametrem jakości.")
+    integer = spec.value_type.name not in ("gdouble", "gfloat")
+    high = arguments.get("quality", config.get_property("quality"))
+    low = spec.minimum
+
+    def attempt(quality):
+        quality = int(round(quality)) if integer else round(quality, 4)
+        run_checked(proc, config_for(proc, image=image, file=target, arguments=dict(arguments, quality=quality)))
+        return quality, Path(target).stat().st_size
+
+    quality, size = attempt(high)
+    if size <= max_bytes:
+        return quality
+    best, lower, upper = None, low, high
+    for _attempt in range(8):
+        quality, size = attempt((lower + upper) / 2)
+        if size <= max_bytes:
+            best, lower = quality, (lower + upper) / 2
+        else:
+            upper = (lower + upper) / 2
+        if upper - lower < (1 if integer else (high - low) / 200):
+            break
+    if best is None:
+        quality, size = attempt(low)
+        if size > max_bytes:
+            raise ValueError(
+                f"Nie da się zmieścić wyniku w {max_bytes // 1024} KB nawet przy najniższej jakości "
+                f"({-(-size // 1024)} KB). Zmniejsz wymiary albo zwiększ limit."
+            )
+        return quality
+    if quality != best:
+        attempt(best)
+    return best
+
+
+def export_image(image, target, arguments, options=None, max_bytes=0):
     if options and options.get("output_color") == "srgb":
         if image.get_base_type() == Gimp.ImageBaseType.INDEXED:
             require(image.convert_rgb(), "RGB eksportu")
@@ -449,8 +615,11 @@ def export_image(image, target, arguments, options=None):
                 ),
                 "paleta GIF",
             )
-        run_checked(proc, config_for(proc, image=image, file=target, arguments=arguments))
-    elif arguments:
+        if max_bytes:
+            fit_quality(proc, image, target, arguments, max_bytes)
+        else:
+            run_checked(proc, config_for(proc, image=image, file=target, arguments=arguments))
+    elif arguments or max_bytes:
         raise ValueError(f"Brak skonfigurowanego eksportera dla {ext}")
     else:
         if options:
@@ -461,6 +630,55 @@ def export_image(image, target, arguments, options=None):
         )
 
 
+def publish(temporary, target, overwrite):
+    """Move a finished temporary file into place; False if the target appeared meanwhile."""
+    if overwrite:
+        os.replace(temporary, target)
+        return True
+    try:
+        if os.name == "nt":
+            os.rename(temporary, target)  # never replaces an existing file on Windows
+        else:
+            os.link(temporary, target)
+            Path(temporary).unlink(missing_ok=True)
+    except FileExistsError:
+        return False
+    return True
+
+
+def export_variant(image, settings, main_target, options, checkpoint=lambda: None):
+    """Export a copy of the current image (optionally smaller) to a temporary file."""
+    suffix = main_target.suffix if settings["format"] == 0 else "." + FORMATS[settings["format"] - 1]
+    copy = require(image.duplicate(), "kopia dla dodatkowej wersji")
+    temporary = None
+    try:
+        copy.undo_disable()
+        if settings["max_edge"]:
+            width, height = copy.get_width(), copy.get_height()
+            factor = settings["max_edge"] / max(width, height)
+            if factor < 1:
+                require(
+                    copy.scale(max(1, round(width * factor)), max(1, round(height * factor))),
+                    "skalowanie dodatkowej wersji",
+                )
+        checkpoint()
+        fd, name = tempfile.mkstemp(prefix=".bimp-", suffix=suffix, dir=main_target.parent)
+        os.close(fd)
+        temporary = Path(name)
+        export_image(
+            copy, temporary, settings.get("arguments", {}), options, max_bytes=settings.get("max_kb", 0) * 1024
+        )
+        if not temporary.stat().st_size:
+            raise RuntimeError("Eksporter nie zapisał dodatkowej wersji.")
+        return temporary
+    except BaseException:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+    finally:
+        copy.delete()
+
+
 def process_one(source, target, steps, overwrite=False, keep_dates=False, options=None, checkpoint=lambda: None):
     """Export to a sibling temporary file, then publish only a successful result."""
     source, target = Path(source), Path(target)
@@ -469,13 +687,14 @@ def process_one(source, target, steps, overwrite=False, keep_dates=False, option
     if path_key(target) in {path_key(p) for p in dependency_paths(steps)}:
         raise ValueError("Plik wynikowy nie może nadpisywać zależności zadania.")
     automatic_suffix = options is not None and options.get("collision") == "suffix"
-    reserved = set((options or {}).get("reserved_targets", []))
+    reserved = {path_key(p) for p in (options or {}).get("reserved_targets", [])}
 
     def next_target(original):
         counter = 2
         while True:
             candidate = original.with_name(f"{original.stem}_{counter}{original.suffix}")
-            if not candidate.exists() and path_key(candidate) not in reserved:
+            group = [candidate, *variant_targets(candidate, steps)]
+            if not any(p.exists() or path_key(p) in reserved for p in group):
                 return candidate
             counter += 1
 
@@ -486,51 +705,60 @@ def process_one(source, target, steps, overwrite=False, keep_dates=False, option
     target.parent.mkdir(parents=True, exist_ok=True)
     stat = source.stat()
     image, temporary = None, None
+    variant_files = []
     require(Gimp.context_push(), "kontekst")
     try:
         image = require(
             Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(str(source))), "otwarcie obrazu"
         )
         image.undo_disable()
+        if (options or {}).get("auto_orient", True):
+            auto_orient(image)
         for step in steps:
             checkpoint()
-            apply_step(image, step, checkpoint)
-        arguments = next((s["settings"]["arguments"] for s in steps if s["type"] == "changeformat"), {})
+            if step["type"] == "variant":
+                # Snapshot at this point of the sequence; published only after the main result.
+                variant_files.append(export_variant(image, step["settings"], target, options, checkpoint))
+            else:
+                apply_step(image, step, checkpoint)
+        changeformat = next((s["settings"] for s in steps if s["type"] == "changeformat"), {})
+        arguments = changeformat.get("arguments", {})
         fd, name = tempfile.mkstemp(prefix=".bimp-", suffix=target.suffix, dir=target.parent)
         os.close(fd)
         temporary = Path(name)
         checkpoint()
-        if options is None:
+        max_bytes = changeformat.get("max_kb", 0) * 1024
+        if options is None and not max_bytes:
             export_image(image, temporary, arguments)
         else:
-            export_image(image, temporary, arguments, options)
+            export_image(image, temporary, arguments, options, max_bytes=max_bytes)
         if not temporary.is_file() or not temporary.stat().st_size:
             raise RuntimeError("Eksporter nie zapisał pliku.")
-        if keep_dates:
-            os.utime(temporary, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+        for produced in [temporary, *variant_files]:
+            if keep_dates:
+                os.utime(produced, ns=(stat.st_atime_ns, stat.st_mtime_ns))
         checkpoint()
-        if overwrite:
-            os.replace(temporary, target)
-        else:
-            original_target = target
-            while True:
-                try:
-                    if os.name == "nt":
-                        os.rename(temporary, target)
-                    else:
-                        os.link(temporary, target)
-                    break
-                except FileExistsError:
-                    if automatic_suffix:
-                        target = next_target(original_target)
-                    else:
-                        return {"source": str(source), "target": str(target), "status": "skipped"}
-        return {"source": str(source), "target": str(target), "status": "success"}
+        original_target = target
+        while True:
+            if publish(temporary, target, overwrite):
+                break
+            if not automatic_suffix:
+                return {"source": str(source), "target": str(target), "status": "skipped"}
+            target = next_target(original_target)
+        variants = []
+        for produced, variant in zip(variant_files, variant_targets(target, steps)):
+            status = "success" if publish(produced, variant, overwrite) else "skipped"
+            variants.append({"target": str(variant), "status": status})
+        result = {"source": str(source), "target": str(target), "status": "success"}
+        if variants:
+            result["variants"] = variants
+        return result
     finally:
         # Cleanup failures must never mask an export error or skip context_pop.
         for action in (
             lambda: image.delete() if image is not None else None,
             lambda: temporary.unlink(missing_ok=True) if temporary is not None else None,
+            *(lambda produced=produced: produced.unlink(missing_ok=True) for produced in variant_files),
         ):
             try:
                 action()
@@ -538,7 +766,7 @@ def process_one(source, target, steps, overwrite=False, keep_dates=False, option
                 import warnings
 
                 try:
-                    warnings.warn(f"BIMP: problem ze sprzątaniem: {exc}", RuntimeWarning)
+                    warnings.warn(f"BIMP: problem ze sprzątaniem: {exc}", RuntimeWarning, stacklevel=2)
                 except Exception:
                     # Warning filters must not turn a cleanup warning into an
                     # exception which skips restoring the GIMP context.
@@ -546,7 +774,7 @@ def process_one(source, target, steps, overwrite=False, keep_dates=False, option
         Gimp.context_pop()
 
 
-def render_preview(source, steps, before, after, checkpoint=lambda: None, max_edge=1000):
+def render_preview(source, steps, before, after, checkpoint=lambda: None, max_edge=1000, options=None):
     """Full-resolution operations followed by display-size PNGs; source untouched."""
     validate_runtime(steps)
     Gimp.context_push()
@@ -554,6 +782,8 @@ def render_preview(source, steps, before, after, checkpoint=lambda: None, max_ed
     try:
         image = require(Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(str(source))), "podgląd")
         image.undo_disable()
+        if (options or {}).get("auto_orient", True):
+            auto_orient(image)
 
         def thumbnail(destination):
             checkpoint()

@@ -10,6 +10,11 @@ permissions:
 jobs:
   model-and-lint:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.14 is the interpreter bundled with GIMP 3.2.x on Windows.
+        python-version: ['3.12', '3.14']
     defaults:
       run:
         working-directory: bimp3
@@ -17,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
       - run: python -m pip install -r requirements-dev.txt
       - run: ruff check bimp3 tests
       - run: python -m unittest discover -s tests -p "test_*.py" -v
