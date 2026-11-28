@@ -1,0 +1,44 @@
+# Testy rdzenia wtyczki Zetmar Kolor (bez GIMP-a): pyflakes + pytest
+# na Windows i Ubuntu, Python 3.12 i 3.14 (GIMP 3.2 na Windows ma Pythona 3.14).
+# Z numpy, żeby porównać wariant numpy z czystym Pythonem.
+# Testy w GIMP-ie (tests/gimp_batch.py) wykonuje się ręcznie – opis w zetmar-kolor/README.md.
+name: zetmar-kolor – testy
+
+on:
+  push:
+    paths:
+      - "zetmar-kolor/**"
+      - ".github/workflows/zetmar-kolor-*.yml"
+  pull_request:
+    paths:
+      - "zetmar-kolor/**"
+      - ".github/workflows/zetmar-kolor-*.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: zetmar-kolor
+
+jobs:
+  pytest:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Zależności testów
+        run: python -m pip install --upgrade pip pytest pyflakes numpy
+      - name: pyflakes
+        run: python -m pyflakes plug-ins/zetmar-kolor tests build-release.py
+      - name: pytest
+        run: python -m pytest tests -q -p no:cacheprovider
+      - name: Paczka wydania
+        run: python build-release.py

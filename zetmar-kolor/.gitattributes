@@ -1,0 +1,6 @@
+# Shebang scripts must keep LF line endings to run on Linux.
+*.py  text eol=lf
+*.json text eol=lf
+*.ps1 text eol=crlf
+*.md  text
+*.webp binary
