@@ -1,0 +1,90 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows (MSYS2 CLANG64)
+    runs-on: windows-latest
+    permissions:
+      contents: write   # attaches the ZIP to tagged releases
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: CLANG64
+          update: true
+          install: gettext
+          pacboy: >-
+            clang:p meson:p ninja:p pkgconf:p gimp:p libraw:p libheif:p
+            lcms2:p gexiv2:p lensfun:p
+
+      - name: Configure and build
+        run: |
+          meson setup build
+          meson compile -C build
+
+      - name: Unit tests
+        run: meson test -C build --print-errorlogs
+
+      - name: Package
+        shell: pwsh
+        run: |
+          ./build.ps1 -Package -Msys "${{ steps.msys2.outputs.msys2-location }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gimp-raw-heic-win64
+          path: dist/*.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release view "${{ github.ref_name }}" *> $null
+          if ($LASTEXITCODE) { gh release create "${{ github.ref_name }}" --title "gimp-raw-heic ${{ github.ref_name }}" --notes "See CHANGELOG.md" }
+          gh release upload "${{ github.ref_name }}" dist/*.zip --clobber
+
+  linux:
+    name: Linux (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['fedora:latest', 'debian:testing']
+    container: ${{ matrix.image }}
+    steps:
+      - name: Install dependencies (Fedora)
+        if: startsWith(matrix.image, 'fedora')
+        run: >
+          dnf install -y git meson ninja-build gcc gcc-c++ gettext pkgconf
+          gimp-devel LibRaw-devel libheif-devel lcms2-devel libgexiv2-devel
+          lensfun-devel libgomp
+
+      - name: Install dependencies (Debian)
+        if: startsWith(matrix.image, 'debian')
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates meson ninja-build \
+            gcc g++ gettext pkgconf libgimp-3.0-dev libraw-dev libheif-dev \
+            liblcms2-dev libgexiv2-dev liblensfun-dev
+
+      - uses: actions/checkout@v4
+
+      - name: Build and unit tests
+        run: sh ./build.sh

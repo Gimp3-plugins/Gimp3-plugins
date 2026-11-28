@@ -23,7 +23,7 @@ static const gchar *raw_patterns[] =
 {
   "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "dng", "raf", "orf",
   "rw2", "rwl", "raw", "pef", "srw", "3fr", "fff", "iiq", "erf", "mrw", "kdc",
-  "dcr", "mef", "mos", "x3f", "gpr", NULL
+  "dcr", "mef", "mos", NULL
 };
 
 GimpProcedure *
@@ -56,19 +56,27 @@ batch_procedure_new (GimpPlugIn  *plug_in,
                                             _("Paths of the RAW files to open"),
                                             G_PARAM_READWRITE);
   raw_settings_add_arguments (procedure);
+  gimp_procedure_add_string_argument (procedure, "preset", _("Preset"),
+                                      _("Name of a development preset applied in "
+                                        "non-interactive mode (empty = use the arguments)"),
+                                      "", G_PARAM_READWRITE);
+
+  gimp_procedure_add_core_object_array_return_value (procedure, "images", _("Images"),
+                                                     _("The opened images"),
+                                                     GIMP_TYPE_IMAGE, G_PARAM_READWRITE);
 
   return procedure;
 }
 
-static gchar **
-choose_files (void)
+gchar **
+rawheic_choose_raw_files (const gchar *title)
 {
   GtkWidget     *chooser;
   GtkFileFilter *filter;
   GPtrArray     *paths = g_ptr_array_new ();
   gint           i;
 
-  chooser = gtk_file_chooser_dialog_new (_("Open several RAW files"), NULL,
+  chooser = gtk_file_chooser_dialog_new (title, NULL,
                                          GTK_FILE_CHOOSER_ACTION_OPEN,
                                          _("_Cancel"), GTK_RESPONSE_CANCEL,
                                          _("_Open"),   GTK_RESPONSE_ACCEPT,
@@ -140,6 +148,9 @@ batch_run (GimpProcedure       *procedure,
   GString        *errors = g_string_new (NULL);
   gint            n, i, loaded = 0;
   gboolean        cancelled = FALSE;
+  GPtrArray      *images = g_ptr_array_new ();
+  GError         *serror = NULL;
+  GimpValueArray *ret;
 
   g_object_get (config, "run-mode", &run_mode, "files", &files, NULL);
 
@@ -147,7 +158,7 @@ batch_run (GimpProcedure       *procedure,
     {
       gimp_ui_init (PLUGIN_NAME);
       g_strfreev (files);
-      files = choose_files ();
+      files = rawheic_choose_raw_files (_("Open several RAW files"));
 
       if (! files || ! files[0])
         {
@@ -184,7 +195,31 @@ batch_run (GimpProcedure       *procedure,
     }
 
   raw_settings_from_config (&s, config);
-  raw_batch_session_begin (&s, files);
+
+  if (run_mode != GIMP_RUN_INTERACTIVE)
+    {
+      gchar *preset = NULL;
+
+      g_object_get (config, "preset", &preset, NULL);
+      if (preset && *preset && ! raw_presets_load (preset, &s))
+        {
+          GError *error = g_error_new (G_FILE_ERROR, G_FILE_ERROR_NOENT,
+                                       _("Unknown preset '%s'."), preset);
+          g_free (preset);
+          g_strfreev (files);
+          g_string_free (errors, TRUE);
+          return gimp_procedure_new_return_values (procedure, GIMP_PDB_CALLING_ERROR, error);
+        }
+      g_free (preset);
+    }
+
+  if (! raw_batch_session_begin (&s, files, &serror))
+    {
+      g_strfreev (files);
+      g_string_free (errors, TRUE);
+      g_ptr_array_free (images, TRUE);
+      return gimp_procedure_new_return_values (procedure, GIMP_PDB_EXECUTION_ERROR, serror);
+    }
 
   for (i = 0; i < n && ! cancelled; i++)
     {
@@ -204,6 +239,7 @@ batch_run (GimpProcedure       *procedure,
       if (image)
         {
           loaded++;
+          g_ptr_array_add (images, image);
           if (run_mode == GIMP_RUN_INTERACTIVE)
             {
               gimp_display_new (image);
@@ -238,8 +274,17 @@ batch_run (GimpProcedure       *procedure,
   g_string_free (errors, TRUE);
   g_strfreev (files);
 
-  return gimp_procedure_new_return_values (procedure,
-                                           cancelled && loaded == 0 ?
-                                           GIMP_PDB_CANCEL : GIMP_PDB_SUCCESS,
-                                           NULL);
+  ret = gimp_procedure_new_return_values (procedure,
+                                          cancelled && loaded == 0 ?
+                                          GIMP_PDB_CANCEL : GIMP_PDB_SUCCESS,
+                                          NULL);
+  /* scripts get the images (NULL-terminated array) */
+  if (! (cancelled && loaded == 0))
+    {
+      g_ptr_array_add (images, NULL);
+      GIMP_VALUES_SET_CORE_OBJECT_ARRAY (ret, 1, images->pdata);
+    }
+  g_ptr_array_free (images, TRUE);
+
+  return ret;
 }

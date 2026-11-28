@@ -145,13 +145,10 @@ temperature_to_xy (gdouble  T,
     }
   else
     {
-      /* Planckian locus, Kim et al. cubic spline */
+      /* Planckian locus, Kim et al. cubic spline (1667 K .. 4000 K) */
       gdouble t = 1.0 / T;
 
-      if (T <= 4000.0)
-        *x = -0.2661239e9 * t * t * t - 0.2343589e6 * t * t + 0.8776956e3 * t + 0.179910;
-      else
-        *x = -3.0258469e9 * t * t * t + 2.1070379e6 * t * t + 0.2226347e3 * t + 0.240390;
+      *x = -0.2661239e9 * t * t * t - 0.2343589e6 * t * t + 0.8776956e3 * t + 0.179910;
 
       if (T <= 2222.0)
         *y = -1.1063814 * pow (*x, 3) - 1.34811020 * *x * *x + 2.18555832 * *x - 0.20219683;
@@ -287,6 +284,33 @@ remove_hot_pixels (libraw_data_t *lr)
 
 /* --- public -------------------------------------------------------------- */
 
+/* The camera's default crop (DNG DefaultCrop, CR3, ...) in visible-area
+ * coordinates, as LibRaw's cropbox expects.  Inset crops are relative to
+ * the full raw frame.
+ */
+static gboolean
+camera_crop_box (libraw_data_t *lr,
+                 guint          box[4])
+{
+  libraw_raw_inset_crop_t *c  = &lr->sizes.raw_inset_crops[0];
+  libraw_image_sizes_t    *sz = &lr->sizes;
+
+  if (c->cwidth > 16 && c->cheight > 16 &&
+      c->cleft >= sz->left_margin && c->ctop >= sz->top_margin &&
+      c->cleft - sz->left_margin + c->cwidth  <= sz->width &&
+      c->ctop  - sz->top_margin  + c->cheight <= sz->height &&
+      (c->cwidth < sz->width || c->cheight < sz->height))
+    {
+      box[0] = c->cleft - sz->left_margin;
+      box[1] = c->ctop  - sz->top_margin;
+      box[2] = c->cwidth;
+      box[3] = c->cheight;
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
 static void
 apply_settings (libraw_data_t     *lr,
                 const RawSettings *s,
@@ -307,8 +331,9 @@ apply_settings (libraw_data_t     *lr,
   p->threshold      = 0.0f;   /* crashes in LibRaw 0.22.2: see denoise.c */
   p->fbdd_noiserd   = s->fbdd;
   p->med_passes     = preview ? 0 : s->median_passes;
-  p->aber[0]        = 1.0 / s->ca_red;
-  p->aber[2]        = 1.0 / s->ca_blue;
+  /* never hand LibRaw a non-finite or zero scale */
+  p->aber[0]        = (isfinite (s->ca_red)  && s->ca_red  > 0.5) ? 1.0 / s->ca_red  : 1.0;
+  p->aber[2]        = (isfinite (s->ca_blue) && s->ca_blue > 0.5) ? 1.0 / s->ca_blue : 1.0;
 
   switch (s->highlight)
     {
@@ -332,6 +357,9 @@ apply_settings (libraw_data_t     *lr,
       p->exp_preser = (float) s->exposure_preserve;
     }
 
+  if (s->camera_crop)
+    camera_crop_box (lr, p->cropbox);
+
   p->use_camera_wb = 0;
   p->use_auto_wb   = 0;
   memset (p->user_mul, 0, sizeof (p->user_mul));
@@ -352,35 +380,32 @@ apply_settings (libraw_data_t     *lr,
         p->use_camera_wb = 1;
       break;
 
+    case WB_MULTIPLIERS:
+      /* from files (XMP, XCF): never trust the range */
+      p->user_mul[0] = isfinite (s->wb_mul[0]) ? (float) CLAMP (s->wb_mul[0], 0.05, 20.0) : 1.0f;
+      p->user_mul[1] = 1.0f;
+      p->user_mul[2] = isfinite (s->wb_mul[2]) ? (float) CLAMP (s->wb_mul[2], 0.05, 20.0) : 1.0f;
+      p->user_mul[3] = 1.0f;
+      break;
+
     case WB_SPOT:
+      /* LibRaw applies the cropbox first (it shrinks sizes.width/height),
+       * so the grey box is relative to the cropped image, full resolution.
+       */
       p->use_auto_wb = 1;
       spot_to_raw (s->spot, s->auto_rotate ? lr->sizes.flip : 0,
-                   lr->sizes.width, lr->sizes.height, p->greybox);
+                   p->cropbox[2] != 0xffffffff ? (gint) p->cropbox[2] : lr->sizes.width,
+                   p->cropbox[3] != 0xffffffff ? (gint) p->cropbox[3] : lr->sizes.height,
+                   p->greybox);
       break;
     }
 
-  if (s->camera_crop)
-    {
-      libraw_raw_inset_crop_t *c = &lr->sizes.raw_inset_crops[0];
-
-      /* inset crops are relative to the full raw frame */
-      if (c->cwidth > 16 && c->cheight > 16 &&
-          c->cleft >= lr->sizes.left_margin && c->ctop >= lr->sizes.top_margin &&
-          c->cleft - lr->sizes.left_margin + c->cwidth  <= lr->sizes.width &&
-          c->ctop  - lr->sizes.top_margin  + c->cheight <= lr->sizes.height &&
-          (c->cwidth < lr->sizes.width || c->cheight < lr->sizes.height))
-        {
-          p->cropbox[0] = c->cleft - lr->sizes.left_margin;
-          p->cropbox[1] = c->ctop  - lr->sizes.top_margin;
-          p->cropbox[2] = c->cwidth;
-          p->cropbox[3] = c->cheight;
-        }
-    }
 }
 
 static gfloat *
 to_float_scaled (const libraw_processed_image_t *mem,
-                 gint                            max_size,
+                 gint                            max_w,
+                 gint                            max_h,
                  gint                           *out_w,
                  gint                           *out_h)
 {
@@ -389,8 +414,9 @@ to_float_scaled (const libraw_processed_image_t *mem,
   gint           f = 1, ow, oh, x, y;
   gfloat        *dst;
 
-  if (max_size > 0)
-    while (MAX (w, h) / f > max_size)
+  /* fit into max_w x max_h (portrait images must fit the height too) */
+  if (max_w > 0 && max_h > 0)
+    while (w / f > max_w || h / f > max_h)
       f++;
 
   ow = w / f;
@@ -428,12 +454,83 @@ to_float_scaled (const libraw_processed_image_t *mem,
   return dst;
 }
 
+/* Highlight recovery modes make LibRaw scale by the largest white balance
+ * multiplier instead of the smallest (scale_colors: "if (!highlight) dmax =
+ * dmin"), which darkens the image by max/min.  After dcraw_process the
+ * used multipliers are in color.pre_mul.
+ */
+static gdouble
+recovery_compensation (libraw_data_t     *lr,
+                       const RawSettings *s)
+{
+  gdouble lo = G_MAXDOUBLE, hi = 0.0;
+  gint    c;
+
+  if (s->highlight == HL_CLIP || ! s->highlight_compensate)
+    return 1.0;
+
+  for (c = 0; c < 4; c++)
+    {
+      gdouble m = lr->color.pre_mul[c];
+
+      if (m > 1e-6)
+        {
+          lo = MIN (lo, m);
+          hi = MAX (hi, m);
+        }
+    }
+
+  if (hi <= 0.0 || lo >= G_MAXDOUBLE)
+    return 1.0;
+
+  return CLAMP (hi / lo, 1.0, 16.0);
+}
+
+/* Scale 16-bit data, rolling values above the knee off smoothly instead
+ * of clipping them (keeps recovered highlight detail in integer output).
+ */
+static void
+compensate_u16 (guint16 *data,
+                gsize    n,
+                gdouble  gain)
+{
+  const gdouble knee = 0.85;
+  gsize         i;
+
+#pragma omp parallel for
+  for (i = 0; i < n; i++)
+    {
+      gdouble x = data[i] / 65535.0 * gain;
+
+      if (x > knee)
+        x = knee + (1.0 - knee) * (1.0 - exp (-(x - knee) / (1.0 - knee)));
+
+      data[i] = (guint16) (x * 65535.0 + 0.5);
+    }
+}
+
+static void
+compensate_float (gfloat *data,
+                  gsize   n,
+                  gdouble gain)
+{
+  gsize i;
+
+#pragma omp parallel for
+  for (i = 0; i < n; i++)
+    data[i] *= (gfloat) gain;
+}
+
 struct _RawSession
 {
   libraw_data_t *lr;
   gchar         *path;
   ProgressCtx    ctx;
   gboolean       hot_done;
+  gpointer       raw_backup;     /* raw data before hot-pixel removal */
+  gfloat         auto_mul[4];    /* multipliers of the last auto/spot WB */
+  gboolean       have_auto_mul;
+  gsize          raw_backup_len;
 };
 
 RawSession *
@@ -490,30 +587,110 @@ raw_session_camera (RawSession *ses)
 /* Can be called repeatedly with different settings (LibRaw re-copies the
  * unpacked raw data for each dcraw_process()).  Not thread-safe per session.
  */
-RawImage *
-raw_session_develop (RawSession         *ses,
-                     const RawSettings  *s,
-                     gint                max_size,
-                     RawProgressFunc     progress,
-                     gpointer            progress_data,
-                     GError            **error)
+static void
+lens_info_from_libraw (libraw_data_t *lr,
+                       LensInfo      *info)
+{
+  memset (info, 0, sizeof *info);
+  g_strlcpy (info->camera_make,  lr->idata.make,  sizeof info->camera_make);
+  g_strlcpy (info->camera_model, lr->idata.model, sizeof info->camera_model);
+  g_strlcpy (info->lens_make,    lr->lens.LensMake, sizeof info->lens_make);
+  g_strlcpy (info->lens,         lr->lens.Lens,     sizeof info->lens);
+  info->focal    = lr->other.focal_len;
+  info->aperture = lr->other.aperture;
+  info->focal35  = lr->lens.FocalLengthIn35mmFormat;
+}
+
+static gint
+lens_flags (const RawSettings *s)
+{
+  return (s->lens_vignetting ? RAWHEIC_LENS_VIGNETTING : 0) |
+         (s->lens_distortion ? RAWHEIC_LENS_DISTORTION : 0) |
+         (s->lens_tca        ? RAWHEIC_LENS_TCA        : 0);
+}
+
+/* @region (x, y, w, h as fractions of the oriented, cropped image) limits
+ * processing to that part at full resolution (preview loupe).
+ */
+static RawImage *
+session_develop (RawSession         *ses,
+                 const RawSettings  *s,
+                 gint                max_w,
+                 gint                max_h,
+                 const gdouble      *region,
+                 RawProgressFunc     progress,
+                 gpointer            progress_data,
+                 GError            **error)
 {
   libraw_data_t            *lr = ses->lr;
   libraw_processed_image_t *mem;
   RawImage                 *img;
+  gdouble                   gain;
   gint                      ret;
+  g_autofree gchar         *profile = NULL;   /* camera profile in use */
+  gboolean                  use_profile;
+
+  /* an explicit camera profile, or one found for this camera */
+  if (s->camera_profile[0])
+    profile = g_strdup (s->camera_profile);
+  else if (s->auto_profile)
+    profile = rawheic_camprofile_find (s->profile_dir, lr->idata.make, lr->idata.model);
+  use_profile = profile && lr->idata.colors == 3;
 
   ses->ctx.func      = progress;
   ses->ctx.data      = progress_data;
   ses->ctx.cancelled = FALSE;
 
-  if (s->hot_pixels && ! ses->hot_done)
+  /* hot-pixel removal edits the raw data in place: keep a copy so that
+   * switching the option off in the preview restores the original
+   */
+  if (s->hot_pixels && ! ses->hot_done && lr->rawdata.raw_image)
     {
+      ses->raw_backup_len = (gsize) lr->sizes.raw_pitch * lr->sizes.raw_height;
+      if (! ses->raw_backup)
+        ses->raw_backup = g_memdup2 (lr->rawdata.raw_image, ses->raw_backup_len);
       remove_hot_pixels (lr);
       ses->hot_done = TRUE;
     }
+  else if (! s->hot_pixels && ses->hot_done && ses->raw_backup)
+    {
+      memcpy (lr->rawdata.raw_image, ses->raw_backup, ses->raw_backup_len);
+      ses->hot_done = FALSE;
+    }
 
-  apply_settings (lr, s, max_size > 0 && max_size <= 2048);
+  apply_settings (lr, s, ! region && max_w > 0 && MAX (max_w, max_h) <= 2048);
+
+  /* a camera profile works on LibRaw's camera RGB */
+  if (use_profile)
+    lr->params.output_color = 0;
+
+  if (region)
+    {
+      libraw_output_params_t *p = &lr->params;
+      guint base[4] = { 0, 0, lr->sizes.width, lr->sizes.height };
+      guint box[4];
+
+      if (p->cropbox[2] != 0xffffffff)
+        memcpy (base, p->cropbox, sizeof base);
+
+      spot_to_raw (region, s->auto_rotate ? lr->sizes.flip : 0, base[2], base[3], box);
+      p->cropbox[0] = base[0] + box[0];
+      p->cropbox[1] = base[1] + box[1];
+      p->cropbox[2] = box[2];
+      p->cropbox[3] = box[3];
+      p->half_size  = 0;
+
+      /* automatic white balance must not be re-measured on the crop:
+       * reuse what the full preview measured
+       */
+      if (ses->have_auto_mul && (s->wb_mode == WB_AUTO || s->wb_mode == WB_SPOT))
+        {
+          p->use_auto_wb   = 0;
+          p->use_camera_wb = 0;
+          memcpy (p->user_mul, ses->auto_mul, sizeof p->user_mul);
+          memset (p->greybox, 0, sizeof p->greybox);
+        }
+    }
 
   ret = libraw_dcraw_process (lr);
   if (ret != LIBRAW_SUCCESS)
@@ -543,24 +720,107 @@ raw_session_develop (RawSession         *ses,
       goto fail;
     }
 
+  if (! region && (s->wb_mode == WB_AUTO || s->wb_mode == WB_SPOT))
+    {
+      gint c;
+
+      for (c = 0; c < 4; c++)
+        ses->auto_mul[c] = lr->color.pre_mul[c];
+      ses->have_auto_mul = TRUE;
+    }
+
+  gain = recovery_compensation (lr, s);
+
   img = g_new0 (RawImage, 1);
   img->camera = g_strdup (raw_session_camera (ses));
 
-  if (max_size <= 0 && mem->colors == 3)
+  /* the multipliers LibRaw really used (measured ones for auto/spot WB) */
+  {
+    gdouble g = lr->color.pre_mul[1] > 1e-6 ? lr->color.pre_mul[1] : 1.0;
+    gint    c;
+
+    for (c = 0; c < 4; c++)
+      img->used_mul[c] = lr->color.pre_mul[c] > 1e-6 ? lr->color.pre_mul[c] / g : 1.0;
+  }
+
+  /* full size, integer output: hand LibRaw's buffer over (compensation is
+   * rolled off softly); float output keeps compensated values above 1.0
+   */
+  if (max_w <= 0 && mem->colors == 3 && ! lens_flags (s) &&
+      ! use_profile &&
+      ! (gain > 1.0 && s->depth == DEPTH_FLOAT))
     {
+      if (gain > 1.0)
+        compensate_u16 ((guint16 *) mem->data, (gsize) mem->width * mem->height * 3, gain);
+
       /* full size: hand LibRaw's buffer over, no float copy */
       img->mem      = mem;
       img->pixels16 = (guint16 *) mem->data;
       img->width    = mem->width;
       img->height   = mem->height;
+      rawheic_tone_apply (img, s->tone_curve);
       return img;
     }
 
-  img->pixels = to_float_scaled (mem, max_size, &img->width, &img->height);
+  img->pixels = to_float_scaled (mem, max_w, max_h, &img->width, &img->height);
   libraw_dcraw_clear_mem (mem);
 
+  if (img->pixels && gain > 1.0)
+    compensate_float (img->pixels, (gsize) img->width * img->height * 3, gain);
+
+  if (use_profile)
+    img->profile = g_path_get_basename (profile);
+
+  if (img->pixels && use_profile)
+    {
+      gfloat mul[4];
+      gint   c;
+
+      for (c = 0; c < 4; c++)
+        mul[c] = lr->color.pre_mul[c];
+
+      if (! rawheic_camprofile_apply (profile, img->pixels,
+                                      (gsize) img->width * img->height, mul,
+                                      s->color_space, s->camera_profile_look, error))
+        {
+          raw_image_free (img);
+          return NULL;
+        }
+    }
+
   if (img->pixels)
-    return img;
+    {
+      LensInfo info;
+      gint     full_w = img->width, full_h = img->height, off_x = 0, off_y = 0;
+
+      lens_info_from_libraw (lr, &info);
+      img->lens = info.lens[0] ? g_strdup (info.lens) : NULL;
+
+      if (region)
+        {
+          raw_session_size (ses, s, &full_w, &full_h);
+          off_x = (gint) (region[0] * full_w);
+          off_y = (gint) (region[1] * full_h);
+        }
+
+      if (lens_flags (s))
+        img->lens_done = rawheic_lens_correct (img->pixels, img->width, img->height,
+                                               full_w, full_h, off_x, off_y,
+                                               &info, lens_flags (s));
+      if (img->lens)
+        {
+          gchar *desc = rawheic_lens_describe (&info);
+
+          img->lens_known = desc != NULL;
+          g_free (desc);
+        }
+    }
+
+  if (img->pixels)
+    {
+      rawheic_tone_apply (img, s->tone_curve);
+      return img;
+    }
 
   raw_image_free (img);
   ret = LIBRAW_UNSUFFICIENT_MEMORY;
@@ -573,6 +833,62 @@ fail:
   return NULL;
 }
 
+RawImage *
+raw_session_develop (RawSession         *ses,
+                     const RawSettings  *s,
+                     gint                max_size,
+                     RawProgressFunc     progress,
+                     gpointer            progress_data,
+                     GError            **error)
+{
+  return session_develop (ses, s, max_size, max_size, NULL, progress, progress_data, error);
+}
+
+/* Developed image that fits into @max_w x @max_h (previews). */
+RawImage *
+raw_session_develop_box (RawSession         *ses,
+                         const RawSettings  *s,
+                         gint                max_w,
+                         gint                max_h,
+                         RawProgressFunc     progress,
+                         gpointer            progress_data,
+                         GError            **error)
+{
+  return session_develop (ses, s, MAX (1, max_w), MAX (1, max_h), NULL,
+                          progress, progress_data, error);
+}
+
+/* Full-resolution develop of a part of the image, float pixels. */
+RawImage *
+raw_session_develop_region (RawSession         *ses,
+                            const RawSettings  *s,
+                            const gdouble       region[4],
+                            GError            **error)
+{
+  return session_develop (ses, s, G_MAXINT, G_MAXINT, region, NULL, NULL, error);
+}
+
+/* Size of the developed image at full resolution: after the camera crop
+ * (if enabled) and the rotation (if enabled).
+ */
+void
+raw_session_size (RawSession        *ses,
+                  const RawSettings *s,
+                  gint              *width,
+                  gint              *height)
+{
+  libraw_data_t *lr = ses->lr;
+  guint          box[4] = { 0, 0, lr->sizes.width, lr->sizes.height };
+  gboolean       swap;
+
+  if (s->camera_crop)
+    camera_crop_box (lr, box);
+
+  swap = s->auto_rotate && (lr->sizes.flip == 5 || lr->sizes.flip == 6);
+  *width  = swap ? box[3] : box[2];
+  *height = swap ? box[2] : box[3];
+}
+
 void
 raw_session_free (RawSession *ses)
 {
@@ -580,6 +896,7 @@ raw_session_free (RawSession *ses)
     {
       if (ses->lr)
         libraw_close (ses->lr);
+      g_free (ses->raw_backup);
       g_free (ses->path);
       g_free (ses);
     }
@@ -602,7 +919,28 @@ raw_develop (const gchar        *path,
   img = raw_session_develop (ses, s, max_size, progress, progress_data, error);
   raw_session_free (ses);   /* releases LibRaw's internal image before GIMP copies */
 
+  if (img && ! rawheic_geometry_apply (img, s, FALSE))
+    {
+      raw_image_free (img);
+      g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_NOMEM,
+                           _("Not enough memory to straighten or crop the image."));
+      return NULL;
+    }
+
   return img;
+}
+
+/* Drop the 16-bit buffer (LibRaw's or our own). */
+void
+raw_image_release_pixels16 (RawImage *img)
+{
+  if (img->own16)
+    g_free (img->pixels16);
+  if (img->mem)
+    libraw_dcraw_clear_mem (img->mem);
+  img->pixels16 = NULL;
+  img->mem      = NULL;
+  img->own16    = FALSE;
 }
 
 void
@@ -611,9 +949,10 @@ raw_image_free (RawImage *img)
   if (img)
     {
       g_free (img->pixels);
-      if (img->mem)
-        libraw_dcraw_clear_mem (img->mem);
+      raw_image_release_pixels16 (img);
       g_free (img->camera);
+      g_free (img->lens);
+      g_free (img->profile);
       g_free (img);
     }
 }
@@ -638,13 +977,16 @@ raw_probe (const gchar  *path,
   else if (check_sizes (lr, path, error))
     {
       gboolean swap = lr->sizes.flip == 5 || lr->sizes.flip == 6;
+      guint    box[4] = { 0, 0, lr->sizes.width, lr->sizes.height };
+
+      camera_crop_box (lr, box);
 
       if (camera)
         *camera = g_strdup_printf ("%s %s", lr->idata.make, lr->idata.model);
       if (width)
-        *width = swap ? lr->sizes.height : lr->sizes.width;
+        *width = swap ? box[3] : box[2];
       if (height)
-        *height = swap ? lr->sizes.width : lr->sizes.height;
+        *height = swap ? box[2] : box[3];
       ok = TRUE;
     }
 
@@ -675,9 +1017,11 @@ raw_extract_thumbnail (const gchar  *path,
   if (ret == LIBRAW_SUCCESS && check_sizes (lr, path, error))
     {
       gboolean swap = lr->sizes.flip == 5 || lr->sizes.flip == 6;
+      guint    box[4] = { 0, 0, lr->sizes.width, lr->sizes.height };
 
-      *out_width  = swap ? lr->sizes.height : lr->sizes.width;
-      *out_height = swap ? lr->sizes.width  : lr->sizes.height;
+      camera_crop_box (lr, box);
+      *out_width  = swap ? box[3] : box[2];
+      *out_height = swap ? box[2] : box[3];
       *flip       = lr->sizes.flip;
 
       ret = libraw_unpack_thumb (lr);
@@ -693,7 +1037,8 @@ raw_extract_thumbnail (const gchar  *path,
                 }
               else if (mem->type == LIBRAW_IMAGE_BITMAP && mem->bits == 8 &&
                        mem->colors == 3 && mem->width > 0 && mem->height > 0 &&
-                       mem->data_size >= (guint) mem->width * mem->height * 3)
+                       mem->width <= MAX_DIMENSION && mem->height <= MAX_DIMENSION &&
+                       (gsize) mem->data_size >= (gsize) mem->width * mem->height * 3)
                 {
                   *is_jpeg = FALSE;
                   *bmp_w   = mem->width;

@@ -12,7 +12,7 @@
 
 #define RAW_EXTENSIONS \
   "cr2,cr3,crw,nef,nrw,arw,srf,sr2,dng,raf,orf,rw2,rwl,raw,rwz,pef,srw," \
-  "3fr,fff,iiq,cap,erf,mrw,mdc,kdc,dcr,dc2,k25,kc2,mef,mos,x3f,gpr,"      \
+  "3fr,fff,iiq,cap,erf,mrw,mdc,kdc,dcr,dc2,k25,kc2,mef,mos,"      \
   "bay,mfw,ari,cs1,sti,ia,rdc,qtk,pxn"
 
 #define RAW_MIME_TYPES \
@@ -24,7 +24,7 @@
   "image/x-samsung-srw,image/x-hasselblad-3fr,image/x-hasselblad-fff," \
   "image/x-phaseone-iiq,image/x-epson-erf,image/x-minolta-mrw,"        \
   "image/x-kodak-kdc,image/x-kodak-dcr,image/x-mamiya-mef,"            \
-  "image/x-leaf-mos,image/x-sigma-x3f"
+  "image/x-leaf-mos"
 
 /* No magics on purpose: GIMP first matches *magic-less* procedures by
  * extension and only then tries magics.  Most RAW formats are TIFF
@@ -75,6 +75,16 @@ raw_load_procedure_new (GimpPlugIn  *plug_in,
                                             RAW_THUMB_PROC);
 
   raw_settings_add_arguments (procedure);
+  gimp_procedure_add_string_argument (procedure, "preset", _("Preset"),
+                                      _("Name of a development preset applied in "
+                                        "non-interactive mode (empty = use the arguments)"),
+                                      "", G_PARAM_READWRITE);
+
+  gimp_procedure_add_boolean_argument (procedure, "xmp-sidecar",
+                                       _("Use XMP sidecar settings"),
+                                       _("Take white balance, exposure, lens and noise settings "
+                                         "from a Lightroom or darktable XMP file next to the RAW"),
+                                       TRUE, G_PARAM_READWRITE);
 
   gimp_procedure_add_boolean_aux_argument (procedure, "ask-dialog",
                                            _("Always show this dialog"),
@@ -143,6 +153,7 @@ raw_load_run (GimpProcedure         *procedure,
   GError         *error = NULL;
   gchar          *path;
   gchar          *name;
+  gboolean        dialog_shown = FALSE;
 
   path = rawheic_file_path (file);
   if (! path)
@@ -163,7 +174,26 @@ raw_load_run (GimpProcedure         *procedure,
 
       if (ask != rawheic_shift_pressed ())
         {
-          gchar *title = g_strdup_printf (_("Develop RAW – %s"), name);
+          gchar       *title;
+
+          dialog_shown = TRUE;
+          const gchar *xmp_src = NULL;
+          gboolean     use_xmp = TRUE;
+
+          g_object_get (config, "xmp-sidecar", &use_xmp, NULL);
+          if (use_xmp)
+            {
+              RawSettings tmp;
+
+              raw_settings_from_config (&tmp, config);
+              xmp_src = rawheic_xmp_apply (path, &tmp);
+              if (xmp_src)
+                raw_settings_to_config (&tmp, config);
+            }
+
+          title = xmp_src ?
+                  g_strdup_printf (_("Develop RAW – %s (settings from %s)"), name, xmp_src) :
+                  g_strdup_printf (_("Develop RAW – %s"), name);
 
           if (! raw_dialog_run (procedure, config, path, title))
             {
@@ -179,9 +209,39 @@ raw_load_run (GimpProcedure         *procedure,
 
   raw_settings_from_config (&settings, config);
 
+  if (run_mode != GIMP_RUN_INTERACTIVE)
+    {
+      gchar *preset = NULL;
+
+      g_object_get (config, "preset", &preset, NULL);
+      if (preset && *preset && ! raw_presets_load (preset, &settings))
+        {
+          g_set_error (&error, G_FILE_ERROR, G_FILE_ERROR_NOENT,
+                       _("Unknown preset '%s'."), preset);
+          g_free (preset);
+          g_free (name);
+          g_free (path);
+          return gimp_procedure_new_return_values (procedure,
+                                                   GIMP_PDB_CALLING_ERROR, error);
+        }
+      g_free (preset);
+    }
+
   /* File > Open several RAW files: settings chosen once for the queue */
   if (run_mode == GIMP_RUN_NONINTERACTIVE)
     raw_batch_session_lookup (path, &settings);
+
+  /* a photo's own XMP sidecar wins (when the dialog was shown it already
+   * started from the sidecar and the user had the last word)
+   */
+  if (! dialog_shown)
+    {
+      gboolean use_xmp = TRUE;
+
+      g_object_get (config, "xmp-sidecar", &use_xmp, NULL);
+      if (use_xmp)
+        rawheic_xmp_apply (path, &settings);
+    }
 
   gimp_progress_init_printf (_("Developing '%s'"), name);
 
@@ -200,6 +260,7 @@ raw_load_run (GimpProcedure         *procedure,
 
   gimp_progress_set_text_printf (_("Creating image from '%s'"), name);
   image = rawheic_image_from_raw (img, &settings, file, &error);
+  rawheic_settings_remember_wb (&settings, img);
   raw_image_free (img);
 
   if (! image)

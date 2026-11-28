@@ -20,6 +20,8 @@
 #include <gexiv2/gexiv2.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <libheif/heif.h>
+#include <libheif/heif_properties.h>
+#include <libgimp/gimpui.h>
 
 #include "rawheic.h"
 
@@ -91,7 +93,7 @@ heif_load_procedure_new (GimpPlugIn  *plug_in,
                                             HEIF_THUMB_PROC);
 
   gimp_procedure_add_choice_argument (procedure, "hdr-mode",
-                                      _("_HDR images"),
+                                      _("HDR images"),
                                       _("What to do with HDR (PQ/HLG) images"),
                                       gimp_choice_new_with_values (
                                         "linear",  HDR_LINEAR,
@@ -102,6 +104,10 @@ heif_load_procedure_new (GimpPlugIn  *plug_in,
                                         _("Use GIMP's built-in loader for all files"), NULL,
                                         NULL),
                                       "linear", G_PARAM_READWRITE);
+  gimp_procedure_add_double_argument (procedure, "hdr-exposure",
+                                      _("HDR exposure (EV)"),
+                                      _("Exposure applied to HDR images before tone mapping"),
+                                      -6.0, 6.0, 0.0, G_PARAM_READWRITE);
 
   return procedure;
 }
@@ -300,6 +306,7 @@ load_hdr (HeifFile  *hf,
           GFile     *file,
           gint       tc,
           gint       mode,
+          gdouble    exposure,
           GError   **error)
 {
   struct heif_decoding_options *opts;
@@ -361,31 +368,66 @@ load_hdr (HeifFile  *hf,
 
   maxv = (gfloat) ((1 << bits) - 1);
 
+  /* the transfer function as a table: at most 65536 code values instead
+   * of two pow()/exp() calls per sample
+   */
+  {
+    gint    nlut = (1 << bits), i;
+    gfloat *lut  = g_new (gfloat, nlut);
+
+    for (i = 0; i < nlut; i++)
+      lut[i] = (tc == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ) ?
+               pq_to_linear (i / maxv) : hlg_to_linear (i / maxv);
+
 #pragma omp parallel for private (x)
-  for (y = 0; y < h; y++)
-    {
-      const guint16 *src = (const guint16 *) (plane + (gsize) y * stride);
-      gfloat        *dst = buf + (gsize) y * w * channels;
+    for (y = 0; y < h; y++)
+      {
+        const guint16 *src = (const guint16 *) (plane + (gsize) y * stride);
+        gfloat        *dst = buf + (gsize) y * w * channels;
 
-      for (x = 0; x < w * channels; x++)
-        {
-          gfloat e = GUINT16_FROM_LE (src[x]) / maxv;
+        for (x = 0; x < w * channels; x++)
+          {
+            guint v = MIN ((guint) GUINT16_FROM_LE (src[x]), (guint) nlut - 1);
 
-          if (alpha && x % 4 == 3)
-            dst[x] = e;
-          else
-            dst[x] = (tc == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ) ?
-                     pq_to_linear (e) : hlg_to_linear (e);
-        }
-    }
+            dst[x] = (alpha && x % 4 == 3) ? v / maxv : lut[v];
+          }
+      }
+
+    g_free (lut);
+  }
 
   heif_image_release (img);
+
+  if (fabs (exposure) > 1e-4)
+    {
+      gfloat gain = (gfloat) pow (2.0, exposure);
+      gsize  n    = (gsize) w * h, i;
+      gint   c;
+
+      for (i = 0; i < n; i++)
+        for (c = 0; c < 3; c++)
+          buf[i * channels + c] *= gain;
+    }
 
   if (mode == HDR_SDR)
     tone_map_sdr (buf, (gsize) w * h, channels);
 
-  image   = gimp_image_new_with_precision (w, h, GIMP_RGB, GIMP_PRECISION_FLOAT_LINEAR);
   profile = rawheic_profile_rec2100_linear ();
+  fmt     = profile ? gimp_color_profile_get_format (profile,
+                                                     babl_format (alpha ? "RGBA float" : "RGB float"),
+                                                     GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                                                     error) : NULL;
+  if (! fmt)
+    {
+      g_clear_object (&profile);
+      g_free (buf);
+      if (error && ! *error)
+        g_set_error_literal (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                             _("Could not create the Rec. 2100 colour profile."));
+      return NULL;
+    }
+
+  image   = gimp_image_new_with_precision (w, h, GIMP_RGB, GIMP_PRECISION_FLOAT_LINEAR);
   gimp_image_set_color_profile (image, profile);
 
   name  = g_file_get_basename (file);
@@ -395,10 +437,6 @@ load_hdr (HeifFile  *hf,
   g_free (name);
   gimp_image_insert_layer (image, layer, NULL, 0);
 
-  fmt  = gimp_color_profile_get_format (profile,
-                                        babl_format (alpha ? "RGBA float" : "RGB float"),
-                                        GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
-                                        NULL);
   gbuf = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
   gegl_buffer_set (gbuf, GEGL_RECTANGLE (0, 0, w, h), 0, fmt, buf, GEGL_AUTO_ROWSTRIDE);
   g_object_unref (gbuf);
@@ -418,6 +456,413 @@ load_hdr (HeifFile  *hf,
   return image;
 }
 
+/* ---------------------------------------------------------------------- */
+/* Apple HDR photos (iOS 14-17): an SDR Display P3 image plus a gain map
+ * stored as auxiliary image "urn:com:apple:photo:2020:aux:hdrgainmap".
+ * Following Apple's "Applying Apple HDR effect to your photos":
+ *   hdr_linear = sdr_linear * (1 + (headroom - 1) * eotf_sRGB(gainmap))
+ * with the headroom derived from Apple maker note tags 0x0021 and 0x0030.
+ */
+
+#define APPLE_GAINMAP_TYPE "urn:com:apple:photo:2020:aux:hdrgainmap"
+
+static GExiv2Metadata *
+heif_exif_metadata (struct heif_image_handle *handle)
+{
+  heif_item_id    ids[4];
+  GExiv2Metadata *meta = NULL;
+  gint            n, i;
+
+  n = heif_image_handle_get_list_of_metadata_block_IDs (handle, "Exif", ids, 4);
+
+  for (i = 0; i < n && ! meta; i++)
+    {
+      gsize   size = heif_image_handle_get_metadata_size (handle, ids[i]);
+      guint8 *buf, *app1;
+      guint32 offset;
+      gsize   tiff_len;
+
+      if (size < 16 || size > 64 * 1024 * 1024)
+        continue;
+
+      buf = g_malloc (size);
+      if (heif_image_handle_get_metadata (handle, ids[i], buf).code != heif_error_Ok)
+        {
+          g_free (buf);
+          continue;
+        }
+
+      offset = ((guint32) buf[0] << 24) | ((guint32) buf[1] << 16) |
+               ((guint32) buf[2] << 8)  |  (guint32) buf[3];
+      if ((gsize) offset > size - 4 - 8)
+        {
+          g_free (buf);
+          continue;
+        }
+      tiff_len = size - 4 - offset;
+
+      app1 = g_malloc (6 + tiff_len);
+      memcpy (app1, "Exif\0\0", 6);
+      memcpy (app1 + 6, buf + 4 + offset, tiff_len);
+      g_free (buf);
+
+      meta = gexiv2_metadata_new ();
+      if (! gexiv2_metadata_from_app1_segment (meta, app1, (glong) (6 + tiff_len), NULL))
+        g_clear_object (&meta);
+      g_free (app1);
+    }
+
+  return meta;
+}
+
+static guint32
+rd_u32 (const guint8 *p, gboolean be)
+{
+  return be ? ((guint32) p[0] << 24 | (guint32) p[1] << 16 | (guint32) p[2] << 8 | p[3])
+            : ((guint32) p[3] << 24 | (guint32) p[2] << 16 | (guint32) p[1] << 8 | p[0]);
+}
+
+static guint16
+rd_u16 (const guint8 *p, gboolean be)
+{
+  return be ? (guint16) (p[0] << 8 | p[1]) : (guint16) (p[1] << 8 | p[0]);
+}
+
+/* Parse the Apple maker note ("Apple iOS\0" + version + byte order + IFD,
+ * offsets relative to the note) for tags 0x0021 and 0x0030.  Every read
+ * is bounds-checked: this is untrusted file data.
+ */
+gboolean
+rawheic_apple_hdr_tags (const guint8 *note,
+                        gsize         len,
+                        gdouble      *maker33,
+                        gdouble      *maker48)
+{
+  gboolean be, have33 = FALSE, have48 = FALSE;
+  guint    n, i;
+
+  if (! note || len < 16 || memcmp (note, "Apple iOS", 9) != 0)
+    return FALSE;
+
+  if (note[12] == 'M' && note[13] == 'M')
+    be = TRUE;
+  else if (note[12] == 'I' && note[13] == 'I')
+    be = FALSE;
+  else
+    return FALSE;
+
+  n = rd_u16 (note + 14, be);
+  for (i = 0; i < n && i < 512; i++)
+    {
+      gsize   e = 16 + (gsize) i * 12;
+      guint16 tag, type;
+      guint32 count, off;
+
+      if (e + 12 > len)
+        break;
+
+      tag   = rd_u16 (note + e, be);
+      type  = rd_u16 (note + e + 2, be);
+      count = rd_u32 (note + e + 4, be);
+      off   = rd_u32 (note + e + 8, be);
+
+      if ((tag == 0x0021 || tag == 0x0030) && count == 1 &&
+          (type == 5 || type == 10) && (gsize) off + 8 <= len)
+        {
+          gdouble num = type == 10 ? (gdouble) (gint32) rd_u32 (note + off, be)
+                                   : (gdouble) rd_u32 (note + off, be);
+          gdouble den = type == 10 ? (gdouble) (gint32) rd_u32 (note + off + 4, be)
+                                   : (gdouble) rd_u32 (note + off + 4, be);
+          gdouble v;
+
+          if (den == 0.0)
+            continue;
+          v = num / den;
+          if (! isfinite (v))
+            continue;
+
+          if (tag == 0x0021) { *maker33 = v; have33 = TRUE; }
+          else               { *maker48 = v; have48 = TRUE; }
+        }
+    }
+
+  return have33 && have48;
+}
+
+gdouble
+rawheic_apple_headroom (gdouble maker33,
+                        gdouble maker48)
+{
+  gdouble stops;
+
+  if (maker33 < 1.0)
+    stops = (maker48 <= 0.01) ? -20.0 * maker48 + 1.8 : -0.101 * maker48 + 1.601;
+  else
+    stops = (maker48 <= 0.01) ? -70.0 * maker48 + 3.0 : -0.303 * maker48 + 2.303;
+
+  return pow (2.0, CLAMP (stops, 0.0, 8.0));
+}
+
+/* The gain map's auxiliary handle, or NULL. */
+static struct heif_image_handle *
+apple_gainmap_handle (struct heif_image_handle *handle)
+{
+  heif_item_id ids[8];
+  gint         n, i;
+
+  n = heif_image_handle_get_list_of_auxiliary_image_IDs (handle,
+                                                        LIBHEIF_AUX_IMAGE_FILTER_OMIT_ALPHA |
+                                                        LIBHEIF_AUX_IMAGE_FILTER_OMIT_DEPTH,
+                                                        ids, 8);
+  for (i = 0; i < n; i++)
+    {
+      struct heif_image_handle *aux = NULL;
+      const char               *type = NULL;
+      gboolean                  match;
+
+      if (heif_image_handle_get_auxiliary_image_handle (handle, ids[i], &aux).code != heif_error_Ok)
+        continue;
+
+      match = heif_image_handle_get_auxiliary_type (aux, &type).code == heif_error_Ok &&
+              type && ! strcmp (type, APPLE_GAINMAP_TYPE);
+      if (type)
+        heif_image_handle_release_auxiliary_type (aux, &type);
+
+      if (match)
+        return aux;
+      heif_image_handle_release (aux);
+    }
+
+  return NULL;
+}
+
+/* Headroom of an Apple HDR photo, or 0 when it is not one. */
+static gdouble
+apple_hdr_headroom (struct heif_image_handle *handle)
+{
+  GExiv2Metadata *meta = heif_exif_metadata (handle);
+  GBytes         *note;
+  gdouble         m33 = 0, m48 = 0, headroom = 0;
+
+  if (! meta)
+    return 0;
+
+  note = gexiv2_metadata_try_get_tag_raw (meta, "Exif.Photo.MakerNote", NULL);
+  if (note)
+    {
+      gsize         len;
+      const guint8 *data = g_bytes_get_data (note, &len);
+
+      if (rawheic_apple_hdr_tags (data, len, &m33, &m48))
+        headroom = rawheic_apple_headroom (m33, m48);
+      g_bytes_unref (note);
+    }
+
+  g_object_unref (meta);
+
+  return headroom;
+}
+
+static inline gfloat
+srgb_eotf (gfloat v)
+{
+  return v <= 0.04045f ? v / 12.92f : powf ((v + 0.055f) / 1.055f, 2.4f);
+}
+
+static GimpImage *
+load_apple_gainmap (HeifFile                 *hf,
+                    struct heif_image_handle *gain,
+                    GFile                    *file,
+                    gdouble                   headroom,
+                    gdouble                   exposure,
+                    GError                  **error)
+{
+  struct heif_image *img = NULL, *gimg = NULL;
+  const guint8      *plane, *gplane;
+  size_t             stride = 0, gstride = 0;
+  gint               w, h, gw, gh, y;
+  GimpColorProfile  *icc = NULL, *linear;
+  const Babl        *src_fmt, *lin_fmt;
+  gfloat            *buf, *gmap;
+  gfloat             gain_exposure = (gfloat) pow (2.0, exposure);
+  GimpImage         *image;
+  GimpLayer         *layer;
+  GeglBuffer        *gbuf;
+  gchar             *name;
+
+  if (heif_image_handle_get_luma_bits_per_pixel (hf->handle) != 8 ||
+      heif_decode_image (hf->handle, &img, heif_colorspace_RGB,
+                         heif_chroma_interleaved_RGB, NULL).code != heif_error_Ok)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Decoding the HEIF image failed."));
+      return NULL;
+    }
+  if (heif_decode_image (gain, &gimg, heif_colorspace_monochrome,
+                         heif_chroma_monochrome, NULL).code != heif_error_Ok)
+    {
+      heif_image_release (img);
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Decoding the HDR gain map failed."));
+      return NULL;
+    }
+
+  w      = heif_image_get_primary_width (img);
+  h      = heif_image_get_primary_height (img);
+  gw     = heif_image_get_primary_width (gimg);
+  gh     = heif_image_get_primary_height (gimg);
+  plane  = heif_image_get_plane_readonly2 (img, heif_channel_interleaved, &stride);
+  gplane = heif_image_get_plane_readonly2 (gimg, heif_channel_Y, &gstride);
+
+  if (! plane || ! gplane || w < 1 || h < 1 || gw < 1 || gh < 1 ||
+      w > MAX_DIMENSION || h > MAX_DIMENSION || (gint64) w * h > MAX_PIXELS ||
+      /* gain maps are at most full resolution (in either orientation) */
+      gw > MAX (w, h) || gh > MAX (w, h) ||
+      stride < (size_t) w * 3 || gstride < (size_t) gw)
+    {
+      heif_image_release (img);
+      heif_image_release (gimg);
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_INVAL,
+                   _("The HEIF image has an unsupported layout."));
+      return NULL;
+    }
+
+  /* gain map in [0,1] linear; follow the primary's rotation if the aux
+   * image was stored without it
+   */
+  gmap = g_try_new (gfloat, (gsize) gw * gh);
+  if (! gmap)
+    {
+      heif_image_release (img);
+      heif_image_release (gimg);
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_NOMEM,
+                   _("Not enough memory to load the image."));
+      return NULL;
+    }
+  for (y = 0; y < gh; y++)
+    {
+      gint x;
+
+      for (x = 0; x < gw; x++)
+        gmap[(gsize) y * gw + x] = srgb_eotf (gplane[(gsize) y * gstride + x] / 255.0f);
+    }
+  heif_image_release (gimg);
+
+  if ((w > h) != (gw > gh) && gw != gh)
+    {
+      gint    rot  = heif_item_get_property_transform_rotation_ccw (
+                       hf->ctx, heif_image_handle_get_item_id (hf->handle), 0);
+      gfloat *r    = g_try_new (gfloat, (gsize) gw * gh);
+      gint    x;
+
+      if (! r)
+        {
+          g_free (gmap);
+          heif_image_release (img);
+          g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_NOMEM,
+                       _("Not enough memory to load the image."));
+          return NULL;
+        }
+
+      for (y = 0; y < gh; y++)
+        for (x = 0; x < gw; x++)
+          {
+            /* 90° ccw: (x, y) -> (y, gw - 1 - x); 270° ccw: -> (gh - 1 - y, x) */
+            gsize dst = (rot == 270) ? (gsize) x * gh + (gh - 1 - y)
+                                     : (gsize) (gw - 1 - x) * gh + y;
+            r[dst] = gmap[(gsize) y * gw + x];
+          }
+      g_free (gmap);
+      gmap = r;
+      x = gw; gw = gh; gh = x;
+    }
+
+  /* colour: the primary's own ICC profile (Display P3 on iPhones) */
+  if (heif_image_handle_get_color_profile_type (hf->handle) == heif_color_profile_type_prof ||
+      heif_image_handle_get_color_profile_type (hf->handle) == heif_color_profile_type_rICC)
+    {
+      gsize   n   = heif_image_handle_get_raw_color_profile_size (hf->handle);
+      guint8 *raw = n > 0 && n < 4 * 1024 * 1024 ? g_malloc (n) : NULL;
+
+      if (raw && heif_image_handle_get_raw_color_profile (hf->handle, raw).code == heif_error_Ok)
+        icc = gimp_color_profile_new_from_icc_profile (raw, n, NULL);
+      g_free (raw);
+    }
+  if (! icc)
+    icc = rawheic_profile_new (CS_DISPLAY_P3, FALSE);
+  linear = gimp_color_profile_new_linear_from_color_profile (icc);
+  if (! linear)
+    linear = g_object_ref (icc);
+
+  src_fmt = gimp_color_profile_get_format (icc, babl_format ("R'G'B' u8"),
+                                           GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC, NULL);
+  lin_fmt = gimp_color_profile_get_format (linear, babl_format ("RGB float"),
+                                           GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC, NULL);
+
+  buf = g_try_malloc ((gsize) w * h * 3 * sizeof (gfloat));
+  if (! buf || ! src_fmt || ! lin_fmt)
+    {
+      g_free (buf);
+      g_free (gmap);
+      heif_image_release (img);
+      g_object_unref (icc);
+      g_object_unref (linear);
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_NOMEM,
+                   _("Not enough memory to load the image."));
+      return NULL;
+    }
+
+#pragma omp parallel for
+  for (y = 0; y < h; y++)
+    {
+      gfloat *row = buf + (gsize) y * w * 3;
+      gfloat  gy  = CLAMP ((y + 0.5f) * gh / h - 0.5f, 0.0f, (gfloat) (gh - 1));
+      gint    y0  = (gint) gy, y1 = MIN (y0 + 1, gh - 1);
+      gfloat  fy  = gy - y0;
+      gint    x;
+
+      babl_process (babl_fish (src_fmt, lin_fmt), plane + (gsize) y * stride, row, w);
+
+      for (x = 0; x < w; x++)
+        {
+          gfloat gx = CLAMP ((x + 0.5f) * gw / w - 0.5f, 0.0f, (gfloat) (gw - 1));
+          gint   x0 = (gint) gx, x1 = MIN (x0 + 1, gw - 1);
+          gfloat fx = gx - x0;
+          gfloat g  = (gmap[(gsize) y0 * gw + x0] * (1 - fx) + gmap[(gsize) y0 * gw + x1] * fx) * (1 - fy) +
+                      (gmap[(gsize) y1 * gw + x0] * (1 - fx) + gmap[(gsize) y1 * gw + x1] * fx) * fy;
+          gfloat k  = (1.0f + ((gfloat) headroom - 1.0f) * CLAMP (g, 0.0f, 1.0f)) * gain_exposure;
+
+          row[x * 3 + 0] *= k;
+          row[x * 3 + 1] *= k;
+          row[x * 3 + 2] *= k;
+        }
+    }
+
+  heif_image_release (img);
+  g_free (gmap);
+
+  image = gimp_image_new_with_precision (w, h, GIMP_RGB, GIMP_PRECISION_FLOAT_LINEAR);
+  gimp_image_set_color_profile (image, linear);
+
+  name  = g_file_get_basename (file);
+  layer = gimp_layer_new (image, name, w, h, GIMP_RGB_IMAGE, 100.0,
+                          gimp_image_get_default_new_layer_mode (image));
+  g_free (name);
+  gimp_image_insert_layer (image, layer, NULL, 0);
+
+  gbuf = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
+  gegl_buffer_set (gbuf, GEGL_RECTANGLE (0, 0, w, h), 0, lin_fmt, buf, GEGL_AUTO_ROWSTRIDE);
+  g_object_unref (gbuf);
+
+  g_free (buf);
+  g_object_unref (icc);
+  g_object_unref (linear);
+
+  return image;
+}
+
+/* ---------------------------------------------------------------------- */
+
 static GimpValueArray *
 heif_load_run (GimpProcedure         *procedure,
                GimpRunMode            run_mode,
@@ -434,33 +879,104 @@ heif_load_run (GimpProcedure         *procedure,
   HeifFile           hf;
   gint               mode;
   gint               tc = 0;
+  gdouble            exposure = 0.0;
+  gdouble            headroom = 0.0;
+  struct heif_image_handle *gain = NULL;
+
+  /* Always look at the file: a remembered "built-in" choice must not hide
+   * the HDR dialog for good.
+   */
+  if (! heif_file_open (&hf, file, &error))
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR, error);
+
+  tc = hdr_transfer (hf.handle);
+
+  if (! tc)
+    {
+      gain = apple_gainmap_handle (hf.handle);
+      if (gain)
+        {
+          headroom = apple_hdr_headroom (hf.handle);
+          if (headroom <= 1.0)
+            {
+              heif_image_handle_release (gain);
+              gain = NULL;
+            }
+        }
+    }
+
+  if ((tc || gain) && run_mode == GIMP_RUN_INTERACTIVE)
+    {
+      GtkWidget *dialog;
+      gchar     *name  = g_file_get_basename (file);
+      gchar     *title = g_strdup_printf (_("Open HDR image – %s"), name);
+      gboolean   ok;
+
+      gimp_ui_init (PLUGIN_NAME);
+      dialog = gimp_procedure_dialog_new (procedure, config, title);
+      gchar     *info  = gain ?
+        g_strdup_printf (_("This is an Apple HDR photo (gain map, up to %.1f× "
+                           "brighter than SDR white).\nThe SDR choice opens the "
+                           "photo's own SDR image (8-bit Display P3)."), headroom) :
+        g_strdup (tc == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ ?
+                  _("This image is HDR (PQ, BT.2100).") :
+                  _("This image is HDR (HLG, BT.2100)."));
+
+      gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog), "hdr-info",
+                                       info, FALSE, FALSE);
+      g_free (info);
+      gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                                  "hdr-info", "hdr-mode", "hdr-exposure", NULL);
+      ok = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
+      gtk_widget_destroy (dialog);
+      g_free (title);
+      g_free (name);
+
+      if (! ok)
+        {
+          heif_file_close (&hf);
+          return gimp_procedure_new_return_values (procedure, GIMP_PDB_CANCEL, NULL);
+        }
+    }
 
   mode = gimp_procedure_config_get_choice_id (config, "hdr-mode");
+  g_object_get (config, "hdr-exposure", &exposure, NULL);
 
-  if (mode != HDR_BUILTIN)
+  if (gain && mode == HDR_LINEAR)
     {
-      if (! heif_file_open (&hf, file, &error))
-        return gimp_procedure_new_return_values (procedure,
-                                                 GIMP_PDB_EXECUTION_ERROR, error);
+      gchar *name = g_file_get_basename (file);
 
-      tc = hdr_transfer (hf.handle);
+      gimp_progress_init_printf (_("Loading HDR image '%s'"), name);
+      g_free (name);
 
-      if (tc)
-        {
-          gchar *name = g_file_get_basename (file);
-
-          gimp_progress_init_printf (_("Loading HDR image '%s'"), name);
-          g_free (name);
-
-          image = load_hdr (&hf, file, tc, mode, &error);
-          if (! image)
-            status = GIMP_PDB_EXECUTION_ERROR;
-
-          gimp_progress_update (1.0);
-        }
-
-      heif_file_close (&hf);
+      image = load_apple_gainmap (&hf, gain, file, headroom, exposure, &error);
+      if (! image)
+        status = GIMP_PDB_EXECUTION_ERROR;
+      tc = -1;   /* handled here; not by the built-in loader */
+      gimp_progress_update (1.0);
     }
+  else if (tc && mode != HDR_BUILTIN)
+    {
+      gchar *name = g_file_get_basename (file);
+
+      gimp_progress_init_printf (_("Loading HDR image '%s'"), name);
+      g_free (name);
+
+      image = load_hdr (&hf, file, tc, mode, exposure, &error);
+      if (! image)
+        status = GIMP_PDB_EXECUTION_ERROR;
+
+      gimp_progress_update (1.0);
+    }
+  else
+    {
+      tc = 0;   /* handled by the built-in loader below */
+    }
+
+  if (gain)
+    heif_image_handle_release (gain);
+  heif_file_close (&hf);
 
   if (! tc)
     {
