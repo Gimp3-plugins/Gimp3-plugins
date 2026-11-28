@@ -1,0 +1,39 @@
+name: zetmar-maski - tests
+
+on:
+  push:
+    paths:
+      - 'zetmar-maski/**'
+      - '.github/workflows/zetmar-maski-tests.yml'
+  pull_request:
+    paths:
+      - 'zetmar-maski/**'
+      - '.github/workflows/zetmar-maski-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.12', '3.14']
+    defaults:
+      run:
+        working-directory: zetmar-maski
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile Python sources
+        run: python -m compileall -q plug-ins tests
+      - name: Test mask calculations and presets (no GIMP required)
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Build Windows distribution
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./build.ps1

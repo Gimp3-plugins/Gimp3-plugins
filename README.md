@@ -12,6 +12,8 @@ Plug-ins for **GIMP 3** (Windows). · Wtyczki do **GIMP-a 3** (Windows).
 | **[LUT-y (.cube)](gimp-wtyczki/lut-cube/)** (PL) | Nakładanie **LUT-ów kolorystycznych** (`.cube`, `.3dl`, Hald) z biblioteką, podglądem przed/po, siłą efektu, presetami, trybem wsadowym i zapisem *własnego looku jako .cube*. | [Wydania](../../releases) (`lut-cube-v*`) | [Polski](gimp-wtyczki/lut-cube/README.md) |
 | **[Zetmar Kolor](zetmar-kolor/)** | **Curves, black & white, sepia, monochrome, duotone and toning** in one window with a before/after preview; looks saved as `.zklook` (compatible with the Photoshop version). No LUTs. PL/EN. | [Release](../../releases/tag/zetmar-kolor-v1.0.0) | [English](zetmar-kolor/README.en.md) · [Polski](zetmar-kolor/README.md) |
 | **[Zetmar Kolor](zetmar-kolor/)** (PL) | **Krzywe, czerń-biel, sepia, monochromia, duotone i toning** w jednym oknie z podglądem przed/po; looki w `.zklook` (zgodne z wersją dla Photoshopa). Bez LUT-ów. | [Wydanie](../../releases/tag/zetmar-kolor-v1.0.0) | [Polski](zetmar-kolor/README.md) |
+| **[Zetmar Maski](zetmar-maski/)** | **Luminosity and color masks** with highlights/shadows/midtones presets, a color picker, live preview and JSON presets. Output to a layer mask, channel or selection. Polish UI. | [Release](../../releases/tag/zetmar-maski-v1.0.0) | [English](zetmar-maski/README.en.md) · [Polski](zetmar-maski/README.md) |
+| **[Zetmar Maski](zetmar-maski/)** (PL) | **Maski jasności i koloru**: światła, cienie, półtony, próbnik koloru, podgląd i presety JSON. Wynik jako maska warstwy, kanał lub zaznaczenie. Interfejs PL. | [Wydanie](../../releases/tag/zetmar-maski-v1.0.0) | [Polski](zetmar-maski/README.md) |
 | **[Kreator memów](gimp-wtyczki/meme-maker/)** | Meme maker: top/bottom text with outline, text bar, live preview, JPG/PNG export (Anton font included). | [Releases](../../releases) (`meme-maker-v*`) | [English](gimp-wtyczki/meme-maker/README.en.md) · [Polski](gimp-wtyczki/meme-maker/README.md) |
 | **[Podpis na zdjęciu](gimp-wtyczki/)** | Signature/watermark on a photo: text or logo as a new layer, 9 positions, size in % of the image, saved templates. | [Releases](../../releases) (`podpis-zdjecia-v*`) | [English](gimp-wtyczki/README.en.md#signature) · [Polski](gimp-wtyczki/README.md#podpis-na-zdjęciu) |
 | **[Instagram filters / Filtry Instagram](gimp-instagram-filtry/)** | 22 Instagram-style filters (1977, Lofi, Toaster, X-Pro II…) and a *Text Border* plug-in, ported from GIMP 2 to GIMP 3 - pure Python, no external libraries. | [Release](../../releases/tag/migrated/gimp-instagram-filtry/v1.0.0) | [English](gimp-instagram-filtry/README.md) · [Polski](gimp-instagram-filtry/README.pl.md) |
@@ -27,14 +29,14 @@ Plug-ins for **GIMP 3** (Windows). · Wtyczki do **GIMP-a 3** (Windows).
 Each plug-in lives in its own folder with its own README, tests and installer; releases are tagged `<plug-in>-vX.Y.Z`
 (for example `pshost-v0.8.0`). The Python plug-ins (LUT, meme maker, signature) share one folder,
 [`gimp-wtyczki/`](gimp-wtyczki/), with a common installer (`install.ps1`) and tests. Every plug-in here is free software
-under the **GNU GPL v3 or later** (see [LICENSE](LICENSE)), except *Podpis na zdjęciu* and *Profile Backup*, which are under the MIT license
-([gimp-wtyczki/LICENSE](gimp-wtyczki/LICENSE), [profile-backup/LICENSE](profile-backup/LICENSE)).
+under the **GNU GPL v3 or later** (see [LICENSE](LICENSE)), except *Podpis na zdjęciu*, *Profile Backup* and *Zetmar Maski*, which are under the MIT license
+([gimp-wtyczki/LICENSE](gimp-wtyczki/LICENSE), [profile-backup/LICENSE](profile-backup/LICENSE), [zetmar-maski/LICENSE](zetmar-maski/LICENSE)).
 **BIMP 3** and its original GIMP 2 sources are under **GNU GPL v2 or later**, as stated in [bimp3/bimp3/LICENSE](bimp3/bimp3/LICENSE); GPL v3 is included as an applicable option.
 
 Każda wtyczka ma własny katalog z README, testami i instalatorem; wydania mają znaczniki `<wtyczka>-vX.Y.Z`. Wtyczki
 w Pythonie (LUT-y, Kreator memów, Podpis) mają wspólny folder [`gimp-wtyczki/`](gimp-wtyczki/) z jednym instalatorem
 (`install.ps1`) i testami. Całość jest wolnym oprogramowaniem na licencji **GNU GPL v3 lub nowszej** (zob.
-[LICENSE](LICENSE)), z wyjątkiem *Podpisu na zdjęciu* i *Kopii profilu*, które mają licencję MIT ([gimp-wtyczki/LICENSE](gimp-wtyczki/LICENSE), [profile-backup/LICENSE](profile-backup/LICENSE)).
+[LICENSE](LICENSE)), z wyjątkiem *Podpisu na zdjęciu*, *Kopii profilu* i *Zetmar Maski*, które mają licencję MIT ([gimp-wtyczki/LICENSE](gimp-wtyczki/LICENSE), [profile-backup/LICENSE](profile-backup/LICENSE), [zetmar-maski/LICENSE](zetmar-maski/LICENSE)).
 **BIMP 3** i jego oryginalne źródła GIMP 2 są dostępne na licencji **GPL v2 lub nowszej**, zgodnie z [bimp3/bimp3/LICENSE](bimp3/bimp3/LICENSE).
 
 ## Consolidated repositories / Połączone repozytoria
